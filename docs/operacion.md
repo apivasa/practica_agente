@@ -1,7 +1,7 @@
 # Operación — runbook
 
 Dueño: arquitecto-SRE. Zona horaria de negocio: America/Guayaquil (UTC-5, sin horario de verano).
-Producción aún no existe (P-02/P-03 pendientes): la salud se prueba en CI contra Supabase local. `salud.yml`, `evaluacion-mensual` y `ritmo-diario` todavía no existen; sus secciones se añadirán con C-03 y el ítem de salud.
+Producción aún no existe (P-02/P-03 pendientes): la salud se prueba en CI contra Supabase local (job `integration` de `ci.yml`). `evaluacion-mensual` y `ritmo-diario` existen desde C-03/C-04 (ADR 0008), pero no hacen nada hasta que haya secretos y `vars.EVALUATION_ENABLED='true'`. `salud.yml` lo construye V-04.
 
 Consultas útiles (solo REST, ver CLAUDE.md §5):
 - Runs de una rama: `gh api 'repos/apivasa/practica_agente/actions/runs?branch=<rama>&per_page=6' --jq '.workflow_runs[]|{id,name,event,conclusion}'`
@@ -11,13 +11,14 @@ Consultas útiles (solo REST, ver CLAUDE.md §5):
 
 ## Workflows y tiempos base
 
-Medidos en `item/S-01` y actualizados en `item/S-02-S-03` (2026-11-19, `ubuntu-latest`). Los jobs de cada workflow corren en paralelo salvo `e2e`, que espera a `build`.
+Medidos en `item/S-01` y actualizados en `item/S-02-S-03` e `item/C-03-C-04` (2026-11-19, `ubuntu-latest`). Los jobs de cada workflow corren en paralelo salvo `e2e`, que espera a `build`.
 
 | Workflow | Disparadores | Job | Base | Alerta si |
 |---|---|---|---|---|
 | `ci.yml` | PR; push a `main`, `item/**`, `fix/**`; manual (y desde `lockfile.yml`) | build (lint, unit, build) | 16–23 s | > 2 min |
 | | | db (pgTAP, CLI Supabase 3.2.0) | 66–74 s | > 4 min |
-| | | e2e (Playwright, tras build) | 26–28 s | > 3 min |
+| | | e2e (Playwright, tras build) | 26–29 s | > 3 min |
+| | | integration (Supabase local + `evaluate.js` mensual y diaria ×2 + `verify-evaluate.sql`) | 69–71 s | > 4 min |
 | | | **total de pared** | **~70–95 s** | > 5 min |
 | | | db (pgTAP, CLI Supabase 3.2.0) | 69–74 s | > 4 min |
 | | | e2e (Playwright + Supabase local desde F-05, tras build) | 113 s (de ellos `supabase start` ~47 s, Playwright install ~38 s, pruebas ~5 s; antes de F-05: 26–28 s) | > 4 min |
@@ -30,12 +31,15 @@ Medidos en `item/S-01` y actualizados en `item/S-02-S-03` (2026-11-19, `ubuntu-l
 | | | pruebas de seguridad (258 casos; las de `tests/security/api/` se omiten aquí) | 7–25 s | > 2 min |
 | | | pentest-api (Supabase local + 428 casos PostgREST/Auth) | 74–93 s | > 5 min (timeout del job: 30 min) |
 | | | **total de pared** | **~75–95 s** (lo marca pentest-api) | > 7 min |
+| `evaluacion-mensual.yml` | cron `7 11 1 * *` (día 1, 06:07 Guayaquil); manual con `as_of` | evaluate (mensual) | sin base (aún sin producción); < 10 s si se omite | > 5 min (timeout 15 min) |
+| `ritmo-diario.yml` | cron `23 11 * * *` (06:23 Guayaquil); manual con `as_of` | evaluate (diario) | sin base; < 10 s si se omite | > 5 min (timeout 15 min) |
 | `lockfile.yml` | push a `item/**`, `fix/**` que cambie `package.json`; manual (nunca en `main`) | lockfile | < 30 s | > 2 min |
 
 Fuentes: CI run 44597648985, Seguridad run 44597649643 (S-01); CI run 44605484960 y Seguridad run 44605484997 (S-02+S-03, ambos `success`); referencia previa CI run 44594674729.
 Desde F-05 el job e2e levanta Supabase local (Auth + API + semilla) con la CLI 3.2.0 y construye el front con `VITE_SUPABASE_URL` y la clave publicable que expone `supabase status`; si falla en «Exportar URL y clave publicable», la CLI cambió el formato de `status -o env` (revisar nombres `API_URL` / `PUBLISHABLE_KEY`). El total de pared de CI pasa a ~2 min (e2e y db corren en paralelo). Fuente e2e: CI run 44606117086 (rama `item/F-05`) frente a 44605255030 (`main`).
 
 Fuentes: CI run 44597648985, Seguridad run 44597649643 (ambos `success`); referencia previa CI run 44594674729.
+Fuentes: CI run 44606812249 (C-03+C-04: build 12 s, db 67 s, integration 69 s, e2e 29 s) y 44606007143 (integration 71 s); CI run 44597648985, Seguridad run 44597649643 (S-01); CI run 44605484960 y Seguridad run 44605484997 (S-02+S-03, ambos `success`); referencia previa CI run 44594674729.
 
 Tasa de fallos observada: en `main`, los fallos/cancelaciones del 2026-11-19 vienen de la puesta en marcha (cancelaciones por concurrencia y un fallo antes del lockfile), no de pasos intermitentes. En `item/S-01`, un solo fallo de Seguridad (run 44595333304) causado por la rama `ensayo/s01-secreto` y corregido en el ítem. Ningún paso intermitente detectado todavía. En `item/S-02-S-03`, los dos fallos de `pentest-api` (runs 44604283956 y 44604729716) fueron defectos reales de las pruebas, corregidos en commits posteriores; no son intermitencia.
 
@@ -75,5 +79,50 @@ Primero identifica el job fallido (consulta de jobs arriba) y lee su log. Nunca 
 8. **Dependabot** propone subir una acción: verificar que el SHA corresponde al tag del comentario y que CI y Seguridad pasan en el PR antes de fusionar.
 9. **Dependabot npm (versión mayor):** fusionar de a uno, pidiendo antes `@dependabot rebase` sobre el `main` actual (los lockfiles de varios PR chocan entre sí). Paquetes acoplados (`eslint` y `@eslint/js`) van juntos: primero `eslint`, luego rebase del otro. Un PR que falla por `ERESOLVE` (dependencia par) no se fuerza con `--legacy-peer-deps`: se espera al PR del paquete par.
 
+## Evaluación programada (`evaluacion-mensual`, `ritmo-diario`)
+
+Ver ADR 0008. Ambos usan `node scripts/evaluate.js --mode=monthly|daily --as-of=YYYY-MM-DD` con `SUPABASE_SECRET_KEY`. Comparten `concurrency: evaluacion-produccion`, así que nunca corren a la vez. Actor de auditoría: `system:evaluate`.
+
+### Activación (compuerta del usuario, V-05)
+1. Secretos `SUPABASE_URL` y `SUPABASE_SECRET_KEY` (`sb_secret_...`) en el repositorio.
+2. Variable de repositorio `EVALUATION_ENABLED=true` (*Settings → Secrets and variables → Actions → Variables*).
+3. Primera corrida manual de `ritmo-diario` sin `as_of`. Verificar en el log la línea JSON final con `errors: 0`.
+Mientras falte algo, el job termina en verde con `::warning::... se omite la evaluación`. Desde la activación, un warning así en un cron significa que alguien borró un secreto o la variable: es una incidencia.
+
+### Cómo vigilarlos (hasta que V-04 construya `salud.yml`)
+- Último run de cada uno: `gh api 'repos/apivasa/practica_agente/actions/workflows/ritmo-diario.yml/runs?per_page=3' --jq '.workflow_runs[]|{id,event,created_at,conclusion}'` (igual con `evaluacion-mensual.yml`).
+- Criterios que `salud.yml` (V-04) debe automatizar, abriendo un issue con etiqueta `salud` **sin datos de unidades** (el repo es público):
+  - `ritmo-diario`: hay un run `schedule` con `conclusion=success` en las últimas 26 h.
+  - `evaluacion-mensual`: si hoy es día ≥ 2 del mes, hay un run `success` con `created_at` en el mes actual.
+  - Ningún run en `failure`, ni un `success` cuyo paso "Evaluar" fue omitido estando `EVALUATION_ENABLED=true`.
+  - Duración del job por debajo de 5 min.
+  - En BD (consulta liviana con la clave secreta): hay `audit_log` de `system:evaluate` con `created_at` en las últimas 26 h. Si no hubo cambios, puede no haber filas: usar `pace_snapshot` del día solo si hay compromisos trimestrales con paquete.
+- GitHub **desactiva los cron de un repo público tras 60 días sin actividad**. Si pasa, reactivar con `gh api -X PUT repos/apivasa/practica_agente/actions/workflows/ritmo-diario.yml/enable` (igual el mensual). V-04 debe alertar si `state != active`.
+- GitHub puede retrasar los cron varios minutos o descartar alguno en horas de carga. Un día sin run no es un fallo del código: relanzar manualmente con el `as_of` de ese día.
+
+### Qué hacer si fallan
+1. Identificar el paso fallido (consulta de jobs arriba) y leer el log. El script nunca imprime la clave. La última línea JSON resume `evaluations`, `written`, `alerts` y `errors`, y cada error sale como `Error: <unidad>: <motivo>`.
+2. **Exit 2 `Error de configuración`**: falta un secreto, la URL no es https o la clave no tiene prefijo `sb_secret_`. Corregir los secretos (compuerta del usuario si hay que crearlos o rotarlos).
+3. **Errores por unidad** (exit 1, hay otras unidades bien): el script escribió las unidades sanas y reporta las otras. Causas típicas:
+   - `El historial termina en ... (H-C01-02)`: `as_of` no corresponde al mes que se cierra (ver "Reprocesar un mes").
+   - Un indicador con configuración inválida: lo corrige la gestora o el custodio en la app.
+   Después relanzar con el mismo `as_of`: es idempotente.
+4. **`evaluations upsert` / `alerts insert` / `audit_log insert`**: error de BD (migración no aplicada en producción, constraint, Supabase pausado o caído). Comprobar que Supabase responde y que las migraciones de `supabase/migrations/` están aplicadas, y relanzar.
+5. **`npm ci` falla**: lockfile desincronizado con `main`. Mismo tratamiento que en `seguridad.yml`.
+6. **`Sin paquete por criticidad (package_by_category)`** en el log del diario no es fallo: falta el paquete en el compromiso trimestral. Avisar al custodio.
+7. Si el fallo se repite dos días o afecta el cierre mensual: el orquestador abre `fix/evaluacion-<fecha>` (paso 3 del ciclo, "salud primero").
+
+### Reprocesar un mes
+- La mensual cierra **el mes anterior a `as_of`**. Para reprocesar el mes M, se lanza *Actions → Evaluación mensual → Run workflow* con `as_of` = primer día de M+1. Por REST: `gh api -X POST repos/apivasa/practica_agente/actions/workflows/evaluacion-mensual.yml/dispatches -f ref=main -f 'inputs[as_of]=2027-02-01'` (cierra enero de 2027).
+- Casos típicos: el custodio cargó mediciones tarde (después del cron del día 1) o se corrigió una medición o un umbral.
+- Es idempotente: solo reescribe las evaluaciones que cambian y audita esas. Si el color o el nivel cambian, sale una alerta `color_change` nueva (la anterior queda en el historial). Si nada cambia, no hay alertas.
+- La racha de escalada usa los meses ya guardados del trimestre. Al reprocesar un mes que no es el último, hay que reprocesar también los meses siguientes del mismo trimestre, en orden: M, M+1...
+- `assertHistoryFresh` impide cerrar un mes que no sea el mes de `as_of` o el anterior. No se puede "reprocesar enero" con `as_of` de abril: siempre se usa el día 1 del mes siguiente al reprocesado.
+- Ritmo diario de una fecha pasada: lanzar `ritmo-diario` con `as_of` = esa fecha. Compara contra el último snapshot anterior a esa fecha.
+
+### Restaurar
+- Las evaluaciones son derivables: se recalculan desde `measurements`, `commitments`, `targets` y `exceptions` reprocesando los meses del trimestre en orden.
+- Las alertas y `audit_log` no se regeneran, porque son historial. Si hace falta, se restauran del respaldo diario de Supabase (plan gratuito: sin PITR). El procedimiento detallado se completa en V-05 junto con producción.
+
 ## Pendiente de completar
-- Disponibilidad de Pages y Supabase (`salud.yml`), reprocesar un mes, restaurar: se documentan cuando existan producción y los workflows programados.
+- Disponibilidad de Pages y Supabase y vigilancia automática de los cron (`salud.yml`, V-04). Restauración de Supabase de producción (V-05).

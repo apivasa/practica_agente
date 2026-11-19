@@ -86,6 +86,22 @@ for (const wf of workflows) {
     });
   });
 
+  // C-03/C-04: inputs de workflow_dispatch / workflow_call solo llegan a la shell por env.
+  test(`${wf.name}: inputs nunca interpolados en run:, solo mapeados a env`, () => {
+    for (const { n, l } of codeLines(wf.text)) {
+      if (!/\$\{\{[^}]*\b(inputs\.|github\.event\.inputs)/.test(l)) continue;
+      assert.match(l, /^\s+[A-Z_][A-Z0-9_]*:\s*\$\{\{\s*(inputs|github\.event\.inputs)\.[\w-]+\s*\}\}\s*$/, `${wf.name}:${n} interpola un input fuera de env`);
+    }
+  });
+
+  // C-03/C-04: la clave secreta del backend solo en workflows que no ejecutan código de un PR.
+  test(`${wf.name}: SUPABASE_SECRET_KEY solo con disparadores schedule / workflow_dispatch`, () => {
+    if (!/secrets\.SUPABASE_SECRET_KEY/.test(wf.text)) return;
+    const header = wf.text.split(/^jobs:/m)[0];
+    assert.doesNotMatch(header, /^\s{2}(push|pull_request|pull_request_target|workflow_run|workflow_call|issue_comment|repository_dispatch):/m);
+    assert.match(wf.text, /vars\.EVALUATION_ENABLED|environment:/, 'falta guarda de activación de producción');
+  });
+
   test(`${wf.name}: no imprime secretos`, () => {
     for (const { n, l } of codeLines(wf.text)) {
       assert.doesNotMatch(l, /(echo|printf|cat)\b.*\$\{\{\s*secrets\./, `${wf.name}:${n}`);

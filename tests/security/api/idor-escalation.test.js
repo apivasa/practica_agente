@@ -32,8 +32,8 @@ describe('pentest-api: IDOR y escalada', { skip }, () => {
       { unit_id: UNIT.beta, reason: 'idor-fixture B', expires_on: exp, approved_by: USERS.comite.id },
     ]);
     const [alA, alB] = await adminInsert('alerts', [
-      { unit_id: UNIT.alfa, recipient_user_id: USERS.lider1.id, kind: 'idor-fixture' },
-      { unit_id: UNIT.beta, recipient_user_id: USERS.lider2.id, kind: 'idor-fixture' },
+      { unit_id: UNIT.alfa, recipient_user_id: USERS.lider1.id, kind: 'color_change', dedupe_key: 'idor-fixture:alfa' },
+      { unit_id: UNIT.beta, recipient_user_id: USERS.lider2.id, kind: 'color_change', dedupe_key: 'idor-fixture:beta' },
     ]);
     const [mBeta] = await adminGet(`measurements?unit_id=eq.${UNIT.beta}&indicator_id=eq.${KPI.avail}&limit=1`);
     const [mAlfaVuln] = await adminGet(`measurements?unit_id=eq.${UNIT.alfa}&indicator_id=eq.${KPI.vuln}&limit=1`);
@@ -249,7 +249,7 @@ describe('pentest-api: IDOR y escalada', { skip }, () => {
         const call = as(actor, tokens);
         const ev = await call(`evaluations?unit_id=eq.${UNIT.alfa}`, { method: 'PATCH', body: { color: 'green' }, headers: REPR });
         assert.ok(DENIED.includes(ev.status), `${actor} evaluations: ${fmt(ev)}`);
-        const al = await call('alerts', { method: 'POST', body: { recipient_user_id: USERS.lider2.id, kind: 'fake' }, headers: REPR });
+        const al = await call('alerts', { method: 'POST', body: { recipient_user_id: USERS.lider2.id, unit_id: UNIT.beta, kind: 'exception_expired', dedupe_key: `forged:${actor}` }, headers: REPR });
         assert.ok(DENIED.includes(al.status), `${actor} alerts: ${fmt(al)}`);
         const au = await call('audit_log?entity=eq.units', { method: 'DELETE', headers: REPR });
         assert.ok(DENIED.includes(au.status), `${actor} audit_log: ${fmt(au)}`);
@@ -257,7 +257,7 @@ describe('pentest-api: IDOR y escalada', { skip }, () => {
     });
 
     test('alerta: el destinatario solo marca read_at; no cambia payload ni destinatario', async () => {
-      for (const body of [{ payload: { x: 1 } }, { recipient_user_id: USERS.lider2.id }, { kind: 'x' }]) {
+      for (const body of [{ payload: { x: 1 } }, { recipient_user_id: USERS.lider2.id }, { kind: 'pace_behind' }, { dedupe_key: 'forged:silence' }]) {
         const r = await L1(`alerts?id=eq.${fx.alA.id}`, { method: 'PATCH', body, headers: REPR });
         assert.ok(DENIED.includes(r.status), `${JSON.stringify(body)}: ${fmt(r)}`);
       }
