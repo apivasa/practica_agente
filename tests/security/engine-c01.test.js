@@ -37,13 +37,26 @@ test('excepción vencida ayer no suspende; la que vence hoy sí (límite inclusi
   assert.equal(r2.level, 'exception');
 });
 
-// Hallazgo H-C01-01 (baja): fechas imposibles del calendario pasan el regex.
-test('H-C01-01 (documentado): fecha imposible 2026-02-31 se acepta y cuenta como vigente el 2026-02-29/30', () => {
-  const r = evaluateEscalation(RED2, { asOf: '2026-02-30', activeExceptions: [{ id: 'c', scope: 'all', expiresOn: '2026-02-31' }] });
-  // Comportamiento actual: acepta. Impacto acotado: no supera el mes 2026-02 frente a un asOf real (>= 2026-03-01).
+// H-C01-01 (corregido): fechas imposibles del calendario se rechazan.
+for (const bad of ['2026-02-31', '2026-02-30', '2026-02-29', '2025-02-29', '2026-04-31', '2026-06-31', '2026-09-31', '2026-11-31']) {
+  test(`H-C01-01: expiresOn inexistente ${bad} se rechaza`, () => {
+    assert.throws(() => ev(RED2, { activeExceptions: [{ id: 'c', scope: 'all', expiresOn: bad }] }), TypeError);
+  });
+  test(`H-C01-01: asOf inexistente ${bad} se rechaza`, () => {
+    assert.throws(() => evaluateEscalation(RED2, { asOf: bad }), TypeError);
+  });
+}
+
+test('H-C01-01: fechas reales límite se aceptan (bisiesto, fin de mes)', () => {
+  const r = evaluateEscalation(RED2, { asOf: '2028-02-29', activeExceptions: [{ id: 'c', scope: 'all', expiresOn: '2028-02-29' }] });
   assert.equal(r.level, 'exception');
-  const real = evaluateEscalation(RED2, { asOf: '2026-03-01', activeExceptions: [{ id: 'c', scope: 'all', expiresOn: '2026-02-31' }] });
-  assert.equal(real.level, 'frozen');
+  assert.equal(ev(RED2, { activeExceptions: [{ id: 'd', scope: 'all', expiresOn: '2026-04-30' }] }).level, 'exception');
+});
+
+test('id de excepción vacío o no-string se rechaza', () => {
+  for (const id of ['', '   ', undefined, null, 1, {}]) {
+    assert.throws(() => ev(RED2, { activeExceptions: [{ id, scope: 'all', expiresOn: '2026-12-31' }] }), TypeError);
+  }
 });
 
 // --- Scope manipulado -------------------------------------------------------
@@ -147,15 +160,23 @@ test('entradas no-objeto en history se rechazan', () => {
   assert.throws(() => ev({ length: 0 }), TypeError);
 });
 
-// Hallazgo H-C01-02 (baja): huecos y desfase con asOf no se validan.
-test('H-C01-02 (documentado): hueco de mes cuenta como consecutivo', () => {
-  const r = evaluateEscalation([{ month: '2026-01', color: 'red' }, { month: '2026-03', color: 'red' }], { asOf: '2026-03-31' });
-  assert.equal(r.monthsInBreach, 2); // comportamiento actual: no detecta que falta 2026-02
+// H-C01-02 (parcialmente corregido): huecos y meses posteriores a asOf se rechazan.
+test('H-C01-02: hueco de mes se rechaza (no cuenta como consecutivo)', () => {
+  assert.throws(() => evaluateEscalation([{ month: '2026-01', color: 'red' }, { month: '2026-03', color: 'red' }], { asOf: '2026-03-31' }), RangeError);
+  assert.throws(() => evaluateEscalation([{ month: '2026-04', color: 'red' }, { month: '2026-06', color: 'yellow' }], { asOf: '2026-06-30' }), RangeError);
 });
 
-test('H-C01-02 (documentado): historial de un trimestre que no contiene asOf se acepta', () => {
+test('H-C01-02: historial con mes posterior al mes de asOf se rechaza', () => {
+  assert.throws(() => evaluateEscalation(RED2, { asOf: '2026-01-31' }), RangeError);
+  assert.throws(() => evaluateEscalation([{ month: '2026-02', color: 'green' }], { asOf: '2026-01-15' }), RangeError);
+  assert.throws(() => evaluateEscalation([{ month: '2027-01', color: 'red' }], { asOf: '2026-12-31' }), RangeError);
+  // El mes de asOf sí es válido.
+  assert.equal(evaluateEscalation(RED2, { asOf: '2026-02-01' }).level, 'frozen');
+});
+
+test('H-C01-02 (pendiente C-03, documentado): historial de un trimestre anterior que no contiene asOf aún se acepta', () => {
   const r = evaluateEscalation(RED2, { asOf: '2026-09-01' });
-  assert.equal(r.level, 'frozen'); // comportamiento actual: no verifica que history sea del trimestre de asOf
+  assert.equal(r.level, 'frozen'); // la regla "último mes = mes de asOf o anterior" la aplica C-03 al armar el historial
 });
 
 // --- No mutación ------------------------------------------------------------

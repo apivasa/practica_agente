@@ -23,3 +23,7 @@ Registro de hallazgos que no bloquean el merge. Cada uno se propone como ítem o
 ## Motor de escalada (C-01)
 
 | ID | Ítem | Severidad | Categoría | Descripción | Propuesta |
+|---|---|---|---|---|---|
+| H-C01-01 | C-01 | Baja | 3 Entradas | **Corregido** (89c762b). `DATE_RE` aceptaba fechas imposibles (`2026-02-31`). La vigencia indebida no pasa del mes indicado. | Validar la fecha real (ida y vuelta con `Date.UTC`). |
+| H-C01-02 | C-01 | Baja | 5 Automatizaciones | **Parcialmente corregido** (89c762b). Ya se rechazan los huecos entre meses y los meses posteriores a `asOf`. Falta rechazar un historial de un trimestre anterior que no contiene `asOf`. | Resto en C-03: el último mes del historial debe ser el de `asOf` o el anterior. |
+| H-C01-03 | C-01 | Info | 1 RLS | El motor no vincula la excepción con la unidad ni limita su duración. | Controlarlo con RLS y pgTAP en la tabla `exceptions`. |
