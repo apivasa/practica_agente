@@ -59,7 +59,7 @@ select has_trigger('public', 'commitments', 'audit_commitments', 'trigger de aud
 set local role authenticated;
 set local request.jwt.claims = '{"sub":"aaaaaaaa-0000-4000-8000-000000000004","role":"authenticated"}';
 insert into public.exceptions (id, unit_id, reason, expires_on)
-values ('88888888-0000-4000-8000-0000000000a1', 'bbbbbbbb-0000-4000-8000-000000000001', 'Auditoría', '2027-03-31');
+values ('88888888-0000-4000-8000-0000000000a1', 'bbbbbbbb-0000-4000-8000-000000000001', 'Auditoría', current_date + 30);
 
 -- Gestora cambia un umbral y quita un rol
 set local request.jwt.claims = '{"sub":"aaaaaaaa-0000-4000-8000-000000000001","role":"authenticated"}';

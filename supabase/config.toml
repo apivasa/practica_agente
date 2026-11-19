@@ -1,2 +1,10 @@
 # Configuración mínima de Supabase CLI. La CLI aplica valores por defecto al resto.
 project_id = "practica-agente"
+
+[auth]
+# H-F03-06: sin registro abierto. Las cuentas las crea la gestora (o el seed
+# en local); un usuario autenticado sin fila en user_roles no ve nada.
+enable_signup = false
+
+[auth.email]
+enable_signup = false
