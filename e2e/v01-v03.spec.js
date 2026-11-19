@@ -112,7 +112,7 @@ test.describe('V-02 · vista del comité', () => {
     await expect(page.getByRole('heading', { level: 2 })).toHaveText('Comité de delivery');
     const matrix = page.getByRole('table', { name: 'Matriz unidad por indicador' });
     await expect(matrix.locator('caption')).toHaveText('Color por unidad e indicador · 2027-02');
-    // Otras pruebas e2e pueden crear unidades: se exigen las 3 de la semilla.
+    // Otras pruebas e2e (p. ej. XSS de S-04) crean unidades: se exigen las 3 de la semilla.
     for (const name of ['Unidad Alfa', 'Unidad Beta', 'Unidad Gamma']) {
       await expect(matrix.locator(`tr[data-unit="${name}"]`)).toHaveCount(1);
     }
@@ -158,7 +158,7 @@ test.describe('V-03 · completitud (gestora)', () => {
     const vulnBlock = page.locator('.custodian-block').filter({ has: page.locator('tr[data-indicator="VULN"]') });
     await expect(vulnBlock.getByRole('heading', { level: 3 })).toContainText(/VULN · usuario 11111111…0002: \d+ % cargado/);
     const vuln = vulnBlock.locator('tr[data-indicator="VULN"]');
-    await expect(vuln).toContainText(/[1-3] de 3/);
+    await expect(vuln).toContainText(/[1-9]\d* de \d+/);
     await expect(vuln).toContainText(/\d+ %/);
     await expect(vuln.locator('td').last()).not.toContainText('Unidad Alfa');
 
@@ -170,6 +170,6 @@ test.describe('V-03 · completitud (gestora)', () => {
     const options = await page.getByLabel('Mes a evaluar').locator('option').allTextContents();
     expect(options).toHaveLength(2);
     await page.getByLabel('Mes a evaluar').selectOption({ index: 1 });
-    await expect(page.locator('tr[data-indicator="VULN"]')).toContainText(/\d de 3/);
+    await expect(page.locator('tr[data-indicator="VULN"]')).toContainText(/\d+ de \d+/);
   });
 });
