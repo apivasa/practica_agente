@@ -78,7 +78,8 @@ export const ACTORS = [...ROLES, 'anon'];
 // HTTP
 // ---------------------------------------------------------------------------
 export async function request(path, { token, apikey = env.publishable, method = 'GET', body, headers = {} } = {}) {
-  const h = { apikey, ...headers };
+  const h = { ...headers };
+  if (apikey) h.apikey = apikey;
   if (token) h.Authorization = `Bearer ${token}`;
   if (body !== undefined) h['Content-Type'] = 'application/json';
   const res = await fetch(`${env.url}${path}`, {
