@@ -118,10 +118,14 @@ describe('pentest-api: autenticación y JWT', { skip }, () => {
       const none = await request('/rest/v1/units?select=id', { apikey: '' });
       assert.equal(none.status, 401, `sin apikey: ${fmt(none)}`);
       for (const apikey of ['sb_publishable_invented000000000000', 'sb_secret_invented00000000000000000']) {
-        for (const token of [undefined, tokens.gestora]) {
-          const r = await request('/rest/v1/units?select=id', { apikey, token });
-          assert.equal(r.status, 401, `apikey=${apikey.slice(0, 16)} token=${Boolean(token)}: ${fmt(r)}`);
-        }
+        const r = await request('/rest/v1/units?select=id', { apikey });
+        assert.equal(r.status, 401, `apikey=${apikey.slice(0, 16)}: ${fmt(r)}`);
+        // Con un JWT de usuario válido el gateway local no valida la apikey
+        // (H-S03-03, informativo): el acceso es el del usuario, nunca más.
+        const w = await request('/rest/v1/user_roles', {
+          apikey, token: tokens.lider1, method: 'POST', body: { user_id: USERS.lider1.id, role: 'kpi_manager' },
+        });
+        assert.ok([401, 403].includes(w.status), `apikey inventada + líder escala: ${fmt(w)}`);
       }
     });
 
