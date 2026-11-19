@@ -3,6 +3,7 @@
 ## Candado de ciclo
 Estado: LIBRE
 Desde:
+Latido:
 Sesión:
 
 ## Log de ciclos (más reciente arriba)

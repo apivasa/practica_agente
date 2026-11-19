@@ -26,7 +26,7 @@ Seguridad no solo revisa: en cada ítem **ejecuta pruebas activas** (pentest de 
 
 ## 2. Ciclo del orquestador (cada vez que despiertas)
 
-1. **Candado.** Lee `docs/estado.md`. Si hay un ciclo `EN CURSO` iniciado hace menos de 3 h, termina sin hacer nada. Si no, escribe `EN CURSO` con la hora (America/Guayaquil), haz commit y push a `main`.
+1. **Candado.** `git pull` y lee `docs/estado.md`. Si hay un ciclo `EN CURSO` cuyo *Latido* tiene menos de 90 minutos, termina sin hacer nada (otra sesión está trabajando). Si no, escribe `EN CURSO`, *Desde* y *Latido* con la hora (America/Guayaquil), haz commit y push a `main`. **Renueva el Latido** (commit y push) cada vez que cierres o empieces un ítem.
 2. **Sincroniza.** `git pull`. Lee `docs/pendientes-usuario.md`: si el usuario respondió algo, aplica la respuesta (desbloquea ítems, ajusta configuración, actualiza `docs/diseno.md` si cambió una regla) y mueve la entrada a "Resueltos".
 3. **Salud primero.** Revisa el último run de CI y de los workflows programados en `main` (con `gh api` sobre `actions/runs?branch=main`, ver sección 5). Si `main` está en rojo, el primer ítem del ciclo es arreglarlo (rama `fix/main-<fecha>`).
 4. **Elige.** Primer ítem `Pendiente` de "Orden de ejecución autónoma" en `docs/plan-maestro.md` con dependencias `Hecho`. Márcalo `En curso`.
@@ -37,6 +37,13 @@ Seguridad no solo revisa: en cada ítem **ejecuta pruebas activas** (pentest de 
 9. **Integra.** Abre PR `[<ID>] <título>` con los tres informes enlazados. Espera CI. Verde → merge con squash y borra la rama. Rojo → vuelve al paso 7 (cuenta como intento).
 10. **Registra.** Marca el ítem `Hecho` con el número de PR. Añade una línea al log de `docs/estado.md`.
 11. **Continúa o cierra.** Si quedan contexto y tiempo (máximo 3 ítems por ciclo), vuelve al paso 3. Al terminar, cambia el candado a `LIBRE`, commit y push.
+
+### Modo acelerado (pedido del usuario el 2026-11-19: terminar lo antes posible)
+- Sin tope de 3 ítems por ciclo: sigue mientras tengas contexto.
+- Puedes **agrupar** ítems pequeños y relacionados en una sola rama y PR (por ejemplo `item/F-01-F-02`), con un informe por revisor que cubra todos.
+- Puedes trabajar **en paralelo** ítems sin dependencia entre sí (por ejemplo, el motor `engine/` y las migraciones), lanzando cada `desarrollador` con `isolation: "worktree"` en su propia rama.
+- Prioridad si no alcanza el tiempo: MVP publicado = F-01..F-06, M-01..M-05, C-01..C-04, V-01..V-03, S-01, S-03, S-05, V-05. Lo demás después.
+- Nada de lo anterior relaja la Definition of Done, las revisiones ni las reglas de seguridad.
 
 ---
 
