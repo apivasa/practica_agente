@@ -31,13 +31,13 @@ test('C-02: el comité aprueba una excepción de inicio puntual y la revoca', as
   await expect(page.getByRole('heading', { level: 2 })).toHaveText('Excepciones del comité');
 
   // Validación en el cliente: change obligatorio para inicio puntual.
-  await page.getByLabel('Unidad').selectOption({ label: 'Unidad Alfa' });
-  await page.getByLabel('Motivo').fill(`${tag} <img src=x onerror=alert(1)>`);
-  await page.getByLabel('Vence el').fill(inDaysGye(30));
+  await page.getByLabel('Unidad', { exact: true }).selectOption({ label: 'Unidad Alfa' });
+  await page.getByLabel('Motivo', { exact: true }).fill(`${tag} <img src=x onerror=alert(1)>`);
+  await page.getByLabel('Vence el', { exact: true }).fill(inDaysGye(30));
   await page.getByRole('button', { name: 'Aprobar excepción' }).click();
   await expect(page.locator('#exc-change-error')).toHaveText('Indica el change que se autoriza.');
 
-  await page.getByLabel('Change autorizado').fill('CHG-E2E-1');
+  await page.getByLabel('Change autorizado', { exact: true }).fill('CHG-E2E-1');
   await page.getByRole('button', { name: 'Aprobar excepción' }).click();
 
   const row = page.locator('tbody tr', { hasText: tag });
@@ -59,11 +59,11 @@ test('C-02: el comité aprueba una excepción de inicio puntual y la revoca', as
 test('C-02: vencimiento mayor al tope se rechaza en el formulario', async ({ page }) => {
   await login(page, 'comite@example.test');
   await page.goto('./#/comite/excepciones');
-  await page.getByLabel('Unidad').selectOption({ label: 'Unidad Beta' });
-  await page.getByLabel('Alcance').selectOption('all');
-  await expect(page.getByLabel('Change autorizado')).toBeHidden();
-  await page.getByLabel('Motivo').fill('Demasiado larga');
-  await page.getByLabel('Vence el').fill(inDaysGye(91));
+  await page.getByLabel('Unidad', { exact: true }).selectOption({ label: 'Unidad Beta' });
+  await page.getByLabel('Alcance', { exact: true }).selectOption('all');
+  await expect(page.getByLabel('Change autorizado', { exact: true })).toBeHidden();
+  await page.getByLabel('Motivo', { exact: true }).fill('Demasiado larga');
+  await page.getByLabel('Vence el', { exact: true }).fill(inDaysGye(91));
   await page.getByRole('button', { name: 'Aprobar excepción' }).click();
   await expect(page.locator('#exc-expires-error')).toContainText('90 días');
 });
