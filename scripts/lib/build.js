@@ -4,7 +4,7 @@
 import {
   measure,
   evaluateColor,
-  validateIndicator,
+  effectiveThresholds,
   unitColor,
   evaluateEscalation,
   quarterOf,
@@ -35,8 +35,10 @@ export function pickCommitment(commitments, unitId, indicatorId, month) {
 }
 
 /**
- * Configuración del motor desde una fila de `indicators`, con los umbrales del compromiso
- * si existen y son coherentes con el sentido; si no, los generales.
+ * Configuración del motor desde una fila de `indicators`, con los umbrales
+ * efectivos del compromiso. La regla (override completo y coherente con el
+ * sentido; si no, los generales) es la de engine/effectiveThresholds: la misma
+ * que muestra el front (M-03, H-1).
  * @param {any} row
  * @param {any} [commitment]
  * @returns {{ cfg: any, thresholdSource: 'commitment' | 'indicator', note?: string }}
@@ -52,19 +54,16 @@ export function indicatorConfig(row, commitment = null) {
     minSample: row.min_sample,
     source: row.source,
   };
-  const g = num(commitment?.green_override);
-  const y = num(commitment?.yellow_override);
-  if (g === null && y === null) return { cfg: base, thresholdSource: 'indicator' };
-  const withOverride = {
-    ...base,
-    thresholds: { green: g ?? base.thresholds.green, yellow: y ?? base.thresholds.yellow },
-  };
-  if (validateIndicator(withOverride).ok) return { cfg: withOverride, thresholdSource: 'commitment' };
-  return {
-    cfg: base,
-    thresholdSource: 'indicator',
-    note: 'Umbrales del compromiso incoherentes con el sentido: se usan los generales',
-  };
+  let eff;
+  try {
+    eff = effectiveThresholds(base, commitment);
+  } catch {
+    // Umbrales generales inválidos y sin override aplicable: el motor lo rechazará al medir.
+    return { cfg: base, thresholdSource: 'indicator' };
+  }
+  const cfg = { ...base, thresholds: { green: eff.green, yellow: eff.yellow } };
+  if (eff.overridden) return { cfg, thresholdSource: 'commitment' };
+  return eff.reason ? { cfg, thresholdSource: 'indicator', note: eff.reason } : { cfg, thresholdSource: 'indicator' };
 }
 
 /**
