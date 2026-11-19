@@ -33,6 +33,18 @@ export const ACTOR = 'system:evaluate';
 
 const evalKey = (unitId, indicatorId, month) => `${unitId}|${indicatorId ?? ''}|${month}`;
 
+/** JSON con claves ordenadas: jsonb no conserva el orden de las claves. */
+export function stableStringify(v) {
+  if (Array.isArray(v)) return `[${v.map(stableStringify).join(',')}]`;
+  if (v && typeof v === 'object') {
+    return `{${Object.keys(v)
+      .sort()
+      .map((k) => `${JSON.stringify(k)}:${stableStringify(v[k])}`)
+      .join(',')}}`;
+  }
+  return JSON.stringify(v);
+}
+
 const sameArray = (a, b) => JSON.stringify([...(a ?? [])]) === JSON.stringify([...(b ?? [])]);
 
 /** ¿La fila nueva difiere de la guardada? (para no reescribir ni auditar lo mismo). */
@@ -265,7 +277,8 @@ export async function runDaily(db, { asOf, log = () => {} }) {
           (s) => s.entity_id === entityId && s.details?.as_of === asOf && s.details?.quarter === quarter,
         );
         const snapshot = { ...context, quarter, behind_any: pace.behindAny, status };
-        if (!sameDay.some((s) => JSON.stringify(s.details?.status) === JSON.stringify(status) && s.details?.behind_any === pace.behindAny)) {
+        const fingerprint = stableStringify(status);
+        if (!sameDay.some((s) => stableStringify(s.details?.status) === fingerprint && s.details?.behind_any === pace.behindAny)) {
           audit.push({ actor: ACTOR, action: 'pace_snapshot', entity: 'pace', entity_id: entityId, details: snapshot });
         }
         log(`${unit.name}/${ind.code}: ${pace.reason}`);

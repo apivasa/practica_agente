@@ -2,6 +2,15 @@
 // importan: unique (unit_id, indicator_id, month) en evaluations y unique dedupe_key en alerts.
 import { randomUUID } from 'node:crypto';
 
+/** Como jsonb: las claves de los objetos se guardan ordenadas (no conserva el orden). */
+function jsonbLike(v) {
+  if (Array.isArray(v)) return v.map(jsonbLike);
+  if (v && typeof v === 'object') {
+    return Object.fromEntries(Object.keys(v).sort().map((k) => [k, jsonbLike(v[k])]));
+  }
+  return v;
+}
+
 export function createFakeDb(data) {
   const t = {
     units: [],
@@ -52,14 +61,14 @@ export function createFakeDb(data) {
       const out = [];
       for (const r of rows) {
         if (t.alerts.some((a) => a.dedupe_key === r.dedupe_key)) continue;
-        const row = { id: randomUUID(), sent_at: now(), read_at: null, ...clone(r) };
+        const row = { id: randomUUID(), sent_at: now(), read_at: null, ...clone(r), payload: jsonbLike(r.payload ?? {}) };
         t.alerts.push(row);
         out.push(clone(row));
       }
       return out;
     },
     async insertAudit(rows) {
-      for (const r of rows) t.audit_log.push({ id: t.audit_log.length + 1, created_at: now(), ...clone(r) });
+      for (const r of rows) t.audit_log.push({ id: t.audit_log.length + 1, created_at: now(), ...clone(r), details: jsonbLike(r.details ?? {}) });
     },
     paceSnapshots: async (entityIds, quarter) =>
       clone(

@@ -1,7 +1,7 @@
 // C-03/C-04: evaluación mensual y diaria contra una BD en memoria con el escenario de la semilla.
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
-import { runMonthly, runDaily, latestSnapshot, ACTOR } from '../../scripts/lib/run.js';
+import { runMonthly, runDaily, latestSnapshot, stableStringify, ACTOR } from '../../scripts/lib/run.js';
 import { createFakeDb, seedScenario, IDS } from './fake-db.js';
 
 const { U, I } = IDS;
@@ -238,4 +238,10 @@ describe('latestSnapshot', () => {
     assert.equal(latestSnapshot(rows, 'e', '2027-Q1', '2027-02-08'), null);
     assert.equal(latestSnapshot([{ entity_id: 'e' }], 'e', '2027-Q1', '2027-02-08'), null);
   });
+});
+
+test('stableStringify ignora el orden de claves (jsonb lo reordena)', () => {
+  assert.equal(stableStringify({ b: 1, a: [{ d: 2, c: null }] }), stableStringify({ a: [{ c: null, d: 2 }], b: 1 }));
+  assert.notEqual(stableStringify({ a: 1 }), stableStringify({ a: 2 }));
+  assert.equal(stableStringify('x'), '"x"');
 });
