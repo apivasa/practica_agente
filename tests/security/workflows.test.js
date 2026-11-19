@@ -146,6 +146,22 @@ test('seguridad.yml: corre en PR, push a main, semanal y manual, con las cinco h
   assert.doesNotMatch(wf, /(gitleaks|semgrep|npm audit --omit)[^\n]*\|\|\s*true/);
 });
 
+test('seguridad.yml: job pentest-api contra Supabase local, obligatorio y sin omitir', () => {
+  const wf = workflows.find((w) => w.name === 'seguridad.yml').text;
+  const jobs = wf.split(/^ {2}(?=[\w-]+:\s*$)/m);
+  const job = jobs.find((j) => j.startsWith('pentest-api:'));
+  assert.ok(job, 'falta el job pentest-api (S-03)');
+  assert.match(job, /supabase\/setup-cli@[0-9a-f]{40}/);
+  assert.match(job, /version:\s*\d+\.\d+\.\d+/);
+  assert.match(job, /supabase start\b/);
+  assert.match(job, /supabase status -o env/);
+  // Sin PENTEST_REQUIRE las pruebas de API se omitirían: sería un control desactivado.
+  assert.match(job, /PENTEST_REQUIRE:\s*'1'/);
+  assert.match(job, /node --test --test-concurrency=1 'tests\/security\/api\/\*\.test\.js'/);
+  assert.doesNotMatch(job, /secrets\./, 'el pentest local no necesita secretos del repo');
+  assert.doesNotMatch(job, /permissions:[\s\S]*write/);
+});
+
 test('dependabot.yml cubre github-actions y npm', () => {
   const p = join(ROOT, '.github', 'dependabot.yml');
   assert.ok(existsSync(p), 'falta .github/dependabot.yml');
