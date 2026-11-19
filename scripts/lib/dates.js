@@ -1,24 +1,17 @@
 // Fechas de negocio (America/Guayaquil) y utilidades de calendario.
 // Funciones puras salvo `todayInGuayaquil`, que recibe el instante como argumento.
-import { parseDay, quarterOf } from '../../engine/index.js';
+import { parseDay, quarterOf, businessDate, BUSINESS_TZ } from '../../engine/index.js';
 
-export const BUSINESS_TZ = 'America/Guayaquil';
+export { BUSINESS_TZ };
 const DAY_MS = 86_400_000;
 const MONTH_RE = /^(\d{4})-(0[1-9]|1[0-2])$/;
 
 /**
- * Fecha 'YYYY-MM-DD' del instante `now` en America/Guayaquil (sin librerías).
+ * Fecha 'YYYY-MM-DD' del instante `now` en America/Guayaquil (engine/dates.js).
  * @param {Date} [now]
  */
 export function todayInGuayaquil(now = new Date()) {
-  const parts = new Intl.DateTimeFormat('en-CA', {
-    timeZone: BUSINESS_TZ,
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-  }).formatToParts(now);
-  const get = (t) => parts.find((p) => p.type === t)?.value;
-  return `${get('year')}-${get('month')}-${get('day')}`;
+  return businessDate(now);
 }
 
 /** @param {unknown} s */

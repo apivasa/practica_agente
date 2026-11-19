@@ -107,23 +107,23 @@ export function validateCommitment(indicator, commitment) {
  * @returns {{ green: number, yellow: number, overridden: boolean, reason?: string }}
  */
 export function effectiveThresholds(indicator, commitment) {
+  const green = pick(commitment, 'greenOverride', 'green_override');
+  const yellow = pick(commitment, 'yellowOverride', 'yellow_override');
+  const g = toNum(green);
+  const y = toNum(yellow);
+  // Un override completo y coherente reemplaza a los dos umbrales: no hace falta el general.
+  if (isFiniteNumber(g) && isFiniteNumber(y) && coherent(indicator?.direction, g, y)) {
+    return { green: g, yellow: y, overridden: true };
+  }
   const base = generalThresholds(indicator);
   if (!isFiniteNumber(base.green) || !isFiniteNumber(base.yellow)) {
     throw new Error('Indicador sin umbrales generales válidos');
   }
-  const green = pick(commitment, 'greenOverride', 'green_override');
-  const yellow = pick(commitment, 'yellowOverride', 'yellow_override');
   if (!present(green) && !present(yellow)) return { ...base, overridden: false };
-
-  const g = toNum(green);
-  const y = toNum(yellow);
   if (!isFiniteNumber(g) || !isFiniteNumber(y)) {
     return { ...base, overridden: false, reason: 'Umbral negociado incompleto: se usan los generales' };
   }
-  if (!coherent(indicator?.direction, g, y)) {
-    return { ...base, overridden: false, reason: 'Umbral negociado incoherente con el sentido: se usan los generales' };
-  }
-  return { green: g, yellow: y, overridden: true };
+  return { ...base, overridden: false, reason: 'Umbral negociado incoherente con el sentido: se usan los generales' };
 }
 
 /** Suma del paquete por categoría (para commitments.package_total). null si no hay paquete. */

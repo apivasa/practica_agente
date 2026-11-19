@@ -23,7 +23,12 @@ Funciones puras en JavaScript ESM, sin dependencias ni acceso a red. Las usan el
 - `isValidPeriod(p)`: `YYYY-Qn` o `YYYY-MM` (mismo patrón que `commitments.period`).
 - `validateCommitment(indicator, { period, greenOverride?, yellowOverride?, packageByCategory? })` → `{ ok, errors[] }`. El umbral negociado va en pareja (verde y amarillo) y debe ser coherente con `direction`. `packageByCategory` solo en `cumulative_target`, enteros >= 0.
 - `effectiveThresholds(indicator, commitment)` → `{ green, yellow, overridden, reason? }`. Aplica el umbral negociado del compromiso sobre el general. Acepta el indicador del motor (`thresholds`) o la fila de la BD (`green_threshold`, `yellow_threshold`) y el compromiso en camelCase o snake_case (`green_override`). Un override incompleto o incoherente no se aplica y `reason` lo explica. Para evaluar con él: `evaluateColor({ ...cfg, thresholds: { green, yellow } }, measured)`.
+- Es la **única** regla de umbral negociado: `scripts/lib/build.js` (`indicatorConfig`, C-03) la usa también. La BD impide overrides a medias (`commitments_override_pair`).
 - `packageTotal(packageByCategory)`: suma (para `commitments.package_total`).
+
+### Fecha de negocio — `dates.js`
+
+- `businessDate(now)` → `'YYYY-MM-DD'` en America/Guayaquil. La usan `src/lib/dates.js` y `scripts/lib/dates.js`.
 
 ### Captura de mediciones (M-04) — `measurements-input.js`
 

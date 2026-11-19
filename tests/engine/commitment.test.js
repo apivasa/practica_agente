@@ -68,3 +68,8 @@ test('packageTotal suma las categorías', () => {
   assert.equal(packageTotal({}), null);
   assert.equal(packageTotal(null), null);
 });
+
+test('effectiveThresholds: override completo aplica aunque el general sea inválido', () => {
+  assert.deepEqual(effectiveThresholds({ direction: 'higher_is_better', green_threshold: 'x' }, { green_override: 99.5, yellow_override: 99 }),
+    { green: 99.5, yellow: 99, overridden: true });
+});

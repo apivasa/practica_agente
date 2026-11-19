@@ -122,10 +122,14 @@ describe('build', () => {
     const full = indicatorConfig(AVAIL, { green_override: '99.5', yellow_override: 99 });
     assert.deepEqual(full.cfg.thresholds, { green: 99.5, yellow: 99 });
     assert.equal(full.thresholdSource, 'commitment');
-    assert.deepEqual(indicatorConfig(AVAIL, { green_override: null, yellow_override: 99 }).cfg.thresholds, { green: 99.9, yellow: 99 });
+    // Regla única (engine/effectiveThresholds, H-1 de M-03): un override a medias no se aplica.
+    const half = indicatorConfig(AVAIL, { green_override: null, yellow_override: 99 });
+    assert.deepEqual(half.cfg.thresholds, { green: 99.9, yellow: 99.5 });
+    assert.equal(half.thresholdSource, 'indicator');
+    assert.match(half.note, /incompleto/);
     const bad = indicatorConfig(AVAIL, { green_override: 90, yellow_override: 99 });
     assert.equal(bad.thresholdSource, 'indicator');
-    assert.match(bad.note, /incoherentes/);
+    assert.match(bad.note, /incoherente/);
   });
   test('toEngineMeasurements ordena por fecha y creación', () => {
     const out = toEngineMeasurements([
