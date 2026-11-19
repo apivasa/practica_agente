@@ -44,3 +44,10 @@ Detalle y reproducción en `docs/reportes/F-03-F-04-F-06-seguridad.md`.
 | H-F03-06 | F-04 | Baja | 2 | `config.toml` / panel de Auth | Registro abierto activo (`enable_signup` por defecto). | `enable_signup = false`; verificar en S-05. | S-05 | Abierto |
 | H-F03-07 | F-06 | Info | 8 | `seed.sql` | Contraseña local común para 7 cuentas. Solo es seguro mientras `seed.sql` no llegue a producción. | Guarda en `tests/security/db-static-f03.test.js`; en `deploy.yml` (V-05) usar `db push` sin `--include-seed`. | V-05 | Mitigado |
 | H-F03-08 | F-04 | Info | 1 | `units_select`, `indicators_select` | El custodio ve todas las unidades; todo rol ve la configuración de todos los indicadores. | Revisar si se añade asignación indicador↔unidad. | — | Aceptado |
+## Motor de vulnerabilidades (M-05)
+
+| ID | Ítem | Severidad | Categoría | Ubicación | Resumen | Corrección sugerida | Estado |
+|---|---|---|---|---|---|---|---|
+| H-M05-01 | M-05 | Media | 3/5 Entradas, alertas | `engine/vulnerabilities.js:163,231` | `resolvedToDate.total` no se acota al efectivo y `paceStatus` usa el total combinado: 500 P2/P3 resueltas sobre un paquete de 300 dejan el ritmo "al día" con 0 P0/P1 resueltas, y la alerta de atraso no se dispara. | Acotar `min(resuelto, efectivo)` por criticidad en el ritmo o rechazar el exceso; ritmo por criticidad; CHECK en BD/CSV. | Corregido (7dc977b; pruebas invertidas en tests/security/engine-m05.test.js) |
+| H-M05-02 | M-05 | Baja | 3/5 Entradas, alertas | `engine/vulnerabilities.js:61,162,243` | Conteos no seguros (`1e308`) → total `Infinity`, `expected` `NaN`, `behind:false` (falla abierta). | `Number.isSafeInteger` y lanzar si un total no es finito; CHECK de rango en BD. | Corregido (7dc977b; pruebas invertidas en tests/security/engine-m05.test.js) |
+| H-M05-03 | M-05 | Baja | 3 Entradas | `engine/vulnerabilities.js:123-124` | `thresholds` lee propiedades heredadas (`Object.create({p0p1:0})` → umbral 0). No alcanzable vía JSON. | Leer solo propiedades propias (`Object.hasOwn`). | Corregido (7dc977b; pruebas invertidas en tests/security/engine-m05.test.js) |
