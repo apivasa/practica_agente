@@ -134,7 +134,8 @@ describe('cumplimiento por criticidad', () => {
     assert.equal(r.compliance.p0p1Pct, 100);
     assert.equal(r.compliance.p2p3Pct, 100);
     assert.equal(r.pending.total, 0);
-    assert.equal(r.resolvedToDate.total, 12);
+    assert.equal(r.resolvedToDate.total, 10);
+    assert.equal(r.resolvedReported.total, 12);
   });
 });
 
@@ -167,14 +168,94 @@ describe('paceStatus', () => {
     assert.equal(paceStatus(s({ asOf: '2026-01-31' })).expected, 667);
   });
   test('después del trimestre exige el total efectivo', () => {
-    const p = paceStatus(s({ asOf: '2026-04-02', newCritical: crit, resolved: resolvedN(2100) }));
+    const p = paceStatus(s({ asOf: '2026-04-02', newCritical: crit, resolved: resolvedN(1700) }));
     assert.equal(p.expected, 2200);
-    assert.equal(p.gap, 100);
+    assert.equal(p.gap, 500);
     assert.match(p.reason, /cierre del trimestre/);
   });
   test('rechaza un estado que no viene de packageStatus', () => {
     assert.throws(() => paceStatus({}), TypeError);
     assert.throws(() => paceStatus(null), TypeError);
+  });
+});
+
+describe('H-M05-01: una criticidad no compensa la otra', () => {
+  test('exceso de P2/P3 se recorta y el atraso de P0/P1 se ve por criticidad', () => {
+    const st = packageStatus({
+      quarterStart: '2026-01-01', quarterEnd: '2026-03-31', asOf: '2026-01-31',
+      initialPackage: { p0p1: 300, p2p3: 300 },
+      resolved: [{ resolvedOn: '2026-01-10', criticality: 'P2P3', count: 500 }],
+    });
+    assert.deepEqual(st.resolvedToDate, { p0p1: 0, p2p3: 300, total: 300 });
+    assert.equal(st.resolvedReported.total, 500);
+    assert.deepEqual(st.expectedWeeklyPaceByCriticality, { p0p1: 300 / (59 / 7), p2p3: 0 });
+    const p = paceStatus(st);
+    assert.equal(p.behind, false); // total: 300 >= 200
+    assert.equal(p.behindAny, true);
+    assert.deepEqual(p.byCriticality.p0p1, { behind: true, gap: 100, expected: 100, resolved: 0 });
+    assert.equal(p.byCriticality.p2p3.behind, false);
+    assert.match(p.reason, /Atraso por criticidad: P0\/P1 faltan 100$/);
+  });
+  test('P2/P3 atrasadas se informan también', () => {
+    const st = s({ asOf: '2026-01-31', resolved: [{ resolvedOn: '2026-01-10', criticality: 'P0P1', count: 200 }] });
+    const p = paceStatus(st, { monthToDate: false });
+    assert.equal(p.byCriticality.p2p3.behind, true);
+    assert.equal(p.byCriticality.p0p1.behind, false);
+    assert.match(p.reason, /P2\/P3 faltan 600/);
+  });
+  test('al día en ambas criticidades: sin mención de atraso', () => {
+    const p = paceStatus(s({ asOf: '2026-01-31', resolved: [
+      { resolvedOn: '2026-01-10', criticality: 'P0P1', count: 67 },
+      { resolvedOn: '2026-01-10', criticality: 'P2P3', count: 600 }] }));
+    assert.equal(p.behindAny, false);
+    assert.equal(p.reason, 'Al día: 667 resueltas frente a 667 esperadas (avance esperado a 2026-01-31, mes 2026-01)');
+  });
+  test('en el último día el ritmo por criticidad es el pendiente', () => {
+    const st = s();
+    assert.deepEqual(st.expectedWeeklyPaceByCriticality, { p0p1: 200, p2p3: 1800 });
+  });
+  test('P0/P1 del mes 3 resueltas no se arrastran (QA H-01)', () => {
+    const st = s({
+      newCritical: [{ detectedOn: '2026-03-05', count: 50 }],
+      resolved: [{ resolvedOn: '2026-03-30', criticality: 'P0P1', count: 230 }],
+    });
+    assert.equal(st.resolvedToDate.p0p1, 230);
+    assert.equal(st.pending.p0p1, 0);
+    assert.equal(st.pendingCarry, 20 + 1800);
+  });
+});
+
+describe('H-M05-02 y H-M05-03', () => {
+  test('conteos no seguros se rechazan', () => {
+    assert.throws(() => s({ initialPackage: { p0p1: 1e308, p2p3: 0 } }), /entero seguro/);
+    assert.throws(() => s({ initialPackage: { p0p1: 2 ** 53, p2p3: 0 } }), TypeError);
+  });
+  test('sumas que salen del rango seguro se rechazan', () => {
+    const big = Number.MAX_SAFE_INTEGER;
+    assert.throws(() => s({ initialPackage: { p0p1: big, p2p3: big } }), /effectiveTotal excede/);
+    assert.throws(() => s({ initialPackage: { p0p1: big - 1, p2p3: 0 },
+      newCritical: [{ detectedOn: '2026-03-01', count: 5 }] }), /mes 3 excede/);
+    assert.throws(() => s({ newCritical: [{ detectedOn: '2026-01-02', count: big }, { detectedOn: '2026-01-03', count: 1 }] }), /newCritical excede/);
+    assert.throws(() => s({ resolved: [
+      { resolvedOn: '2026-01-02', criticality: 'P0P1', count: big },
+      { resolvedOn: '2026-01-02', criticality: 'P0P1', count: 1 }] }), /resolved P0\/P1 excede/);
+    assert.throws(() => s({ resolved: [
+      { resolvedOn: '2026-01-02', criticality: 'P2P3', count: big },
+      { resolvedOn: '2026-01-02', criticality: 'P2P3', count: 1 }] }), /resolved P2\/P3 excede/);
+    assert.throws(() => s({ resolved: [
+      { resolvedOn: '2026-01-02', criticality: 'P0P1', count: big },
+      { resolvedOn: '2026-01-02', criticality: 'P2P3', count: 1 }] }), /resolved excede/);
+  });
+  test('estado con totales no finitos se rechaza', () => {
+    const st = s();
+    assert.throws(() => paceStatus({ ...st, effectiveTotal: { ...st.effectiveTotal, total: Infinity } }), TypeError);
+    assert.throws(() => paceStatus({ ...st, resolvedToDate: { ...st.resolvedToDate, p0p1: NaN } }), TypeError);
+    assert.throws(() => paceStatus({ ...st, monthlyTargetsByCriticality: undefined }), TypeError);
+  });
+  test('umbrales y paquete heredados del prototipo se ignoran', () => {
+    const st = s({ thresholds: Object.create({ p0p1: 0, p2p3: 0 }) });
+    assert.deepEqual(st.compliance.thresholds, { p0p1: 96, p2p3: 85 });
+    assert.throws(() => s({ initialPackage: Object.create({ p0p1: 5, p2p3: 5 }) }), TypeError);
   });
 });
 

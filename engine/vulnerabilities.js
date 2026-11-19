@@ -29,13 +29,16 @@ import { carryOver } from './escalation.js';
  * @property {string} quarterEnd
  * @property {number|null} currentMonthIndex 1, 2 o 3; null si asOf es posterior al trimestre.
  * @property {Counts} effectiveTotal Paquete inicial + P0/P1 de los meses 1 y 2.
- * @property {Counts} resolvedToDate
+ * @property {Counts} resolvedToDate Resueltas por criticidad, recortadas a lo resoluble (P0/P1: efectivo + mes 3; P2/P3: efectivo).
+ * @property {Counts} resolvedReported Resueltas tal como se reportaron (sin recortar).
  * @property {Counts} pending max(efectivo - resuelto, 0) por criticidad.
  * @property {number} carryToNextQuarter P0/P1 detectadas en el mes 3 (pasan al paquete siguiente).
- * @property {number} pendingCarry Pendiente + carryToNextQuarter: lo que se arrastra si se cerrara hoy.
+ * @property {number} pendingCarry Por criticidad max(efectivo + mes 3 - resuelto, 0), sumado: lo que se arrastra si se cerrara hoy.
  * @property {number} weeksRemaining Días desde asOf (excluido) hasta quarterEnd (incluido) / 7; >= 0.
  * @property {number} expectedWeeklyPace pendiente.total / semanas restantes; con 0 semanas, el pendiente.
+ * @property {{ p0p1: number, p2p3: number }} expectedWeeklyPaceByCriticality
  * @property {MonthlyTarget[]} monthlyTargets Meta acumulada por mes (≈ 1/3, redondeo hacia arriba).
+ * @property {{ p0p1: MonthlyTarget[], p2p3: MonthlyTarget[] }} monthlyTargetsByCriticality
  * @property {{ p0p1Pct: number, p2p3Pct: number, meetsP0P1: boolean, meetsP2P3: boolean,
  *   thresholds: { p0p1: number, p2p3: number } }} compliance
  */
@@ -58,11 +61,21 @@ function day(s, name) {
 
 /** @param {unknown} n @param {string} name */
 function count(n, name) {
-  if (!Number.isInteger(n) || /** @type {number} */ (n) < 0) {
-    throw new TypeError(`${name} debe ser un entero >= 0`);
+  if (!Number.isSafeInteger(n) || /** @type {number} */ (n) < 0) {
+    throw new TypeError(`${name} debe ser un entero seguro >= 0`);
   }
   return /** @type {number} */ (n);
 }
+
+/** Suma de conteos: lanza si el total deja de ser un entero seguro (falla cerrada). */
+function safeSum(name, ...xs) {
+  const total = xs.reduce((a, b) => a + b, 0);
+  if (!Number.isSafeInteger(total)) throw new RangeError(`${name} excede el rango numérico seguro`);
+  return total;
+}
+
+/** Propiedad propia (no heredada del prototipo) o undefined. */
+const own = (o, k) => (Object.hasOwn(o, k) ? o[k] : undefined);
 
 /** @param {unknown} n @param {string} name */
 function pct(n, name) {
@@ -91,6 +104,9 @@ const ceilTol = (x) => Math.ceil(x - tolerance(x));
 /** % de cumplimiento; sin nada que resolver → 100. */
 const compliancePct = (resolved, total) => (total === 0 ? 100 : (Math.min(resolved, total) * 100) / total);
 
+/** @param {Counts} c */
+const finiteCounts = (c) => !!c && [c.p0p1, c.p2p3, c.total].every((n) => Number.isFinite(n));
+
 /**
  * Estado del paquete trimestral de vulnerabilidades de una unidad.
  * - P0/P1 nuevas de los meses 1 y 2 suman al paquete (efectivo); las del mes 3 van a
@@ -116,12 +132,12 @@ export function packageStatus(input) {
   if (!initialPackage || typeof initialPackage !== 'object') {
     throw new TypeError('initialPackage es obligatorio: { p0p1, p2p3 }');
   }
-  const initP0 = count(initialPackage.p0p1, 'initialPackage.p0p1');
-  const initP2 = count(initialPackage.p2p3, 'initialPackage.p2p3');
+  const initP0 = count(own(initialPackage, 'p0p1'), 'initialPackage.p0p1');
+  const initP2 = count(own(initialPackage, 'p2p3'), 'initialPackage.p2p3');
   if (thresholds === null || typeof thresholds !== 'object') throw new TypeError('thresholds debe ser un objeto');
   const th = {
-    p0p1: pct(thresholds.p0p1 ?? DEFAULT_COMPLIANCE_THRESHOLDS.p0p1, 'thresholds.p0p1'),
-    p2p3: pct(thresholds.p2p3 ?? DEFAULT_COMPLIANCE_THRESHOLDS.p2p3, 'thresholds.p2p3'),
+    p0p1: pct(own(thresholds, 'p0p1') ?? DEFAULT_COMPLIANCE_THRESHOLDS.p0p1, 'thresholds.p0p1'),
+    p2p3: pct(own(thresholds, 'p2p3') ?? DEFAULT_COMPLIANCE_THRESHOLDS.p2p3, 'thresholds.p2p3'),
   };
 
   /** @param {unknown} s @param {string} name */
@@ -138,7 +154,8 @@ export function packageStatus(input) {
   newCritical.forEach((e, i) => {
     if (!e || typeof e !== 'object') throw new TypeError(`newCritical[${i}] inválido`);
     const d = inQuarter(e.detectedOn, `newCritical[${i}].detectedOn`);
-    byMonth[monthDiff(firstMonth, d.slice(0, 7))] += count(e.count, `newCritical[${i}].count`);
+    const m = monthDiff(firstMonth, d.slice(0, 7));
+    byMonth[m] = safeSum('newCritical', byMonth[m], count(e.count, `newCritical[${i}].count`));
   });
 
   if (!Array.isArray(resolved)) throw new TypeError('resolved debe ser un arreglo');
@@ -151,30 +168,48 @@ export function packageStatus(input) {
       throw new TypeError(`resolved[${i}].criticality debe ser 'P0P1' o 'P2P3'`);
     }
     const c = count(e.count, `resolved[${i}].count`);
-    if (e.criticality === 'P0P1') resP0 += c;
-    else resP2 += c;
+    if (e.criticality === 'P0P1') resP0 = safeSum('resolved P0/P1', resP0, c);
+    else resP2 = safeSum('resolved P2/P3', resP2, c);
   });
 
-  // Reutiliza la regla de arrastre de C-01, por criticidad para no mezclar excedentes.
-  const p0 = carryOver({ packageTotal: initP0, resolved: resP0, newCriticalByMonth: byMonth });
-  const p2 = carryOver({ packageTotal: initP2, resolved: resP2, newCriticalByMonth: [0, 0, 0] });
+  // carryOver (C-01) da el total efectivo: paquete + P0/P1 de los meses 1 y 2.
+  const effP0 = carryOver({ packageTotal: initP0, resolved: 0, newCriticalByMonth: byMonth }).effectiveTotal;
+  const effP2 = initP2;
+  const m3 = byMonth[2];
+  const effectiveTotal = { p0p1: effP0, p2p3: effP2, total: safeSum('effectiveTotal', effP0, effP2) };
+  safeSum('effectiveTotal + mes 3', effectiveTotal.total, m3);
 
-  const effectiveTotal = { p0p1: p0.effectiveTotal, p2p3: p2.effectiveTotal, total: p0.effectiveTotal + p2.effectiveTotal };
-  const resolvedToDate = { p0p1: resP0, p2p3: resP2, total: resP0 + resP2 };
-  const pendP0 = Math.max(effectiveTotal.p0p1 - resP0, 0);
-  const pendP2 = Math.max(effectiveTotal.p2p3 - resP2, 0);
+  // Lo resuelto de una criticidad no compensa la otra: se recorta a lo que se puede resolver
+  // en esa criticidad (P0/P1: efectivo + mes 3, que cuenta para el cumplimiento, Q-06).
+  const resolvedReported = { p0p1: resP0, p2p3: resP2, total: safeSum('resolved', resP0, resP2) };
+  const rP0 = Math.min(resP0, effP0 + m3);
+  const rP2 = Math.min(resP2, effP2);
+  const resolvedToDate = { p0p1: rP0, p2p3: rP2, total: rP0 + rP2 };
+  const pendP0 = Math.max(effP0 - rP0, 0);
+  const pendP2 = effP2 - rP2;
   const pending = { p0p1: pendP0, p2p3: pendP2, total: pendP0 + pendP2 };
+  // Arrastre al cierre: lo no resuelto, incluidas las P0/P1 del mes 3 aún abiertas.
+  // No usa carryOver: allí el exceso de resueltos no descuenta las del mes 3 (doble conteo, QA H-01).
+  const pendingCarry = effP0 + m3 - rP0 + pendP2;
 
   const weeksRemaining = Math.max(end - now, 0) / 7;
   const expectedWeeklyPace = weeksRemaining === 0 ? pending.total : pending.total / weeksRemaining;
 
-  const monthlyTargets = [1, 2, 3].map((i) => ({
-    month: addMonths(firstMonth, i - 1),
-    cumulativeTarget: i === 3 ? effectiveTotal.total : ceilTol((effectiveTotal.total * i) / 3),
-  }));
+  /** @param {number} total @returns {MonthlyTarget[]} */
+  const targets = (total) =>
+    [1, 2, 3].map((i) => ({
+      month: addMonths(firstMonth, i - 1),
+      cumulativeTarget: i === 3 ? total : ceilTol((total * i) / 3),
+    }));
+  const monthlyTargets = targets(effectiveTotal.total);
+  const monthlyTargetsByCriticality = { p0p1: targets(effP0), p2p3: targets(effP2) };
+  const expectedWeeklyPaceByCriticality = {
+    p0p1: weeksRemaining === 0 ? pendP0 : pendP0 / weeksRemaining,
+    p2p3: weeksRemaining === 0 ? pendP2 : pendP2 / weeksRemaining,
+  };
 
-  const p0p1Pct = compliancePct(resP0, effectiveTotal.p0p1);
-  const p2p3Pct = compliancePct(resP2, effectiveTotal.p2p3);
+  const p0p1Pct = compliancePct(rP0, effP0);
+  const p2p3Pct = compliancePct(rP2, effP2);
   const currentMonthIndex = now > end ? null : monthDiff(firstMonth, asOf.slice(0, 7)) + 1;
 
   return {
@@ -184,12 +219,15 @@ export function packageStatus(input) {
     currentMonthIndex,
     effectiveTotal,
     resolvedToDate,
+    resolvedReported,
     pending,
-    carryToNextQuarter: byMonth[2],
-    pendingCarry: p0.pendingCarry + p2.pendingCarry,
+    carryToNextQuarter: m3,
+    pendingCarry,
     weeksRemaining,
     expectedWeeklyPace,
+    expectedWeeklyPaceByCriticality,
     monthlyTargets,
+    monthlyTargetsByCriticality,
     compliance: {
       p0p1Pct,
       p2p3Pct,
@@ -206,53 +244,83 @@ function assertStatus(s, name = 'status') {
     !s ||
     typeof s !== 'object' ||
     !Array.isArray(/** @type {any} */ (s).monthlyTargets) ||
+    !(/** @type {any} */ (s).monthlyTargetsByCriticality) ||
     /** @type {any} */ (s).monthlyTargets.length !== 3 ||
     !(/** @type {any} */ (s).effectiveTotal) ||
     !(/** @type {any} */ (s).resolvedToDate) ||
-    parseDay(/** @type {any} */ (s).asOf) === null
+    parseDay(/** @type {any} */ (s).asOf) === null ||
+    !finiteCounts(/** @type {any} */ (s).effectiveTotal) ||
+    !finiteCounts(/** @type {any} */ (s).resolvedToDate)
   ) {
     throw new TypeError(`${name} debe ser el resultado de packageStatus`);
   }
 }
 
 /**
+ * Esperado a la fecha según una serie de metas acumuladas.
+ * @param {PackageStatus} status
+ * @param {MonthlyTarget[]} targets
+ * @param {number} total
+ * @param {boolean} monthToDate
+ */
+function expectedAt(status, targets, total, monthToDate) {
+  const idx = status.currentMonthIndex;
+  if (idx === null) return { expected: total, scope: 'cierre del trimestre' };
+  const target = targets[idx - 1];
+  if (!monthToDate) return { expected: target.cumulativeTarget, scope: `meta acumulada de ${target.month}` };
+  const prev = idx === 1 ? 0 : targets[idx - 2].cumulativeTarget;
+  const frac = Number(status.asOf.slice(8, 10)) / daysInMonth(target.month);
+  return {
+    expected: ceilTol(prev + (target.cumulativeTarget - prev) * frac),
+    scope: `avance esperado a ${status.asOf}, mes ${target.month}`,
+  };
+}
+
+/**
+ * @typedef {{ behind: boolean, gap: number, expected: number, resolved: number }} PaceLine
+ */
+
+/**
  * Atraso frente al ritmo esperado (alerta "atraso frente al ritmo esperado").
- * Compara lo resuelto (total) con la meta acumulada del mes en curso.
+ * Compara lo resuelto con la meta acumulada del mes en curso, en total y por criticidad.
  * - `monthToDate: true` (por defecto): la meta del mes se prorratea por días transcurridos
  *   (asOf cuenta como transcurrido), redondeando hacia arriba.
  * - `monthToDate: false`: se exige la meta acumulada completa del mes en curso.
  * - asOf posterior al trimestre: se exige el total efectivo.
+ * - `behind`/`gap`/`expected`/`resolved` son del total; `byCriticality` evalúa P0/P1 y P2/P3
+ *   por separado (lo resuelto de una no compensa la otra) y `behindAny` es true si alguna va atrasada.
  * @param {PackageStatus} status
  * @param {{ monthToDate?: boolean }} [options]
- * @returns {{ behind: boolean, gap: number, expected: number, resolved: number, reason: string }}
+ * @returns {PaceLine & { behindAny: boolean, byCriticality: { p0p1: PaceLine, p2p3: PaceLine }, reason: string }}
  */
 export function paceStatus(status, { monthToDate = true } = {}) {
   assertStatus(status);
-  const resolved = status.resolvedToDate.total;
-  const idx = status.currentMonthIndex;
-  let expected;
-  let scope;
-  if (idx === null) {
-    expected = status.effectiveTotal.total;
-    scope = 'cierre del trimestre';
-  } else {
-    const target = status.monthlyTargets[idx - 1];
-    const prev = idx === 1 ? 0 : status.monthlyTargets[idx - 2].cumulativeTarget;
-    if (monthToDate) {
-      const frac = Number(status.asOf.slice(8, 10)) / daysInMonth(target.month);
-      expected = ceilTol(prev + (target.cumulativeTarget - prev) * frac);
-      scope = `avance esperado a ${status.asOf} (mes ${target.month})`;
-    } else {
-      expected = target.cumulativeTarget;
-      scope = `meta acumulada de ${target.month}`;
-    }
-  }
-  const gap = Math.max(expected - resolved, 0);
-  const behind = gap > 0;
-  const reason = behind
-    ? `Atraso: ${resolved} resueltas frente a ${expected} de la ${scope}; faltan ${gap}`
-    : `Al día: ${resolved} resueltas frente a ${expected} de la ${scope}`;
-  return { behind, gap, expected, resolved, reason };
+  /** @returns {PaceLine} */
+  const line = (expected, resolved) => {
+    const gap = Math.max(expected - resolved, 0);
+    return { behind: gap > 0, gap, expected, resolved };
+  };
+  const tot = expectedAt(status, status.monthlyTargets, status.effectiveTotal.total, monthToDate);
+  const total = line(tot.expected, status.resolvedToDate.total);
+  /** @param {'p0p1' | 'p2p3'} k */
+  const crit = (k) => {
+    const eff = status.effectiveTotal[k];
+    const e = expectedAt(status, status.monthlyTargetsByCriticality[k], eff, monthToDate);
+    return line(e.expected, Math.min(status.resolvedToDate[k], eff));
+  };
+  const byCriticality = { p0p1: crit('p0p1'), p2p3: crit('p2p3') };
+  // Si el total va atrasado, alguna criticidad también: las metas por criticidad se redondean
+  // hacia arriba por separado (suman >= las del total) y lo resuelto por criticidad está recortado.
+  const behindAny = byCriticality.p0p1.behind || byCriticality.p2p3.behind;
+  const lagging = [
+    byCriticality.p0p1.behind ? `P0/P1 faltan ${byCriticality.p0p1.gap}` : '',
+    byCriticality.p2p3.behind ? `P2/P3 faltan ${byCriticality.p2p3.gap}` : '',
+  ].filter(Boolean);
+  const head = total.behind
+    ? `Atraso: ${total.resolved} resueltas frente a ${total.expected} esperadas (${tot.scope}); faltan ${total.gap}`
+    : `Al día: ${total.resolved} resueltas frente a ${total.expected} esperadas (${tot.scope})`;
+  const reason = lagging.length > 0 ? `${head}. Atraso por criticidad: ${lagging.join('; ')}` : head;
+  return { ...total, behindAny, byCriticality, reason };
 }
 
 /**
