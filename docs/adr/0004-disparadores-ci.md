@@ -10,6 +10,11 @@ El orquestador valida cada rama `item/<ID>` o `fix/<fecha>` consultando `actions
    - Con un PR abierto cada push produce dos runs: el de `push` (código de la rama) y el de `pull_request` (merge con `main`). Se aceptan ambos: el primero es la señal que lee el orquestador; el segundo detecta conflictos semánticos con `main`. El grupo de concurrencia `ci-${{ github.ref }}` cancela runs viejos de la misma ref, pero no une los dos (refs distintas).
 2. `lockfile.yml` tiene `permissions: contents: write, actions: write` y, solo si subió un lockfile nuevo, ejecuta `gh workflow run ci.yml --ref <rama>` para que el commit del bot quede validado.
    - `actions: write` se limita a este workflow; no se usa un PAT.
+3. (Actualización S-01, 2026-11-19) Endurecimiento sin cambiar la intención:
+   - `lockfile.yml` solo se dispara por `push` en `item/**` y `fix/**` (nunca escribe en `main`; el job además tiene `if: github.ref_name != 'main'`). `permissions: {}` a nivel de workflow y `contents: write` + `actions: write` solo en el job.
+   - Cambios a `package.json` llegan a `main` únicamente por PR desde `item/**`/`fix/**` (con lockfile ya regenerado) o por Dependabot (`dependabot/**`), que actualiza el lockfile él mismo. Por tanto el lockfile sigue regenerándose siempre que hace falta.
+   - `seguridad.yml` también usa `npm ci`, así que tras subir un lockfile nuevo `lockfile.yml` debe lanzar **ci.yml y seguridad.yml** sobre la rama; si no, el último run de Seguridad de la rama queda en rojo (lockfile desincronizado) y no hay run sobre el commit del bot.
+   - `seguridad.yml` corre además en `ensayo/**` (ramas de prueba de seguridad que no se fusionan).
 
 ## Consecuencias
 - Coste: aproximadamente el doble de minutos de CI mientras el PR está abierto (repo de práctica, aceptable). Si el tiempo de cola se vuelve un problema, se puede quitar `item/**` y `fix/**` del `push` y validar solo por `pull_request`, ajustando la sección 5 de CLAUDE.md.
