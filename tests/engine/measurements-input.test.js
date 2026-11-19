@@ -35,7 +35,7 @@ test('CSV válido de promedio en ventana: unidad por nombre o id, separador ;', 
   assert.deepEqual(r.errors, []);
   assert.equal(r.rows.length, 2);
   assert.deepEqual(r.rows[0], { date: '2027-01-15', unitId: 'u-alfa', value: 99.95, appId: null, compliant: null, category: null, kind: null, line: 2 });
-  const semi = parseMeasurementsCsv('﻿Fecha;Unidad;Valor\r\n2027-01-15;unidad alfa;99,5\r\n', avail, ctx);
+  const semi = parseMeasurementsCsv('\uFEFFFecha;Unidad;Valor\r\n2027-01-15;unidad alfa;99,5\r\n', avail, ctx);
   assert.deepEqual(semi.errors, []);
   assert.equal(semi.rows[0].value, 99.5);
 });

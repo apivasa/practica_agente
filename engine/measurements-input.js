@@ -244,7 +244,7 @@ export function parseMeasurementsCsv(text, indicator, ctx = {}) {
   const type = indicator?.measurementType;
   if (!hasOwn(CSV_COLUMNS, type)) return fileError('El indicador no tiene un tipo de medición válido');
 
-  const clean = text.replace(/^﻿/, '');
+  const clean = text.replace(/^\uFEFF/, '');
   if (!clean.trim()) return fileError('El archivo está vacío');
   const { records, error } = tokenizeCsv(clean, detectDelimiter(clean));
   if (error) return { rows: [], errors: [error] };
