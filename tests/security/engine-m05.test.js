@@ -162,10 +162,16 @@ test('3 · __proto__ en initialPackage vía JSON.parse no aporta conteos', () =>
   assert.throws(() => packageStatus({ ...base(), initialPackage }), TypeError);
 });
 
-test('3 · H-M05-03 (abierto, documentado): umbrales heredados del prototipo se leen', () => {
-  // Solo alcanzable si quien llama construye el objeto con Object.create; JSON no puede.
+test('3 · H-M05-03 (corregido): umbrales heredados del prototipo se ignoran', () => {
   const s = packageStatus({ ...base(), thresholds: Object.create({ p0p1: 0, p2p3: 0 }) });
-  assert.deepEqual(s.compliance.thresholds, { p0p1: 0, p2p3: 0 });
+  assert.deepEqual(s.compliance.thresholds, { p0p1: 96, p2p3: 85 });
+});
+
+test('3 · H-M05-03 (corregido): conteos heredados del prototipo en initialPackage no cuentan', () => {
+  assert.throws(
+    () => packageStatus({ ...base(), initialPackage: Object.create({ p0p1: 5, p2p3: 5 }) }),
+    TypeError,
+  );
 });
 
 // ---------- Categoría 3/5: resultados que no deben dar "al día" o "cumple" sin serlo ----------
@@ -199,26 +205,96 @@ test('5 · 95,99 % de P0/P1 no cumple el 96 % (tolerancia no regala cumplimiento
   assert.equal(s.compliance.meetsP0P1, false);
 });
 
-test('5 · H-M05-01 (abierto, documentado): exceso de P2/P3 resueltas oculta el atraso en P0/P1', () => {
-  // 0 P0/P1 resueltas y 500 P2/P3 sobre un paquete de 300: el ritmo total queda "al día".
-  const s = packageStatus({
+const h01 = (resolved) =>
+  packageStatus({
     quarterStart: '2026-01-01',
     quarterEnd: '2026-03-31',
     asOf: '2026-01-31',
     initialPackage: { p0p1: 300, p2p3: 300 },
-    resolved: [{ resolvedOn: '2026-01-10', criticality: 'P2P3', count: 500 }],
+    resolved,
   });
-  assert.equal(s.resolvedToDate.total, 500); // no acotado al efectivo (300)
+
+test('5 · H-M05-01 (corregido): exceso reportado se recorta al efectivo por criticidad', () => {
+  const s = h01([{ resolvedOn: '2026-01-10', criticality: 'P2P3', count: 500 }]);
+  assert.deepEqual(s.resolvedToDate, { p0p1: 0, p2p3: 300, total: 300 });
+  assert.deepEqual(s.resolvedReported, { p0p1: 0, p2p3: 500, total: 500 }); // trazabilidad de lo reportado
   assert.equal(s.pending.p0p1, 300);
-  assert.equal(paceStatus(s).behind, false);
+  const p = paceStatus(s);
+  assert.equal(p.resolved, 300); // el ritmo usa lo recortado, no lo reportado
+  assert.equal(p.byCriticality.p0p1.behind, true);
+  assert.equal(p.behindAny, true);
 });
 
-test('5 · H-M05-02 (abierto, documentado): conteos enormes dan NaN y el ritmo queda "al día"', () => {
-  const s = packageStatus({ ...base(), initialPackage: { p0p1: 1e308, p2p3: 1e308 }, newCritical: [], resolved: [] });
-  assert.equal(s.effectiveTotal.total, Infinity);
+test('5 · H-M05-01 (corregido): behindAny=true si P0/P1 va atrasada aunque P2/P3 compense el total', () => {
+  // P2/P3 completo (300) + 10 P0/P1: el total (310) supera la meta total (200), pero P0/P1 va atrasada.
+  const s = h01([
+    { resolvedOn: '2026-01-10', criticality: 'P2P3', count: 300 },
+    { resolvedOn: '2026-01-10', criticality: 'P0P1', count: 10 },
+  ]);
+  for (const opts of [undefined, { monthToDate: false }]) {
+    const p = paceStatus(s, opts);
+    assert.equal(p.behind, false, 'el avance global total puede estar al día');
+    assert.equal(p.byCriticality.p0p1.behind, true);
+    assert.ok(p.byCriticality.p0p1.gap > 0);
+    assert.equal(p.behindAny, true, 'la alerta de atraso (C-03) debe dispararse');
+    assert.match(p.reason, /P0\/P1/);
+  }
+});
+
+test('5 · H-M05-01 (corregido): behindAny=true si solo P2/P3 va atrasada', () => {
+  const s = h01([{ resolvedOn: '2026-01-10', criticality: 'P0P1', count: 300 }]);
   const p = paceStatus(s);
-  assert.ok(Number.isNaN(p.expected));
-  assert.equal(p.behind, false); // falla abierta: debería lanzar o marcar atraso
+  assert.equal(p.byCriticality.p2p3.behind, true);
+  assert.equal(p.behindAny, true);
+});
+
+test('5 · H-M05-01 (corregido): behindAny=false solo si ambas criticidades van al día', () => {
+  const s = h01([
+    { resolvedOn: '2026-01-10', criticality: 'P0P1', count: 100 },
+    { resolvedOn: '2026-01-10', criticality: 'P2P3', count: 100 },
+  ]);
+  const p = paceStatus(s);
+  assert.equal(p.byCriticality.p0p1.behind, false);
+  assert.equal(p.byCriticality.p2p3.behind, false);
+  assert.equal(p.behindAny, false);
+});
+
+test('5 · H-M05-02 (corregido): conteos no seguros se rechazan (sin NaN ni "al día" falso)', () => {
+  for (const v of [1e308, 2 ** 53, Number.MAX_VALUE]) {
+    assert.throws(
+      () => packageStatus({ ...base(), initialPackage: { p0p1: v, p2p3: 0 }, newCritical: [], resolved: [] }),
+      TypeError,
+    );
+    assert.throws(
+      () => packageStatus({ ...base(), newCritical: [{ detectedOn: '2026-01-05', count: v }] }),
+      TypeError,
+    );
+    assert.throws(
+      () => packageStatus({ ...base(), resolved: [{ resolvedOn: '2026-01-05', criticality: 'P0P1', count: v }] }),
+      TypeError,
+    );
+  }
+});
+
+test('5 · H-M05-02 (corregido): sumas de enteros seguros que desbordan el rango seguro se rechazan', () => {
+  const big = 2 ** 52;
+  assert.throws(
+    () =>
+      packageStatus({
+        ...base(),
+        initialPackage: { p0p1: big, p2p3: big },
+        newCritical: [{ detectedOn: '2026-01-05', count: big }],
+        resolved: [],
+      }),
+    RangeError,
+  );
+});
+
+test('5 · H-M05-02 (corregido): paceStatus nunca devuelve NaN con un estado válido', () => {
+  const p = paceStatus(packageStatus(base()));
+  for (const n of [p.expected, p.gap, p.byCriticality.p0p1.expected, p.byCriticality.p2p3.expected]) {
+    assert.ok(Number.isFinite(n));
+  }
 });
 
 test('5 · asOf muy posterior al trimestre exige el total (atraso visible)', () => {
