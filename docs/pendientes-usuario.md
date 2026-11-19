@@ -9,6 +9,9 @@ El orquestador solo escribe aquí cuando algo **de verdad** te necesita (ver reg
 - **P-04 · Limpieza y configuración de GitHub (no bloquea).** Desde las sesiones de Claude no se pueden borrar ramas ni cambiar la configuración del repo. (1) Borra la rama `ensayo/s01-secreto` (contiene un token FALSO de ensayo) y las ramas `item/*` y `docs/*` ya fusionadas: en GitHub → Branches. (2) H-007: en Settings → Code security activa *Secret scanning*, *Push protection* y *Dependabot security updates*.
   Respuesta:
 
+- **P-05 · Activar la evaluación en producción (después de publicar, V-05).** Los workflows `evaluacion-mensual.yml` y `ritmo-diario.yml` solo corren contra Supabase real si existe la variable de repositorio `EVALUATION_ENABLED = true` (GitHub → Settings → Secrets and variables → Actions → pestaña *Variables*). Créala solo cuando el orquestador avise que el esquema está desplegado.
+  Respuesta:
+
 ### Decisiones de negocio (no bloquean el avance; el sistema usa el valor por defecto indicado)
 
 - **Q-01 · Lógica de disponibilidad, tiempo de ciclo, MTTR, continuidad y observabilidad.** Por defecto: disponibilidad y MTTR y tiempo de ciclo = promedio en ventana de 30 días; continuidad y observabilidad = cobertura (% de aplicaciones que cumplen). Umbrales de ejemplo en semillas.
