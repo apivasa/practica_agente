@@ -6,9 +6,15 @@ El orquestador solo escribe aquí cuando algo **de verdad** te necesita (ver reg
 
 ### Compuertas técnicas (solo bloquean la publicación, V-05)
 
-- **P-02 · Proyecto Supabase de producción.** Crea un proyecto en Supabase y agrega en GitHub → Settings → Secrets and variables → Actions: `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `SUPABASE_PROJECT_REF`, `SUPABASE_ACCESS_TOKEN`, `SUPABASE_DB_PASSWORD`. No pegues los valores aquí.
+- **P-02 · Proyecto Supabase propio (decidido 2026-11-19: proyecto nuevo, separado de Café & Tinta).** No reutilizar el proyecto de Café & Tinta: compartiría usuarios de login y la service role, y sus migraciones chocarían.
+  1. En supabase.com → **New project** (en tu misma organización; el plan gratuito permite 2 proyectos activos). Nombre sugerido: `capacidad-run`. Guarda la contraseña de la base de datos.
+  2. **No** conectes este proyecto con la integración de GitHub de Supabase: las migraciones las aplica `deploy.yml` (V-05) con la CLI.
+  3. Copia de Project Settings → API: *Project URL*, *anon key* y *service_role key*. El *project ref* es el código de la URL (`https://<ref>.supabase.co`). En Account → Access Tokens genera un token.
+  4. En GitHub → `practica_agente` → Settings → Secrets and variables → Actions → **New repository secret**, crea: `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `SUPABASE_PROJECT_REF`, `SUPABASE_ACCESS_TOKEN`, `SUPABASE_DB_PASSWORD`. No pegues los valores aquí.
   Respuesta:
-- **P-03 · GitHub Pages.** En Settings → Pages, elige "Source: GitHub Actions". Si el repo es privado, Pages requiere un plan que lo permita; si no, decide si el repo pasa a público.
+- **P-03 · GitHub Pages (decidido 2026-11-19: el repo pasa a público).** Revisado: el historial del repo no contiene secretos.
+  1. GitHub → `practica_agente` → **Settings → General** → al final, *Danger Zone* → **Change visibility** → **Make public** y confirma.
+  2. **Settings → Pages** → *Build and deployment* → *Source*: **GitHub Actions**. No hace falta nada más; `deploy.yml` publica en `https://apivasa.github.io/practica_agente/`.
   Respuesta:
 
 ### Decisiones de negocio (no bloquean el avance; el sistema usa el valor por defecto indicado)

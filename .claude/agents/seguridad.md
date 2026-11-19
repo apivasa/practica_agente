@@ -50,7 +50,7 @@ No cambias código de la app. Si una prueba de seguridad falla, es un hallazgo p
 
 **6. Cadena de suministro y código:**
 - Secretos: `gitleaks` sobre el diff y el historial.
-- SAST: `semgrep` con reglas para JavaScript, SQL y GitHub Actions (CodeQL además si el repo es público).
+- SAST: `semgrep` con reglas para JavaScript, SQL y GitHub Actions, y CodeQL (gratuito porque el repo es público). Con el repo público, activa también secret scanning y Dependabot alerts desde el pipeline o pídelo como pendiente.
 - Dependencias: `npm audit --omit=dev` y revisión de licencias y paquetes nuevos (typosquatting, paquetes sin mantenimiento).
 
 **7. Análisis dinámico (DAST):**
