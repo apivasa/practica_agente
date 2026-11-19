@@ -13,7 +13,7 @@ alter table public.alerts
 
 -- Disparadores del diseño (sección Alertas).
 alter table public.alerts
-  add constraint alerts_kind_check
+  add constraint alerts_kind_allowed
     check (kind in ('color_change', 'pace_behind', 'critical_intake', 'exception_expired'));
 
 -- Lectura de snapshots diarios del ritmo (scripts/lib/db.js, paceSnapshots).
