@@ -42,8 +42,14 @@ jobs:
           echo "${GITLEAKS_SHA256}  /tmp/${tarball}" | sha256sum -c -
           mkdir -p /tmp/gitleaks
           tar -xzf "/tmp/${tarball}" -C /tmp/gitleaks gitleaks
-      - name: Escanear todo el historial
-        run: /tmp/gitleaks/gitleaks git --redact --verbose --exit-code 1 --report-format sarif --report-path gitleaks.sarif .
+      # Historial completo de la rama analizada (HEAD). Sin --log-opts gitleaks
+      # usa `git log --all` y, como fetch-depth: 0 trae todas las ramas remotas,
+      # un secreto en cualquier rama haría fallar a todas las demás.
+      - name: Escanear todo el historial de la rama
+        run: |
+          /tmp/gitleaks/gitleaks git --redact --verbose --exit-code 1 \
+            --log-opts="--full-history HEAD" \
+            --report-format sarif --report-path gitleaks.sarif .
       - name: Guardar informe
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2

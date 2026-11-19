@@ -1,4 +1,4 @@
-# Modelo de amenazas (borrador inicial, M-01)
+# Modelo de amenazas (borrador, M-01 + S-01)
 
 Estado: borrador. Cubre la superficie construida hasta M-01 (motor `engine/`). Se amplía en S-02 con Supabase (Auth, RLS, RPC), el front en GitHub Pages y los workflows programados.
 
@@ -43,5 +43,25 @@ Estado: borrador. Cubre la superficie construida hasta M-01 (motor `engine/`). S
 | T-ENG-07 | Tampering / DoS | Valores extremos (p. ej. `1e308`) desbordan la suma a `Infinity` y rompen la evaluación; negativos sesgan el resultado. | Pendiente: validación de rango en BD/CSV (CHECK) y manejo por indicador en Actions. | Ver hallazgos H-M01-02. |
 | T-ENG-08 | Tampering | `sampleSize` no numérico salta la muestra mínima. | Pendiente (H-M01-01). | Ver hallazgos. |
 
+## Superficie de CI/CD (S-01)
+
+- Workflows: `ci.yml` (lint, unit, build, pgTAP, e2e; `contents: read`), `lockfile.yml` (genera y sube `package-lock.json`; `contents: write` + `actions: write` solo en el job, solo en `item/**` y `fix/**`), `seguridad.yml` (gitleaks, semgrep, npm audit, CodeQL, `tests/security`; `contents: read`, `security-events: write` solo en CodeQL).
+- Disparadores: `pull_request` (los forks reciben token de solo lectura y sin secretos), `push` a ramas propias, `schedule` semanal y `workflow_dispatch` (requiere permiso de escritura en el repo).
+- Dependencias de terceros: acciones de GitHub fijadas por SHA, binario de gitleaks con sha256, semgrep y CLI de Supabase con versión fija, paquetes npm del lockfile.
+
+## Amenazas STRIDE (CI/CD y cadena de suministro)
+
+| ID | STRIDE | Amenaza | Control | Prueba |
+|---|---|---|---|---|
+| T-CI-01 | Tampering / Elevation | Etiqueta de una acción de terceros re-apuntada a código malicioso que corre con el token del job. | `uses:` por SHA completo con `# vX.Y.Z`; Dependabot `github-actions` propone las subidas como PR revisable. | `tests/security/workflows.test.js` (SHA y comentario) |
+| T-CI-02 | Elevation | Un PR de fork ejecuta código con permisos de escritura o secretos (`pull_request_target`, `workflow_run`). | Ningún workflow usa esos eventos; permisos por defecto `contents: read`; escritura solo a nivel de job. | idem (sin `pull_request_target`, sin `write` a nivel de workflow) |
+| T-CI-03 | Tampering | Inyección de expresiones (`${{ github.event.pull_request.title }}`, `head_ref`) en `run:`. | Datos del evento solo por variables de entorno. | idem (expresiones de evento) |
+| T-CI-04 | Tampering | Script `postinstall` de un paquete comprometido ejecuta código en CI. | `npm ci --ignore-scripts`; solo `npm rebuild esbuild` explícito; `npm audit` y `npm audit signatures`. | idem (`--ignore-scripts`); job `npm-audit` |
+| T-CI-05 | Information disclosure | El token del checkout queda en `.git/config` al alcance de scripts. | `persist-credentials: false` salvo en `lockfile.yml` (hace push y no ejecuta scripts). | idem (persist-credentials) |
+| T-CI-06 | Tampering | `lockfile.yml` escribe en `main` sin revisión. | `branches: ['item/**','fix/**']`, `if: github.ref_name != 'main'`; `main` solo recibe merges de PR. | idem (lockfile) |
+| T-CI-07 | Information disclosure | Secreto commiteado en cualquier punto del historial. | gitleaks sobre todo el historial de la rama en cada push/PR y semanal; semgrep `p/secrets`. Pendiente usuario: push protection (H-007). | job `gitleaks`; ensayo `ensayo/s01-secreto` |
+| T-CI-08 | Information disclosure | Clave secreta o JWT legado incrustado en `dist/` (no versionado, gitleaks no lo ve). | El front solo usa `VITE_SUPABASE_URL` y `VITE_SUPABASE_PUBLISHABLE_KEY`. | `tests/security/static-secrets.test.js` (dist obligatorio en `seguridad.yml`) |
+| T-CI-09 | Repudiation / Tampering | Neutralizar un control (`continue-on-error`, `\|\| true`) para que el pipeline pase. | Prohibido por CLAUDE.md §4. | `workflows.test.js` (sin `continue-on-error` ni `\|\| true` en pasos de seguridad) |
+
 ## Pendiente para S-02
-Auth y sesión, RLS por rol y tabla, RPC `security definer`, IDOR entre unidades/KPIs, importación CSV (fórmulas, tamaño, unidad ajena), front estático (CSP, secretos en `dist/`, anti-framing), workflows (permisos, SHA, disparo con datos manipulados), cadena de suministro y DAST.
+Auth y sesión, RLS por rol y tabla, RPC `security definer`, IDOR entre unidades/KPIs, importación CSV (fórmulas, tamaño, unidad ajena), front estático (CSP, anti-framing), workflows programados (disparo con datos manipulados) y DAST (ZAP).
