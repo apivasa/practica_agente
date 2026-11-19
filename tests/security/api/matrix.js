@@ -134,7 +134,7 @@ export const MATRIX = {
       return { visible: () => false };
     },
     insert: ['comite'],
-    insertBody: (a) => ({ unit_id: ownUnit(a), reason: 'pentest', expires_on: inDays(30), approved_by: uid(a) }),
+    insertBody: (a) => ({ unit_id: ownUnit(a), scope: 'all', reason: 'pentest', expires_on: inDays(30), approved_by: uid(a) }),
     update: ['comite'],
     updateTarget: (a) => ({
       filter: `unit_id=eq.${UNIT.alfa}&reason=like.pentest-fixture*`,

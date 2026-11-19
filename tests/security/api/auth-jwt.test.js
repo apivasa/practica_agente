@@ -97,7 +97,7 @@ describe('pentest-api: autenticación y JWT', { skip }, () => {
         assert.equal(r.status, 200, `${t}: ${fmt(r)}`);
         assert.deepEqual(r.json, [], `${t}: claims inventados ven datos`);
       }
-      const w = await rest('exceptions', token, { method: 'POST', body: { unit_id: '22222222-2222-4222-8222-000000000001', reason: 'x', expires_on: '2099-01-01', approved_by: ghost } });
+      const w = await rest('exceptions', token, { method: 'POST', body: { unit_id: '22222222-2222-4222-8222-000000000001', scope: 'all', reason: 'x', expires_on: '2099-01-01', approved_by: ghost } });
       assert.ok([401, 403].includes(w.status), fmt(w));
     });
 

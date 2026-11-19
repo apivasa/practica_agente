@@ -28,8 +28,8 @@ describe('pentest-api: IDOR y escalada', { skip }, () => {
     G = as('gestora', tokens);
     const exp = new Date(Date.now() + 30 * 86_400_000).toISOString().slice(0, 10);
     const [excA, excB] = await adminInsert('exceptions', [
-      { unit_id: UNIT.alfa, reason: 'idor-fixture A', expires_on: exp, approved_by: USERS.comite.id },
-      { unit_id: UNIT.beta, reason: 'idor-fixture B', expires_on: exp, approved_by: USERS.comite.id },
+      { unit_id: UNIT.alfa, scope: 'all', reason: 'idor-fixture A', expires_on: exp, approved_by: USERS.comite.id },
+      { unit_id: UNIT.beta, scope: 'all', reason: 'idor-fixture B', expires_on: exp, approved_by: USERS.comite.id },
     ]);
     const [alA, alB] = await adminInsert('alerts', [
       { unit_id: UNIT.alfa, recipient_user_id: USERS.lider1.id, kind: 'color_change', dedupe_key: 'idor-fixture:alfa' },
@@ -222,7 +222,7 @@ describe('pentest-api: IDOR y escalada', { skip }, () => {
     });
 
     test('líder y gestora: crear o extender una excepción', async () => {
-      const body = { unit_id: UNIT.alfa, reason: 'auto', expires_on: '2099-12-31', approved_by: USERS.comite.id };
+      const body = { unit_id: UNIT.alfa, scope: 'all', reason: 'auto', expires_on: '2099-12-31', approved_by: USERS.comite.id };
       for (const call of [L1, G]) {
         const ins = await call('exceptions', { method: 'POST', body, headers: REPR });
         assert.ok(DENIED.includes(ins.status), fmt(ins));
@@ -234,9 +234,9 @@ describe('pentest-api: IDOR y escalada', { skip }, () => {
     });
 
     test('comité: no firma a nombre de otro, no mueve de unidad, no crea vencidas', async () => {
-      const ins = await CM('exceptions', { method: 'POST', body: { unit_id: UNIT.alfa, reason: 'x', expires_on: '2099-01-01', approved_by: USERS.gestora.id }, headers: REPR });
+      const ins = await CM('exceptions', { method: 'POST', body: { unit_id: UNIT.alfa, scope: 'all', reason: 'x', expires_on: '2099-01-01', approved_by: USERS.gestora.id }, headers: REPR });
       assert.ok(DENIED.includes(ins.status), fmt(ins));
-      const past = await CM('exceptions', { method: 'POST', body: { unit_id: UNIT.alfa, reason: 'x', expires_on: '2020-01-01', approved_by: USERS.comite.id }, headers: REPR });
+      const past = await CM('exceptions', { method: 'POST', body: { unit_id: UNIT.alfa, scope: 'all', reason: 'x', expires_on: '2020-01-01', approved_by: USERS.comite.id }, headers: REPR });
       assert.ok(DENIED.includes(past.status), fmt(past));
       const sign = await CM(`exceptions?id=eq.${fx.excA.id}`, { method: 'PATCH', body: { approved_by: USERS.gestora.id }, headers: REPR });
       assert.ok(DENIED.includes(sign.status), fmt(sign));

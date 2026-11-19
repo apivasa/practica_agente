@@ -115,23 +115,52 @@ test('createClient se usa solo en src/lib/supabase.js y con la clave publicable'
   assert.match(text, /detectSessionInUrl:\s*false/);
 });
 
-test('solo la capa lib/ habla con Supabase; las vistas no consultan datos', () => {
-  const importers = srcJs.filter((f) => /from\s+['"][./]*(lib\/)?supabase\.js['"]/.test(read(f)) || /@supabase\/supabase-js/.test(read(f)));
-  for (const f of importers) assert.match(rel(f), /^src\/(lib\/|main\.js$)/, `${rel(f)} importa Supabase`);
+// ADR 0009: el acceso a datos vive en src/data/<dominio>.js (y la lectura de
+// roles en src/lib/session.js). Las escrituras están permitidas en esa capa: la
+// autorización real es RLS, cubierta por el pentest de API (tests/security/api/).
+const isDataLayer = (f) => /^src\/data\//.test(rel(f)) || rel(f) === 'src/lib/session.js';
+const SUPABASE_IMPORT = /from\s+['"][^'"]*\/supabase\.js['"]|import\(\s*['"][^'"]*\/supabase\.js['"]\s*\)|@supabase\/supabase-js/;
+
+test('autoverificación: detección de imports del cliente y de consultas', () => {
+  assert.ok(SUPABASE_IMPORT.test("import { supabase } from '../lib/supabase.js'"));
+  assert.ok(SUPABASE_IMPORT.test("const m = await import('../lib/supabase.js')"));
+  assert.ok(SUPABASE_IMPORT.test("import { createClient } from '@supabase/supabase-js'"));
+  assert.ok(!SUPABASE_IMPORT.test("import { listUnits } from '../data/units.js'"));
+  assert.ok(isDataLayer(join(SRC, 'data/measurements.js')));
+  assert.ok(!isDataLayer(join(SRC, 'views/data/x.js')));
+});
+
+test('@supabase/supabase-js solo se importa en src/lib/supabase.js', () => {
+  const users = srcJs.filter((f) => /@supabase\/supabase-js/.test(read(f))).map(rel);
+  assert.deepEqual(users, ['src/lib/supabase.js']);
+});
+
+test('las vistas (src/views/**) no importan el cliente de Supabase ni hacen fetch', () => {
   const views = srcJs.filter((f) => rel(f).startsWith('src/views/'));
-  for (const f of views) {
-    const t = read(f);
-    assert.ok(!/\.from\(\s*['"]/.test(t) && !/\.rpc\(/.test(t) && !/fetch\(/.test(t), `${rel(f)} consulta datos`);
+  assert.ok(views.length > 0, 'se esperaban vistas en src/views/');
+  const hits = views.filter((f) => SUPABASE_IMPORT.test(read(f)) || /(^|[^.\w])fetch\s*\(/.test(read(f))).map(rel);
+  assert.deepEqual(hits, []);
+});
+
+test('.from( y .rpc( solo en src/data/** y src/lib/session.js', () => {
+  const hits = srcJs
+    .filter((f) => !isDataLayer(f))
+    .filter((f) => /\.from\(\s*['"`]/.test(read(f)) || /\.rpc\(/.test(read(f)) || /\.storage\b/.test(read(f)))
+    .map(rel);
+  assert.deepEqual(hits, []);
+});
+
+test('el cliente de Supabase solo se importa desde la capa de datos, la sesión o main.js', () => {
+  const importers = srcJs.filter((f) => SUPABASE_IMPORT.test(read(f)));
+  for (const f of importers) {
+    assert.match(rel(f), /^src\/(data\/|lib\/|main\.js$)/, `${rel(f)} importa Supabase`);
   }
 });
 
-test('las únicas consultas de datos de F-05 son la lectura de user_roles (protegida por RLS)', () => {
-  const tables = new Set();
-  for (const f of srcJs) for (const m of read(f).matchAll(/\.from\(\s*['"]([a-z_]+)['"]/g)) tables.add(m[1]);
-  assert.deepEqual([...tables], ['user_roles']);
-  const all = srcJs.map(read).join('\n');
-  assert.ok(!/\.rpc\(/.test(all), 'F-05 no debería llamar RPC');
-  assert.ok(!/\.(insert|update|upsert|delete)\(/.test(all), 'F-05 no debería escribir en tablas');
+test('la capa de datos no usa claves de administración ni la API admin de Auth', () => {
+  const data = srcJs.filter(isDataLayer);
+  const hits = data.filter((f) => /auth\.admin\b|\bschema\(\s*['"](auth|storage|vault|supabase_\w+)['"]/.test(read(f))).map(rel);
+  assert.deepEqual(hits, []);
 });
 
 test('login: el mensaje de error es genérico y no reenvía error.message del servidor', () => {

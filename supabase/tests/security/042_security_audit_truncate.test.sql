@@ -49,7 +49,7 @@ select throws_ok($$ delete from public.audit_log $$, '42501', null, 'custodio: n
 
 set local request.jwt.claims = '{"sub":"5ec00000-0000-4000-8000-0000000000a4","role":"authenticated"}';
 select lives_ok(
-  $$ insert into public.exceptions (id, unit_id, reason, expires_on) values ('5ec70000-0000-4000-8000-0000000000a1', '5ec10000-0000-4000-8000-0000000000a1', 'SEC2 aud', '2027-03-31') $$,
+  $$ insert into public.exceptions (id, unit_id, scope, reason, expires_on) values ('5ec70000-0000-4000-8000-0000000000a1', '5ec10000-0000-4000-8000-0000000000a1', 'all', 'SEC2 aud', '2027-03-31') $$,
   'comité: aprueba excepción (para auditar)');
 select is(
   (select count(*)::int from public.audit_log where entity = 'exceptions' and entity_id = '5ec70000-0000-4000-8000-0000000000a1'
