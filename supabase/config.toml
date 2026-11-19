@@ -5,6 +5,6 @@ project_id = "practica-agente"
 # H-F03-06: sin registro abierto. Las cuentas las crea la gestora (o el seed
 # en local); un usuario autenticado sin fila en user_roles no ve nada.
 enable_signup = false
-
-[auth.email]
-enable_signup = false
+# H-S03-00: no se declara [auth.email].enable_signup. En la CLI de Supabase 3.x
+# esa clave desactiva el proveedor de correo entero (422 email_provider_disabled)
+# y nadie puede iniciar sesión. El registro queda cerrado por [auth].enable_signup.
