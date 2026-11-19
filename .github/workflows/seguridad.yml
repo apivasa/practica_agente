@@ -162,28 +162,31 @@ jobs:
           version: 3.2.0
       - name: Levantar Supabase local (migraciones + seed)
         run: supabase start -x studio,imgproxy,realtime,storage-api,edge-runtime,logflare,vector
-      - name: Exportar URL y claves locales al entorno del job
+      # Las claves locales las genera la CLI para este runner efímero. Se pasan
+      # por un archivo (no por GITHUB_ENV) para que no aparezcan en la cabecera
+      # de env de los pasos siguientes; solo se imprimen los nombres.
+      - name: Obtener URL y claves locales
         run: |
           set -euo pipefail
           supabase status -o env > /tmp/sb.env
-          # Solo nombres, nunca valores: las claves locales no son secretos
-          # reales, pero no se vuelcan al log.
           cut -d= -f1 /tmp/sb.env
           get() { grep -E "^$1=" /tmp/sb.env | head -n1 | cut -d= -f2- | tr -d '"'; }
-          echo "::add-mask::$(get SECRET_KEY)"
-          echo "::add-mask::$(get JWT_SECRET)"
+          umask 077
           {
             echo "PENTEST_API_URL=$(get API_URL)"
             echo "PENTEST_PUBLISHABLE_KEY=$(get PUBLISHABLE_KEY)"
             echo "PENTEST_SECRET_KEY=$(get SECRET_KEY)"
             echo "PENTEST_JWT_SECRET=$(get JWT_SECRET)"
             echo "PENTEST_DB_URL=$(get DB_URL)"
-          } >> "$GITHUB_ENV"
+          } > /tmp/pentest.env
           rm -f /tmp/sb.env
       - name: Pentest de la API
         env:
           PENTEST_REQUIRE: '1'
-        run: node --test --test-concurrency=1 'tests/security/api/*.test.js'
+        run: |
+          set -euo pipefail
+          set -a; . /tmp/pentest.env; set +a
+          node --test --test-concurrency=1 'tests/security/api/*.test.js'
       - name: Detener Supabase
         if: always()
         run: supabase stop --no-backup

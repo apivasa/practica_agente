@@ -1,7 +1,23 @@
-# Modelo de amenazas (borrador, actualizado en F-03+F-04+F-06)
-# Modelo de amenazas (borrador, M-01 + S-01)
+# Modelo de amenazas (STRIDE)
 
-Estado: borrador. Cubre la superficie construida hasta M-01 (motor `engine/`). Se amplía en S-02 con Supabase (Auth, RLS, RPC), el front en GitHub Pages y los workflows programados.
+Estado: **S-02** (2026-11-19). Cubre el motor (`engine/`), la capa de datos (F-03/F-04/F-06), CI/CD (S-01) y, por componente, el front en GitHub Pages, Supabase Auth, PostgREST/RLS y las Actions programadas con la clave secreta. Las amenazas de componentes aún no construidos (front con UI, CSV, Actions programadas) quedan con su control exigido y la prueba asignada al ítem que los construye.
+
+Regla del documento: **toda amenaza de riesgo Alto tiene una prueba automática asignada** (archivo y caso). La tabla de trazabilidad del final lo resume; si una amenaza alta queda sin prueba, el ítem que la introduce no puede salir en `VERDE`.
+
+Escala de riesgo: **Alto** = acceso a datos de otra unidad, escalada de rol, alteración de colores/candados, secreto expuesto, XSS almacenado o inyección explotable. **Medio** = abuso con impacto limitado o que exige otra falla previa. **Bajo** = residual o informativo.
+
+## Diagrama de confianza
+
+```
+ Internet ──(HTTPS)──► GitHub Pages (dist/: HTML+JS estático, clave sb_publishable_)
+     │                         │ supabase-js en el navegador
+     │                         ▼
+     └──────────────► Supabase gateway ─► Auth (GoTrue: /auth/v1)    ◄── límite 1: navegador ↔ API
+                               └────────► PostgREST (/rest/v1) ─► Postgres (RLS, esquema private)
+                                                                   ▲
+ GitHub Actions programadas (C-03/C-04, clave sb_secret_) ─────────┘   ◄── límite 2: backend con BYPASSRLS
+ GitHub Actions CI/CD (ci.yml, seguridad.yml, lockfile.yml, deploy.yml) ◄── límite 3: repo ↔ runner
+```
 
 ## Activos
 
@@ -67,18 +83,18 @@ Roles de BD: `anon` (sin privilegios), `authenticated` (todos los usuarios; el r
 | ID | STRIDE | Amenaza | Control | Prueba |
 |---|---|---|---|---|
 | T-DB-01 | Elevation | Usuario se asigna rol o cambia su unidad o KPI en `user_roles` | Solo la gestora escribe (políticas con WITH CHECK); la autorización no lee el JWT | `supabase/tests/security/040_*` §1–4, 011, 013 |
-| T-DB-02 | Elevation / Spoofing | JWT con `role:service_role`, `app_metadata.role` o claims inventados bajo rol `authenticated` | Políticas basadas en `auth.uid()` y `user_roles`; firma del JWT validada por PostgREST | 040 §1 (S-03: JWT manipulado contra PostgREST real) |
+| T-DB-02 | Elevation / Spoofing | JWT con `role:service_role`, `app_metadata.role` o claims inventados bajo rol `authenticated` | Políticas basadas en `auth.uid()` y `user_roles`; firma del JWT validada por PostgREST | 040 §1; `tests/security/api/auth-jwt.test.js` (JWT manipulado → 401; claims inventados con firma válida) |
 | T-DB-03 | Information disclosure | IDOR: líder A lee la unidad B (`or=`, `in=`, joins); custodio X lee Y | RLS por unidad/KPI con funciones de `private` | 040 §3–4, 013, 011 |
 | T-DB-04 | Tampering | Custodio mueve una medición o compromiso a otro KPI | WITH CHECK `is_custodian_of(indicator_id)` | 040 §4, 011 |
-| T-DB-05 | Tampering / Repudiation | Custodio falsifica `created_by` o `source` y reescribe mediciones sin rastro | **Parcial**: INSERT exige `created_by = auth.uid()`; el UPDATE no lo exige y no hay auditoría | H-F03-01, H-F03-02 |
+| T-DB-05 | Tampering / Repudiation | Custodio falsifica `created_by` o `source` y reescribe mediciones sin rastro | INSERT exige `created_by = auth.uid()` y `source='manual'`; UPDATE por columnas (sin `created_by`, `source`, `unit_id`, `indicator_id`); trigger `audit_measurements` (H-F03-01/02 corregidos en `hardening.sql`) | 021; `api/idor-escalation.test.js` › escalada (columnas inmutables, mediciones falsificadas) |
 | T-DB-06 | Elevation | Líder o gestora crea o extiende una excepción; un miembro del comité firma a nombre de otro | Solo el comité; `approved_by = auth.uid()` | 040 §3, 5, 6 |
 | T-DB-07 | Tampering | Usuario escribe `evaluations`, `alerts` o `audit_log` (se pinta de verde, fabrica evidencia) | Sin privilegio INSERT/UPDATE/DELETE | 040 §6, 041, 042 |
 | T-DB-08 | Tampering / DoS | TRUNCATE (ignora RLS) | TRUNCATE revocado a anon/authenticated | 041, 042 |
 | T-DB-09 | Elevation | `security definer` con `search_path` manipulable o invocable por RPC | `search_path=''`, funciones en `private` no expuesto, EXECUTE revocado a PUBLIC/anon | 041 |
 | T-DB-10 | Elevation | Tabla, vista o función futura sin RLS o con los grants por defecto de Supabase | Regresión de catálogo en CI | 041, `tests/security/db-static-f03.test.js` (H-F03-04) |
-| T-DB-11 | Repudiation | Auditoría alterada o actor falsificado | Solo SELECT para usuarios; actor = `auth.uid()`. **Residual**: `service_role` puede borrar (H-F03-03) | 042, 020 |
+| T-DB-11 | Repudiation | Auditoría alterada o actor falsificado | Solo SELECT para usuarios; actor = `auth.uid()`; append-only también para `service_role` (revoke + triggers `audit_log_append_only`/`audit_log_no_truncate`, H-F03-03) | 042, 020; `api/rls-matrix.test.js` › audit_log (POST/PATCH/DELETE por rol) |
 | T-DB-12 | Spoofing | La semilla con contraseña conocida llega a producción | `db push` no aplica la semilla; guarda contra `--include-seed`/`db reset --linked` | `tests/security/db-static-f03.test.js` |
-| T-DB-13 | Spoofing | Autoregistro abierto | El usuario sin rol no ve nada; **residual**: `enable_signup` activo (H-F03-06) | 014, 040 §2 |
+| T-DB-13 | Spoofing | Autoregistro abierto | `enable_signup = false` en `config.toml`; el usuario sin rol no ve nada. En producción se verifica en el panel (S-05) | 014, 040 §2; `api/auth-jwt.test.js` › registro abierto deshabilitado |
 ## Superficie de CI/CD (S-01)
 
 - Workflows: `ci.yml` (lint, unit, build, pgTAP, e2e; `contents: read`), `lockfile.yml` (genera y sube `package-lock.json`; `contents: write` + `actions: write` solo en el job, solo en `item/**` y `fix/**`), `seguridad.yml` (gitleaks, semgrep, npm audit, CodeQL, `tests/security`; `contents: read`, `security-events: write` solo en CodeQL).
@@ -99,5 +115,103 @@ Roles de BD: `anon` (sin privilegios), `authenticated` (todos los usuarios; el r
 | T-CI-08 | Information disclosure | Clave secreta o JWT legado incrustado en `dist/` (no versionado, gitleaks no lo ve). | El front solo usa `VITE_SUPABASE_URL` y `VITE_SUPABASE_PUBLISHABLE_KEY`. | `tests/security/static-secrets.test.js` (dist obligatorio en `seguridad.yml`) |
 | T-CI-09 | Repudiation / Tampering | Neutralizar un control (`continue-on-error`, `\|\| true`) para que el pipeline pase. | Prohibido por CLAUDE.md §4. | `workflows.test.js` (sin `continue-on-error` ni `\|\| true` en pasos de seguridad) |
 
-## Pendiente para S-02
-Auth y sesión, RLS por rol y tabla, RPC `security definer`, IDOR entre unidades/KPIs, importación CSV (fórmulas, tamaño, unidad ajena), front estático (CSP, anti-framing), workflows programados (disparo con datos manipulados) y DAST (ZAP).
+| T-CI-10 | Elevation / Tampering | `deploy.yml` (V-05) con la clave secreta o credenciales de BD se dispara desde una rama o PR y aplica migraciones o publica un `dist/` alterado. | Solo `push` a `main` y `environment` protegido; sin `pull_request`; secretos solo en el job de despliegue; `db push` sin `--include-seed`. | Prueba a añadir en `workflows.test.js` cuando exista `deploy.yml` (V-05); hoy `db-static-f03.test.js` (guarda de seed). |
+
+---
+
+# STRIDE por componente (S-02)
+
+## 1. Front estático en GitHub Pages
+
+Superficie: `dist/` público (HTML, JS, CSS), `VITE_SUPABASE_URL` y `VITE_SUPABASE_PUBLISHABLE_KEY` incrustadas, rutas por rol en el cliente (F-05), formularios de indicadores, compromisos, mediciones y excepciones (M-02..M-04, C-02), importación CSV (M-04). GitHub Pages no permite cabeceras propias: la CSP va por `<meta>` y `frame-ancestors` no aplica.
+
+| ID | STRIDE | Amenaza | Riesgo | Control | Prueba |
+|---|---|---|---|---|---|
+| T-FE-01 | Information disclosure | Clave `sb_secret_`, JWT legado `service_role` o token incrustado en `dist/` | Alto | El front solo lee `VITE_SUPABASE_URL` y `VITE_SUPABASE_PUBLISHABLE_KEY`; gitleaks no ve `dist/`, por eso se escanea el build | `tests/security/static-secrets.test.js` (con `SECURITY_REQUIRE_DIST=1` en `seguridad.yml` › security-tests) |
+| T-FE-02 | Tampering / Elevation | XSS almacenado: nombre de indicador, categoría, `reason` del motor, motivo de excepción, `payload` de alerta o celda CSV renderizados como HTML | Alto | Render con `textContent`/nodos DOM, nunca `innerHTML` con datos; CSP sin `unsafe-inline` en scripts | Asignada a S-04: `e2e/security/xss.spec.js` (payloads en cada campo persistido, con cada rol). Hoy: `api/idor-escalation.test.js` › inyección en filtros (el dato viaja intacto, no se interpreta en BD) |
+| T-FE-03 | Elevation | El front oculta rutas por rol pero la autorización real está en el cliente | Alto | La autorización vive en RLS; el enrutamiento por rol es solo UX. Cualquier llamada directa a la API se evalúa como si no hubiera front | `tests/security/api/rls-matrix.test.js` (matriz completa sin front) |
+| T-FE-04 | Tampering | Clickjacking (la app embebida en un iframe ajeno induce a aprobar una excepción) | Medio | `frame-ancestors` no aplica por meta: script anti-framing (`if (top !== self) …`) y estilo oculto por defecto; residual documentado | S-04: `e2e/security/framing.spec.js` |
+| T-FE-05 | Tampering | Dependencia cargada desde CDN sin SRI o CSP permisiva (`unsafe-inline`, `*`) | Medio | Todo empaquetado por Vite desde npm (lockfile); CSP `script-src 'self'` | S-04: `tests/security/csp-dist.test.js` (meta CSP y ausencia de `<script src="http…">` sin `integrity`) |
+| T-FE-06 | Tampering | CSV con fórmulas (`=`, `+`, `-`, `@`) que se ejecutan al reexportar en Excel; filas hacia otra unidad o KPI ajeno | Medio (fórmulas) / Alto (unidad ajena) | Neutralizar prefijos al exportar; la fila ajena la rechaza RLS (`is_custodian_of`) | Unidad/KPI ajeno: `api/idor-escalation.test.js` › mediciones falsificadas (lote mixto: todo o nada). Fórmulas: S-04 `tests/security/csv-import.test.js` |
+| T-FE-07 | Spoofing | Sesión robada de `localStorage` por XSS | Alto (condicionado a T-FE-02) | Mitigado por T-FE-02 y CSP; tokens de 1 h; logout revoca el refresh token | `api/auth-jwt.test.js` › logout revoca el refresh token; T-FE-02 |
+| T-FE-08 | Information disclosure | Enlace externo con `target=_blank` sin `rel="noopener"` (reverse tabnabbing) | Bajo | `rel="noopener noreferrer"` | S-04: `tests/security/csp-dist.test.js` |
+
+## 2. Supabase Auth (GoTrue, `/auth/v1`)
+
+Superficie: inicio de sesión por correo y contraseña, refresh, logout, `/auth/v1/user` (el propio usuario edita `user_metadata`), `/auth/v1/admin/*` (solo con clave secreta), registro (`/signup`, deshabilitado).
+
+| ID | STRIDE | Amenaza | Riesgo | Control | Prueba |
+|---|---|---|---|---|---|
+| T-AUTH-01 | Spoofing | Autoregistro abierto crea cuentas en la organización | Alto | `enable_signup = false` (local y, en S-05, panel de producción); sin fila en `user_roles` no se ve nada | `api/auth-jwt.test.js` › registro abierto deshabilitado; `supabase/tests/014`, `040` §2 |
+| T-AUTH-02 | Spoofing | JWT falsificado: firma alterada, `alg:none`, secreto inventado, confusión de clave con la publicable, claims o `exp` alterados sin re-firmar | Alto | PostgREST valida firma y `exp`; algoritmo fijado por el servidor | `api/auth-jwt.test.js` › JWT manipulado → 401 (12 variantes × 10 tablas + escritura) |
+| T-AUTH-03 | Spoofing | Token vencido reutilizado | Alto | `exp` validado; tokens de 1 h | `api/auth-jwt.test.js` › token correctamente firmado pero vencido → 401 (con control vigente → 200) |
+| T-AUTH-04 | Elevation | El usuario se pone `app_metadata.role` o `user_metadata.role` por `/auth/v1/user` y la app lo usa como rol | Alto | La autorización sale solo de `public.user_roles` (ADR 0005); `app_metadata` solo la escribe el backend | `api/auth-jwt.test.js` › app_metadata.role por /auth/v1/user; › firma válida con claims de rol inventados no da acceso |
+| T-AUTH-05 | Elevation | Usuario llama a `/auth/v1/admin/users` para crear o promover cuentas | Alto | Requiere clave secreta | `api/auth-jwt.test.js` › API de administración de Auth |
+| T-AUTH-06 | Spoofing | Sesión que sigue viva tras logout | Medio | Logout revoca refresh token y sesión de Auth; **residual**: el access token sigue siendo válido en PostgREST hasta su `exp` (≤ 1 h, JWT sin estado) — H-S03-01 | `api/auth-jwt.test.js` › logout revoca el refresh token y la sesión en Auth |
+| T-AUTH-07 | Spoofing | Fuerza bruta o contraseñas débiles | Medio | Límite de intentos de GoTrue; política de contraseñas mínima — **pendiente** (H-S03-02) | S-05 (configuración de producción) |
+| T-AUTH-08 | Spoofing | Cuentas semilla con contraseña conocida en producción | Alto | `db push` no aplica `seed.sql`; guardas contra `--include-seed` | `tests/security/db-static-f03.test.js` |
+
+## 3. PostgREST y RLS (`/rest/v1`)
+
+Superficie: 10 tablas de `public` (CRUD según grants y políticas), filtros (`eq`, `in`, `or`, `and`, `not`), `select=` con embebidos, `Prefer` (`return`, `resolution`, `count`, `tx`, `missing`), `on_conflict`, `/rpc/*` (hoy ninguna función en `public`), cabeceras `Accept-Profile`/`Content-Profile`, OpenAPI en `/`.
+
+| ID | STRIDE | Amenaza | Riesgo | Control | Prueba |
+|---|---|---|---|---|---|
+| T-API-01 | Information disclosure | Celda de la matriz rol × tabla × operación más abierta que el diseño (ADR 0005) | Alto | Grants mínimos + políticas RLS por tabla | `api/rls-matrix.test.js` › `<tabla>` › `<actor> · GET/POST/PATCH/DELETE` (10 tablas × 8 actores × 4 operaciones = 320 casos) |
+| T-API-02 | Information disclosure | Anónimo con la clave publicable lee o escribe datos | Alto | `anon` sin privilegios | `api/rls-matrix.test.js` (actor `anon`); `api/auth-jwt.test.js` › la clave publicable sola |
+| T-API-03 | Information disclosure | IDOR por filtros: `or=`, `in=`, `neq`, `not`, ids ajenos; conteos con `Prefer: count=exact` | Alto | RLS se aplica antes de cualquier filtro | `api/idor-escalation.test.js` › IDOR por filtros (7 tablas × 8 variantes; HEAD con count) |
+| T-API-04 | Information disclosure | IDOR por embebidos (`select=*,measurements(*)`, `!inner`) o salto a `auth.users` | Alto | RLS en cada tabla embebida; `auth` no expuesto | `api/idor-escalation.test.js` › IDOR por embebidos |
+| T-API-05 | Elevation | Escalada: PATCH/POST/upsert en `user_roles`, `units.leader_user_id`, columnas inmutables (`created_by`, `source`, `unit_id`, `indicator_id`), excepciones | Alto | Políticas solo-gestora/solo-comité, grants por columna, `approved_by = auth.uid()` | `api/idor-escalation.test.js` › escalada |
+| T-API-06 | Tampering | Upsert indebido con `Prefer: resolution=merge-duplicates` + `on_conflict` (robar fila ajena por id, reescribir compromiso de otro KPI) | Alto | INSERT WITH CHECK + UPDATE por columnas | `api/idor-escalation.test.js` › upsert |
+| T-API-07 | Elevation | Funciones de autorización `security definer` invocables por `/rpc` o vía `Accept-Profile: private` | Alto | Esquema `private` no expuesto; `RPC_ALLOWLIST` vacío | `api/rls-matrix.test.js` › RPC; › catálogo (funciones expuestas); `api/idor-escalation.test.js` › esquemas no expuestos |
+| T-API-08 | Elevation | Tabla o vista nueva sin RLS o sin fila en la matriz | Alto | Catálogo verificado en cada PR | `api/rls-matrix.test.js` › catálogo (RLS, `security_invoker`, tabla sin matriz, OpenAPI); `supabase/tests/security/041` |
+| T-API-09 | Tampering | Inyección SQL por filtros, `select=` u `order=` | Alto | PostgREST parametriza; parser estricto | `api/idor-escalation.test.js` › inyección en filtros |
+| T-API-10 | Information disclosure | OpenAPI en `/rest/v1/` lista el esquema a anónimos | Bajo | Grants: anon no ve tablas | `api/auth-jwt.test.js` › la clave publicable sola no lista el esquema |
+| T-API-11 | DoS | Consultas costosas (embebidos profundos, `limit` ausente) | Bajo | Límites del plan de Supabase; sin pruebas de carga en producción (alcance) | — (aceptado) |
+
+## 4. GitHub Actions programadas con la clave secreta (C-03, C-04, V-04)
+
+Superficie: `evaluacion-mensual.yml`, `ritmo-diario.yml`, alertas (C-03/C-04, aún no construidos), `salud.yml` (V-04). Usan `SUPABASE_SECRET_KEY` (BYPASSRLS) para escribir `evaluations`, `alerts` y `audit_log`. Leen mediciones cargadas por custodios (datos no confiables) y las pasan a `engine/`.
+
+| ID | STRIDE | Amenaza | Riesgo | Control | Prueba |
+|---|---|---|---|---|---|
+| T-JOB-01 | Information disclosure | La clave secreta se imprime en logs (`echo`, `set -x`, error de fetch con cabeceras) | Alto | Solo vía `secrets.` en `env:`; sin `set -x`; GitHub enmascara | `tests/security/workflows.test.js` › no imprime secretos (aplica a todo workflow nuevo) |
+| T-JOB-02 | Tampering / Elevation | Disparo con datos manipulados: `workflow_dispatch` con `inputs` (mes, unidad) interpolados en `run:`, o `pull_request` que ejecuta el job con secretos | Alto | Solo `schedule` + `workflow_dispatch` (requiere escritura en el repo); inputs validados por regex y pasados por `env:`; sin `pull_request_target` | `workflows.test.js` › sin `pull_request_target`, › sin expresiones de evento en `run:`. C-03 añade el caso `inputs` validados |
+| T-JOB-03 | Tampering | Custodio carga mediciones extremas o de otra unidad para forzar o quitar un candado | Alto | RLS por KPI (T-DB-04); `measure()` neutraliza no finitos y negativos; CHECK `value >= 0` | `api/idor-escalation.test.js` › mediciones falsificadas; `tests/security/engine-m01.test.js`, `engine-m05.test.js` |
+| T-JOB-04 | Tampering | Usuario escribe `evaluations` o `alerts` directamente (se pinta de verde, se quita un candado) | Alto | Sin INSERT/UPDATE/DELETE para `authenticated` | `api/rls-matrix.test.js` › evaluations, alerts; `api/idor-escalation.test.js` › nadie escribe evaluaciones |
+| T-JOB-05 | Repudiation | Acción automática (candado, alerta, vencimiento) sin rastro o con auditoría editable | Alto | Insert explícito en `audit_log` desde la Action; `audit_log` append-only incluso para `service_role` | `supabase/tests/security/042`, `020`; `api/rls-matrix.test.js` › audit_log. C-03 añade la prueba "cada efecto deja fila de auditoría" |
+| T-JOB-06 | Tampering | Excepción extendida o creada fuera del comité que suspende el candado | Alto | Solo comité, `approved_by = auth.uid()`, `expires_on >= current_date`, `unit_id` inmutable | `api/idor-escalation.test.js` › líder y gestora: crear o extender; › comité: no firma a nombre de otro |
+| T-JOB-07 | DoS | El job falla en silencio (motor lanza por un dato) y no se aplica el candado | Medio | Error por indicador registrado en auditoría; `salud.yml` alerta si un programado no corrió (V-04) | C-03 / V-04 |
+| T-JOB-08 | Elevation | Clave secreta con más alcance del necesario o compartida con CI | Medio | Solo en el environment de los jobs programados y de despliegue; `ci.yml` y `seguridad.yml` no usan secretos | `workflows.test.js` › pentest-api sin `secrets.` |
+
+## 5. CI/CD
+
+Ver "Superficie de CI/CD (S-01)" y T-CI-01..10 arriba. El job `pentest-api` (S-03) levanta Supabase local efímero con claves locales generadas por la CLI: no usa secretos del repositorio y no apunta a hosts externos.
+
+---
+
+## Trazabilidad: amenazas de riesgo Alto → prueba automática
+
+| Amenaza | Prueba (archivo › caso) | Estado |
+|---|---|---|
+| T-DB-01, T-API-05 | `tests/security/api/idor-escalation.test.js` › escalada; `supabase/tests/security/040` §1–4 | Activa |
+| T-DB-02, T-AUTH-02, T-AUTH-03 | `api/auth-jwt.test.js` › JWT manipulado → 401; › token vencido; `040` §1 | Activa |
+| T-DB-03, T-API-03, T-API-04 | `api/idor-escalation.test.js` › IDOR por filtros / por embebidos; `040` §3–4 | Activa |
+| T-DB-04, T-DB-05, T-JOB-03 | `api/idor-escalation.test.js` › columnas inmutables, mediciones falsificadas; `021` | Activa |
+| T-DB-06, T-JOB-06 | `api/idor-escalation.test.js` › líder y gestora: excepción; › comité; `040` §3,5,6 | Activa |
+| T-DB-07, T-JOB-04 | `api/rls-matrix.test.js` › evaluations/alerts/audit_log; `041`, `042` | Activa |
+| T-DB-09, T-API-07 | `api/rls-matrix.test.js` › RPC, › catálogo; `041` | Activa |
+| T-DB-10, T-API-08 | `api/rls-matrix.test.js` › catálogo; `041`; `db-static-f03.test.js` | Activa |
+| T-DB-11, T-JOB-05 | `042`, `020`; `api/rls-matrix.test.js` › audit_log | Activa (C-03 amplía) |
+| T-DB-12, T-AUTH-08 | `tests/security/db-static-f03.test.js` | Activa |
+| T-DB-13, T-AUTH-01 | `api/auth-jwt.test.js` › registro abierto deshabilitado | Activa |
+| T-AUTH-04, T-AUTH-05 | `api/auth-jwt.test.js` › app_metadata; › API de administración | Activa |
+| T-API-01, T-API-02, T-FE-03 | `api/rls-matrix.test.js` (matriz completa, incluido `anon`) | Activa |
+| T-API-06 | `api/idor-escalation.test.js` › upsert | Activa |
+| T-API-09 | `api/idor-escalation.test.js` › inyección en filtros | Activa |
+| T-FE-01 | `tests/security/static-secrets.test.js` | Activa |
+| T-FE-02, T-FE-07 | `e2e/security/xss.spec.js` | **Asignada a S-04** (la UI con datos no existe aún: F-05/M-02..M-04) |
+| T-FE-06 (unidad ajena) | `api/idor-escalation.test.js` › lote mixto | Activa (S-04 añade el CSV) |
+| T-JOB-01, T-JOB-02 | `tests/security/workflows.test.js` | Activa (C-03 añade inputs) |
+| T-CI-01..09 | `tests/security/workflows.test.js`; jobs gitleaks, semgrep, npm-audit, CodeQL | Activa |
+| T-CI-10 | `workflows.test.js` (caso deploy) | **Asignada a V-05** |
