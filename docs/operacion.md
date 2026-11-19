@@ -19,6 +19,9 @@ Medidos en `item/S-01` y actualizados en `item/S-02-S-03` (2026-11-19, `ubuntu-l
 | | | db (pgTAP, CLI Supabase 3.2.0) | 66–74 s | > 4 min |
 | | | e2e (Playwright, tras build) | 26–28 s | > 3 min |
 | | | **total de pared** | **~70–95 s** | > 5 min |
+| | | db (pgTAP, CLI Supabase 3.2.0) | 69–74 s | > 4 min |
+| | | e2e (Playwright + Supabase local desde F-05, tras build) | 113 s (de ellos `supabase start` ~47 s, Playwright install ~38 s, pruebas ~5 s; antes de F-05: 26–28 s) | > 4 min |
+| | | **total de pared** | **~2 min** (desde F-05; antes ~70 s) | > 5 min |
 | `seguridad.yml` | PR; push a `main`, `item/**`, `fix/**`, `ensayo/**`; lunes 06:17 UTC (01:17 Guayaquil); manual | gitleaks | 8 s | > 2 min |
 | | | semgrep | 24 s | > 3 min |
 | | | npm audit | 11 s | > 2 min |
@@ -30,6 +33,9 @@ Medidos en `item/S-01` y actualizados en `item/S-02-S-03` (2026-11-19, `ubuntu-l
 | `lockfile.yml` | push a `item/**`, `fix/**` que cambie `package.json`; manual (nunca en `main`) | lockfile | < 30 s | > 2 min |
 
 Fuentes: CI run 44597648985, Seguridad run 44597649643 (S-01); CI run 44605484960 y Seguridad run 44605484997 (S-02+S-03, ambos `success`); referencia previa CI run 44594674729.
+Desde F-05 el job e2e levanta Supabase local (Auth + API + semilla) con la CLI 3.2.0 y construye el front con `VITE_SUPABASE_URL` y la clave publicable que expone `supabase status`; si falla en «Exportar URL y clave publicable», la CLI cambió el formato de `status -o env` (revisar nombres `API_URL` / `PUBLISHABLE_KEY`). El total de pared de CI pasa a ~2 min (e2e y db corren en paralelo). Fuente e2e: CI run 44606117086 (rama `item/F-05`) frente a 44605255030 (`main`).
+
+Fuentes: CI run 44597648985, Seguridad run 44597649643 (ambos `success`); referencia previa CI run 44594674729.
 
 Tasa de fallos observada: en `main`, los fallos/cancelaciones del 2026-11-19 vienen de la puesta en marcha (cancelaciones por concurrencia y un fallo antes del lockfile), no de pasos intermitentes. En `item/S-01`, un solo fallo de Seguridad (run 44595333304) causado por la rama `ensayo/s01-secreto` y corregido en el ítem. Ningún paso intermitente detectado todavía. En `item/S-02-S-03`, los dos fallos de `pentest-api` (runs 44604283956 y 44604729716) fueron defectos reales de las pruebas, corregidos en commits posteriores; no son intermitencia.
 
