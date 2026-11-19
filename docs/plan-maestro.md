@@ -117,8 +117,8 @@ El orquestador toma el **primer ítem `Pendiente`** cuyas dependencias estén `H
 | 22 | V-02 | Pendiente | 0 | |  |
 | 23 | V-04 | Pendiente | 0 | |  |
 | 24 | V-06 | Pendiente | 0 | |  |
-| 25 | S-05 | Bloqueado | 0 | | Espera P-02 y P-03; constructor: seguridad |
-| 26 | V-05 | Bloqueado | 0 | | Espera S-05, P-02 y P-03 |
+| 25 | S-05 | Bloqueado | 0 | | Espera P-03 (P-02 resuelto); constructor: seguridad |
+| 26 | V-05 | Bloqueado | 0 | | Espera S-05 y P-03 (P-02 resuelto) |
 | 27 | C-05 | Bloqueado | 0 | | Espera Q-04 |
 | 28 | V-07 | Bloqueado | 0 | | Espera Q-02 |
 
