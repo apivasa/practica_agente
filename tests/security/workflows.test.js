@@ -123,6 +123,8 @@ test('seguridad.yml: corre en PR, push a main, semanal y manual, con las cinco h
   assert.match(wf, /workflow_dispatch:/);
   assert.match(wf, /gitleaks git\b/);
   assert.match(wf, /fetch-depth:\s*0/);
+  // Escaneo del historial de la rama, no de todas las ramas remotas.
+  assert.match(wf, /--log-opts="--full-history HEAD"/);
   assert.match(wf, /sha256sum -c/);
   assert.match(wf, /semgrep scan[\s\S]*--error/);
   assert.match(wf, /npm audit --omit=dev --audit-level=high/);
