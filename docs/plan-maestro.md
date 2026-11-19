@@ -5,7 +5,7 @@ Este archivo lo lee y actualiza el **orquestador** en cada ciclo. Solo él cambi
 
 **Objetivo del producto:** que el comité de delivery vea cada mes el color de cada unidad por indicador RUN, que las restricciones (candados) se apliquen y comuniquen solas, y que el control sea por resultados (avance real vs. esperado).
 
-**Modo de trabajo:** autónomo, ciclos cada 3 horas. Cada ciclo cierra entre 1 y 3 ítems. Se construye y prueba con Supabase local dentro de GitHub Actions (sin credenciales reales). El despliegue a producción (Supabase real + GitHub Pages) queda detrás de la compuerta P-02/P-03 del usuario.
+**Modo de trabajo:** autónomo, ciclos cada 3 horas. Cada ciclo cierra entre 1 y 3 ítems. Se construye y prueba con Supabase local dentro de GitHub Actions (sin credenciales reales). El despliegue a producción (Supabase real + GitHub Pages) queda detrás de la compuerta P-02/P-03 del usuario (ambas resueltas el 2026-11-19) y del pentest S-05.
 
 ---
 
@@ -117,8 +117,8 @@ El orquestador toma el **primer ítem `Pendiente`** cuyas dependencias estén `H
 | 22 | V-02 | Pendiente | 0 | |  |
 | 23 | V-04 | Pendiente | 0 | |  |
 | 24 | V-06 | Pendiente | 0 | |  |
-| 25 | S-05 | Bloqueado | 0 | | Espera P-03 (P-02 resuelto); constructor: seguridad |
-| 26 | V-05 | Bloqueado | 0 | | Espera S-05 y P-03 (P-02 resuelto) |
+| 25 | S-05 | Pendiente | 0 | | P-02 y P-03 resueltos; constructor: seguridad |
+| 26 | V-05 | Pendiente | 0 | | P-02 y P-03 resueltos; espera S-05 |
 | 27 | C-05 | Bloqueado | 0 | | Espera Q-04 |
 | 28 | V-07 | Bloqueado | 0 | | Espera Q-02 |
 
@@ -156,4 +156,4 @@ Estados válidos: `Pendiente`, `En curso`, `En revisión`, `Hecho`, `Bloqueado`.
 | Fin Sprint 2: motor de indicadores | 23 | Día 4 |
 | Fin Sprint 3: candados y alertas | 34 | Día 6 |
 | Fin Sprint 4: vistas y salud (incluye seguridad S-01 a S-04) | 55 | Día 9–10 |
-| Pentest previo a producción (S-05) y publicación en Pages | — | Cuando estén P-02 y P-03 |
+| Pentest previo a producción (S-05) y publicación en Pages | ≈ 59 | Día 10 |

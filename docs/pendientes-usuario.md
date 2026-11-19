@@ -4,12 +4,9 @@ El orquestador solo escribe aquí cuando algo **de verdad** te necesita (ver reg
 
 ## Abiertos
 
-### Compuertas técnicas (solo bloquean la publicación, V-05)
+### Compuertas técnicas
 
-- **P-03 · GitHub Pages (decidido 2026-11-19: el repo pasa a público).** Revisado: el historial del repo no contiene secretos.
-  1. GitHub → `practica_agente` → **Settings → General** → al final, *Danger Zone* → **Change visibility** → **Make public** y confirma.
-  2. **Settings → Pages** → *Build and deployment* → *Source*: **GitHub Actions**. No hace falta nada más; `deploy.yml` publica en `https://apivasa.github.io/practica_agente/`.
-  Respuesta:
+Ninguna abierta.
 
 ### Decisiones de negocio (no bloquean el avance; el sistema usa el valor por defecto indicado)
 
@@ -24,5 +21,6 @@ El orquestador solo escribe aquí cuando algo **de verdad** te necesita (ver reg
 
 ## Resueltos
 
+- **P-03 · GitHub Pages** — resuelto el 2026-11-19. Repo público y Pages activado (verificado por API: `visibility: public`, `has_pages: true`). Fuente elegida por el usuario: GitHub Actions; si el primer `deploy.yml` falla por la fuente, revisar Settings → Pages. URL esperada: `https://apivasa.github.io/practica_agente/`.
 - **P-02 · Proyecto Supabase propio** — resuelto el 2026-11-19. Proyecto `KPIs` (ref `oehtspdtpwdhfhhhkgao`, us-east-2), separado de Café & Tinta. El usuario cargó en GitHub los 6 secretos: `SUPABASE_URL`, `SUPABASE_PROJECT_REF`, `SUPABASE_PUBLISHABLE_KEY`, `SUPABASE_SECRET_KEY`, `SUPABASE_ACCESS_TOKEN`, `SUPABASE_DB_PASSWORD`. Las sesiones de Claude no pueden leer secretos: `deploy.yml` (V-05) debe verificar que existen y fallar con un mensaje claro si falta alguno.
 - **P-01 · Acceso al repositorio** — concedido el 2026-11-19.
