@@ -6,7 +6,8 @@ El orquestador solo escribe aquí cuando algo **de verdad** te necesita (ver reg
 
 ### Compuertas técnicas
 
-Ninguna abierta.
+- **P-04 · Limpieza y configuración de GitHub (no bloquea).** Desde las sesiones de Claude no se pueden borrar ramas ni cambiar la configuración del repo. (1) Borra la rama `ensayo/s01-secreto` (contiene un token FALSO de ensayo) y las ramas `item/*` y `docs/*` ya fusionadas: en GitHub → Branches. (2) H-007: en Settings → Code security activa *Secret scanning*, *Push protection* y *Dependabot security updates*.
+  Respuesta:
 
 ### Decisiones de negocio (no bloquean el avance; el sistema usa el valor por defecto indicado)
 

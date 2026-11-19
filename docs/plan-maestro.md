@@ -95,23 +95,23 @@ El orquestador toma el **primer ítem `Pendiente`** cuyas dependencias estén `H
 |---|---|---|---|---|---|
 | 1 | F-01 | Hecho | 0 | #1 |  |
 | 2 | F-02 | Hecho | 0 | #1 |  |
-| 3 | S-01 | En curso | 0 | | Constructor: seguridad |
-| 4 | F-03 | En curso | 0 | |  |
-| 5 | S-02 | Pendiente | 0 | | Constructor: seguridad |
+| 3 | S-01 | Hecho | 1 | #6 | Constructor: seguridad |
+| 4 | F-03 | Hecho | 0 | #5 |  |
+| 5 | S-02 | En curso | 0 | | Constructor: seguridad |
 | 6 | M-01 | Hecho | 1 | #2 | Puede ir en paralelo a F-03 (solo depende de F-01) |
-| 7 | F-04 | En curso | 0 | |  |
-| 8 | F-06 | En curso | 0 | |  |
-| 9 | S-03 | Pendiente | 0 | | Constructor: seguridad |
-| 10 | F-05 | Pendiente | 0 | |  |
+| 7 | F-04 | Hecho | 0 | #5 |  |
+| 8 | F-06 | Hecho | 0 | #5 |  |
+| 9 | S-03 | En curso | 0 | | Constructor: seguridad |
+| 10 | F-05 | En curso | 0 | |  |
 | 11 | M-02 | Pendiente | 0 | |  |
 | 12 | M-03 | Pendiente | 0 | |  |
 | 13 | M-04 | Pendiente | 0 | |  |
 | 14 | S-04 | Pendiente | 0 | | Constructor: seguridad |
-| 15 | M-05 | En curso | 0 | | Parte de motor adelantada; integración con BD tras F-03 y M-04  |
+| 15 | M-05 | Hecho | 1 | #7 | Parte de motor adelantada; integración con BD tras F-03 y M-04  |
 | 16 | C-01 | Hecho | 0 | #3 |  |
 | 17 | C-02 | Pendiente | 0 | |  |
-| 18 | C-03 | Pendiente | 0 | |  |
-| 19 | C-04 | Pendiente | 0 | |  |
+| 18 | C-03 | En curso | 0 | |  |
+| 19 | C-04 | En curso | 0 | |  |
 | 20 | V-03 | Pendiente | 0 | |  |
 | 21 | V-01 | Pendiente | 0 | |  |
 | 22 | V-02 | Pendiente | 0 | |  |
