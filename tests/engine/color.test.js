@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { evaluateColor, measure } from '../../engine/index.js';
+import { evaluateColor, measure, tolerance, REASON_MISSING_TARGET } from '../../engine/index.js';
 
 const hib = { measurementType: 'window_average', direction: 'higher_is_better', thresholds: { green: 99, yellow: 95 } };
 const lib = { measurementType: 'window_average', direction: 'lower_is_better', thresholds: { green: 4, yellow: 8 }, minSample: 3 };
@@ -95,4 +95,36 @@ test('integración: ejemplo MTTR del README', () => {
   ], { asOf: '2026-11-30' });
   assert.deepEqual(m, { value: 4, sampleSize: 3 });
   assert.deepEqual(evaluateColor(mttr, m), { color: 'green', reason: 'Valor 4 <= verde 4' });
+});
+
+test('empate calculado (coma flotante) = color mejor, en ambos sentidos', () => {
+  assert.equal(c(hib, (99.9 + 99.8 + 100) / 3), 'green'); // 99.89999999999999
+  assert.equal(c(hib, 94.99999999999999), 'yellow');
+  assert.equal(c({ ...lib, thresholds: { green: 2.3, yellow: 8 } }, (2.2 + 2.3 + 2.4) / 3, 3), 'green'); // 2.3000000000000003
+  assert.equal(c({ ...lib, thresholds: { green: 2.3, yellow: 8 } }, 8.000000000000002, 3), 'yellow');
+});
+
+test('la tolerancia no oculta diferencias reales', () => {
+  assert.equal(c(hib, 99 - 1e-6), 'yellow');
+  assert.equal(c(lib, 4 + 1e-6, 3), 'yellow');
+  assert.equal(tolerance(0), 1e-9);
+  assert.ok(Math.abs(tolerance(-2000) - 2e-6) < 1e-18);
+});
+
+test('sampleSize inválido → not_evaluated', () => {
+  for (const s of [NaN, 'x', 1.5, -1, Infinity, null]) {
+    const r = evaluateColor(hib, { value: 99, sampleSize: s });
+    if (s === null) {
+      assert.equal(r.color, 'green'); // null se toma como ausente (0) y minSample es 0
+    } else {
+      assert.equal(r.color, 'not_evaluated', `sampleSize=${String(s)}`);
+      assert.match(r.reason, /Tamaño de muestra inválido/);
+    }
+  }
+});
+
+test('value null con reason de measure la propaga', () => {
+  const cum = { measurementType: 'cumulative_target', direction: 'higher_is_better', thresholds: { green: 96, yellow: 85 } };
+  const m = measure(cum, [{ date: '2026-11-01', value: 5 }], { asOf: '2026-11-30' });
+  assert.deepEqual(evaluateColor(cum, m), { color: 'not_evaluated', reason: REASON_MISSING_TARGET });
 });

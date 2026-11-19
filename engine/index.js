@@ -8,5 +8,5 @@ export {
   SOURCES,
   DEFAULTS,
 } from './indicator.js';
-export { measure, parseDay } from './measure.js';
-export { evaluateColor } from './color.js';
+export { measure, parseDay, REASON_MISSING_TARGET, REASON_OUT_OF_RANGE } from './measure.js';
+export { evaluateColor, tolerance } from './color.js';

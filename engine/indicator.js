@@ -120,9 +120,12 @@ export function normalizeIndicator(cfg) {
   if (!ok) {
     throw new Error(`Indicador inválido: ${errors.join('; ')}`);
   }
+  // Objeto sin prototipo: claves como 'constructor' o 'toString' no chocan con Object.prototype.
+  // '__proto__' (posible vía JSON.parse) se descarta de forma explícita: nunca se usa como categoría.
   /** @type {Record<string, Thresholds>} */
-  const byCategory = {};
+  const byCategory = Object.create(null);
   for (const [cat, t] of Object.entries(cfg.thresholdsByCategory ?? {})) {
+    if (cat === '__proto__') continue;
     byCategory[cat] = { green: t.green, yellow: t.yellow };
   }
   return {

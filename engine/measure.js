@@ -10,7 +10,11 @@ import { normalizeIndicator } from './indicator.js';
  * @property {string} [category]
  */
 
-/** @typedef {{ value: number|null, sampleSize: number }} Measured */
+/**
+ * Resultado de una medición. `reason` solo aparece cuando `value` es null por una causa
+ * distinta de la ventana vacía (meta ausente, desbordamiento).
+ * @typedef {{ value: number|null, sampleSize: number, reason?: string }} Measured
+ */
 
 const DAY_MS = 86_400_000;
 const DATE_RE = /^(\d{4})-(\d{2})-(\d{2})$/;
@@ -35,7 +39,8 @@ export function parseDay(s) {
 
 /**
  * Calcula el valor del indicador en la ventana [asOf - windowDays + 1, asOf] (inclusiva).
- * Mediciones con fecha inválida o fuera de la ventana se ignoran.
+ * Mediciones con fecha inválida o fuera de la ventana se ignoran. En `window_average` y
+ * `cumulative_target` también se ignoran valores no finitos o negativos.
  * Si se pasa `category`, solo se consideran mediciones de esa categoría.
  *
  * @param {import('./indicator.js').IndicatorConfig} cfg
@@ -76,13 +81,27 @@ export function measure(cfg, measurements, options) {
 }
 
 const isFiniteNumber = (v) => typeof v === 'number' && Number.isFinite(v);
+// Para promedio en ventana y meta acumulada solo cuentan valores finitos y >= 0.
+const isValidAmount = (v) => isFiniteNumber(v) && v >= 0;
+
+export const REASON_OUT_OF_RANGE = 'Valor calculado fuera de rango numérico';
+export const REASON_MISSING_TARGET = 'Falta la meta (target) del periodo: no se puede evaluar';
+
+/**
+ * Si el resultado no es finito (desbordamiento), el indicador queda sin valor.
+ * @param {number} value @param {number} sampleSize @returns {Measured}
+ */
+function finite(value, sampleSize) {
+  if (!Number.isFinite(value)) return { value: null, sampleSize, reason: REASON_OUT_OF_RANGE };
+  return { value, sampleSize };
+}
 
 /** @param {{ m: Measurement }[]} rows @returns {Measured} */
 function windowAverage(rows) {
-  const values = rows.map((r) => r.m.value).filter(isFiniteNumber);
+  const values = rows.map((r) => r.m.value).filter(isValidAmount);
   if (values.length === 0) return { value: null, sampleSize: 0 };
   const sum = values.reduce((a, b) => a + b, 0);
-  return { value: sum / values.length, sampleSize: values.length };
+  return finite(sum / values.length, values.length);
 }
 
 /** @param {{ m: Measurement, day: number }[]} rows @returns {Measured} */
@@ -100,17 +119,22 @@ function coverage(rows) {
   if (latest.size === 0) return { value: null, sampleSize: 0 };
   let ok = 0;
   for (const v of latest.values()) if (v.compliant) ok += 1;
-  return { value: (ok / latest.size) * 100, sampleSize: latest.size };
+  // ok * 100 / n (y no (ok / n) * 100) evita errores binarios como 57/100*100 = 56.99999999999999.
+  return { value: (ok * 100) / latest.size, sampleSize: latest.size };
 }
 
-/** @param {{ m: Measurement }[]} rows @param {number|undefined} target @returns {Measured} */
+/** @param {{ m: Measurement }[]} rows @param {number|undefined|null} target @returns {Measured} */
 function cumulativeTarget(rows, target) {
   if (target !== undefined && target !== null && !(isFiniteNumber(target) && target >= 0)) {
     throw new Error('target: debe ser un número mayor o igual que 0');
   }
-  const values = rows.map((r) => r.m.value).filter(isFiniteNumber);
+  const values = rows.map((r) => r.m.value).filter(isValidAmount);
+  if (target === undefined || target === null) {
+    return { value: null, sampleSize: values.length, reason: REASON_MISSING_TARGET };
+  }
   if (values.length === 0) return { value: null, sampleSize: 0 };
+  // target 0: no hay nada que resolver → 100 %.
+  if (target === 0) return { value: 100, sampleSize: values.length };
   const resolved = values.reduce((a, b) => a + b, 0);
-  if (!target) return { value: 100, sampleSize: values.length };
-  return { value: (resolved / target) * 100, sampleSize: values.length };
+  return finite((resolved * 100) / target, values.length);
 }

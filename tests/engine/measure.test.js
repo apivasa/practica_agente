@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { measure, parseDay } from '../../engine/index.js';
+import { measure, parseDay, REASON_MISSING_TARGET, REASON_OUT_OF_RANGE } from '../../engine/index.js';
 
 const avg = { measurementType: 'window_average', direction: 'higher_is_better', thresholds: { green: 99, yellow: 95 } };
 const cov = { ...avg, measurementType: 'coverage' };
@@ -106,11 +106,35 @@ test('cumulative_target: % de avance', () => {
   assert.deepEqual(measure(cum, ms, { asOf: '2026-03-31', target: 400 }), { value: 200, sampleSize: 2 });
 });
 
-test('cumulative_target: target 0 o ausente → 100', () => {
+test('cumulative_target: target 0 → 100', () => {
   const ms = [{ date: '2026-01-15', value: 0 }];
   assert.deepEqual(measure(cum, ms, { asOf: '2026-03-31', target: 0 }), { value: 100, sampleSize: 1 });
-  assert.deepEqual(measure(cum, ms, { asOf: '2026-03-31' }), { value: 100, sampleSize: 1 });
-  assert.deepEqual(measure(cum, ms, { asOf: '2026-03-31', target: null }), { value: 100, sampleSize: 1 });
+});
+
+test('cumulative_target: target ausente o null → sin valor con razón', () => {
+  const ms = [{ date: '2026-01-15', value: 5 }];
+  for (const opts of [{ asOf: '2026-03-31' }, { asOf: '2026-03-31', target: undefined }, { asOf: '2026-03-31', target: null }]) {
+    assert.deepEqual(measure(cum, ms, opts), { value: null, sampleSize: 1, reason: REASON_MISSING_TARGET });
+  }
+  assert.deepEqual(measure(cum, [], { asOf: '2026-03-31' }), { value: null, sampleSize: 0, reason: REASON_MISSING_TARGET });
+});
+
+test('valores negativos se ignoran en window_average y cumulative_target', () => {
+  const ms = [{ date: '2026-03-01', value: -500 }, { date: '2026-03-02', value: 10 }];
+  assert.deepEqual(measure(cum, ms, { asOf: '2026-03-31', target: 10 }), { value: 100, sampleSize: 1 });
+  assert.deepEqual(measure(avg, ms, { asOf: '2026-03-31' }), { value: 10, sampleSize: 1 });
+  assert.deepEqual(measure(avg, [{ date: '2026-03-01', value: -1 }], { asOf: '2026-03-31' }), { value: null, sampleSize: 0 });
+});
+
+test('desbordamiento → value null con razón (no Infinity)', () => {
+  const big = [{ date: '2026-03-20', value: 1e308 }, { date: '2026-03-21', value: 1e308 }];
+  assert.deepEqual(measure(avg, big, { asOf: '2026-03-31' }), { value: null, sampleSize: 2, reason: REASON_OUT_OF_RANGE });
+  assert.deepEqual(measure(cum, big, { asOf: '2026-03-31', target: 1 }), { value: null, sampleSize: 2, reason: REASON_OUT_OF_RANGE });
+});
+
+test('coverage: 57 de 100 apps da exactamente 57', () => {
+  const ms = Array.from({ length: 100 }, (_, i) => ({ date: '2026-11-10', appId: `a${i}`, compliant: i < 57 }));
+  assert.deepEqual(measure(cov, ms, { asOf: '2026-11-30' }), { value: 57, sampleSize: 100 });
 });
 
 test('cumulative_target: ventana vacía y target inválido', () => {

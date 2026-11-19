@@ -18,7 +18,8 @@ test('normalize aplica defaults', () => {
   assert.equal(n.frequency, 'monthly');
   assert.equal(n.minSample, 0);
   assert.equal(n.source, 'manual');
-  assert.deepEqual(n.thresholdsByCategory, {});
+  assert.deepEqual({ ...n.thresholdsByCategory }, {});
+  assert.equal(Object.getPrototypeOf(n.thresholdsByCategory), null);
   assert.deepEqual(DEFAULTS, { windowDays: 30, frequency: 'monthly', minSample: 0, source: 'manual' });
 });
 
@@ -36,7 +37,7 @@ test('normalize respeta valores dados y copia (no muta)', () => {
   assert.equal(n.frequency, 'weekly');
   assert.equal(n.minSample, 5);
   assert.equal(n.source, 'automatic');
-  assert.deepEqual(n.thresholdsByCategory, { P0: { green: 100, yellow: 96 } });
+  assert.deepEqual({ ...n.thresholdsByCategory }, { P0: { green: 100, yellow: 96 } });
   n.thresholds.green = 0;
   n.thresholdsByCategory.P0.green = 0;
   assert.equal(cfg.thresholds.green, 99);
@@ -125,4 +126,15 @@ test('frequency, minSample y source', () => {
   for (const m of [-1, 1.2, '3']) assert.match(validateIndicator({ ...base, minSample: m }).errors[0], /minSample/);
   for (const s of ['manual', 'automatic']) assert.equal(validateIndicator({ ...base, source: s }).ok, true);
   assert.match(validateIndicator({ ...base, source: 'jira' }).errors[0], /source/);
+});
+
+test('normalize: __proto__ se descarta, constructor queda como categoría propia', () => {
+  const cfg = JSON.parse(
+    '{"measurementType":"coverage","direction":"higher_is_better","thresholds":{"green":9,"yellow":5},' +
+      '"thresholdsByCategory":{"__proto__":{"green":1,"yellow":0},"constructor":{"green":2,"yellow":1}}}',
+  );
+  const n = normalizeIndicator(cfg);
+  assert.deepEqual(Object.keys(n.thresholdsByCategory), ['constructor']);
+  assert.deepEqual(n.thresholdsByCategory.constructor, { green: 2, yellow: 1 });
+  assert.equal(({}).green, undefined);
 });
