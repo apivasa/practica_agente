@@ -11,7 +11,7 @@ Funciones puras en `engine/escalation.js` (ESM, sin dependencias). Las usan el f
 - `carryOver({ packageTotal, resolved, newCriticalByMonth: [m1, m2, m3] })` devuelve `{ effectiveTotal, pendingCarry }`.
   `effectiveTotal = packageTotal + m1 + m2` y `pendingCarry = max(effectiveTotal - resolved, 0) + m3`.
 
-`history` contiene los meses del trimestre actual: como máximo 3, en orden ascendente y sin repetidos. Si no cumple esto, la función lanza `RangeError` o `TypeError`.
+`history` contiene los meses del trimestre actual: como máximo 3, consecutivos y sin huecos, en orden ascendente y ninguno posterior al mes de `asOf`. `asOf` y `expiresOn` deben ser fechas reales del calendario (se rechaza `2026-02-31`). Cada excepción necesita un `id` de texto no vacío. Si algo no cumple, la función lanza `RangeError` o `TypeError`.
 
 ## Tabla de verdad
 
