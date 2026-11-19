@@ -13,7 +13,7 @@ import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync, readdirSync, statSync, existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { join, relative } from 'node:path';
+import { join } from 'node:path';
 
 import {
   parseMeasurementsCsv, validateMeasurementInput, isFormulaLike, tokenizeCsv,
