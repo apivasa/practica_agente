@@ -3,6 +3,7 @@
 // crudo de PostgREST.
 import { getSupabase } from '../lib/supabase.js';
 import { MSG_NOT_CONFIGURED } from '../lib/session.js';
+import { readAllPages } from '../lib/paginate.js';
 
 export const MSG_LOAD = 'No se pudieron cargar los datos. Inténtalo de nuevo.';
 export const MSG_SAVE = 'No se pudo guardar. Inténtalo de nuevo.';
@@ -25,4 +26,15 @@ export function raise(error, fallback, byCode = {}) {
   if (code && Object.prototype.hasOwnProperty.call(byCode, code)) throw new Error(byCode[code]);
   if (code === '42501') throw new Error(MSG_DENIED);
   throw new Error(fallback);
+}
+
+/**
+ * Todas las filas de una consulta, página a página (H-1 de V-01..V-03: PostgREST corta en
+ * max_rows sin error). `build()` debe devolver una consulta nueva con orden total
+ * (por ejemplo, terminar en `.order('id')`).
+ * @param {() => any} build
+ * @param {string} [fallback] mensaje si falla
+ */
+export function allPages(build, fallback = MSG_LOAD) {
+  return readAllPages((from, to) => build().range(from, to), { onError: (error) => raise(error, fallback) });
 }

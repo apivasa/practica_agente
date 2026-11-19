@@ -39,3 +39,16 @@ export async function revokeException(id) {
   if (error) raise(error, MSG_GENERIC, BY_CODE);
   if (!data || data.length === 0) throw new Error(MSG_FORBIDDEN);
 }
+
+/**
+ * V-01/V-02: excepciones que vencen en `fromDate` o después (candidatas a vigentes). La
+ * vigencia final (revocadas incluidas) la decide exceptionStatus del motor
+ * (activeExceptions en src/lib/dashboard.js). RLS: el líder solo lee las de su unidad.
+ */
+export async function listCurrentExceptions(fromDate, unitId) {
+  let q = db().from('exceptions').select(COLUMNS).gte('expires_on', fromDate);
+  if (unitId) q = q.eq('unit_id', unitId);
+  const { data, error } = await q.order('expires_on');
+  if (error) raise(error, MSG_LOAD);
+  return data ?? [];
+}

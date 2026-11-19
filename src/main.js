@@ -17,6 +17,9 @@ import { renderIndicators } from './views/kpi_manager/indicators.js';
 import { renderCommitments } from './views/custodian/commitments.js';
 import { renderMeasurements } from './views/custodian/measurements.js';
 import { renderCommitteeExceptions } from './views/committee/exceptions.js';
+import { renderCompleteness } from './views/kpi_manager/completeness.js';
+import { renderCommitteeHome } from './views/committee/home.js';
+import { renderLeaderHome } from './views/unit_leader/home.js';
 
 export const APP_TITLE = 'App de control de capacidad RUN';
 
@@ -64,9 +67,10 @@ const VIEWS = Object.freeze({
   'no-role': () => renderNoRole({ message: state.rolesError }),
   kpi_manager: home,
   custodian: home,
-  committee: home,
-  unit_leader: home,
+  committee: (ctx) => renderCommitteeHome(ctx),
+  unit_leader: (ctx) => renderLeaderHome(ctx),
   'kpi-indicators': (ctx) => renderIndicators(ctx),
+  'kpi-completeness': (ctx) => renderCompleteness(ctx),
   'custodian-commitments': (ctx) => renderCommitments(ctx),
   'custodian-measurements': (ctx) => renderMeasurements(ctx),
   'committee-exceptions': (ctx) => renderCommitteeExceptions(ctx),
