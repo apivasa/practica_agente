@@ -193,6 +193,24 @@ Ver "Superficie de CI/CD (S-01)" y T-CI-01..10 arriba. El job `pentest-api` (S-0
 
 ---
 
+## Superficie nueva (M-02, M-03, M-04)
+
+- **Pantalla de indicadores (gestora):** alta y edición de `indicators`, activar o desactivar, y asignación de custodio, que escribe `user_roles` (borrar e insertar filas `custodian`) y `indicators.custodian_user_id` desde el front, en tres peticiones sin transacción.
+- **Compromisos (custodio):** INSERT/UPDATE de `commitments` con umbral negociado y paquete por categoría.
+- **Mediciones (custodio):** captura manual e importación CSV (hasta 1 MB y 5000 filas), validada fila a fila en `engine/measurements-input.js` y guardada en un solo INSERT.
+- **Semilla:** tres usuarios ficticios nuevos (custodio de un KPI inactivo, multirol gestora+custodio y un usuario sin rol) y dos indicadores inactivos.
+
+| STRIDE | Amenaza | Control | Prueba |
+|---|---|---|---|
+| E | Un custodio, un líder o un usuario sin rol se concede el rol `custodian` o borra el de otro | `user_roles_insert/delete` solo `kpi_manager` | `api/rls-matrix.test.js` (user_roles), `api/m02-m04.test.js` › asignación |
+| T | Un corte a medias en la asignación de custodio deja más permisos | Orden "falla cerrado" (borrar → conceder → columna); `custodian_user_id` es informativo y no da permisos | `front-m02-m04.test.js` › corte en cualquier paso |
+| T | Dos asignaciones a la vez dejan dos custodios | Detección en pantalla (`incoherentCustodians`) | `front-m02-m04.test.js` › carrera (H-M02-01, abierto) |
+| T | CSV con fórmulas (`= + - @`), tipos inválidos, unidades ajenas o cabeceras `__proto__` | `validateMeasurementInput` y `parseMeasurementsCsv` rechazan la fila y el lote entero | `front-m02-m04.test.js` › CSV |
+| D | CSV enorme o patológico que congela la pestaña | Límite de 1 MB (`File.size` y bytes UTF-8) y 5000 filas; tokenizador lineal | `front-m02-m04.test.js` › tamaño y archivo patológico |
+| T | Fila del CSV que fija `source`, `created_by` o `indicator_id` | Cabecera con lista blanca; `toMeasurementRow` fija `source: 'manual'`; RLS exige `created_by = auth.uid()` y `source = 'manual'` | `front-m02-m04.test.js`, `api/m02-m04.test.js` › multirol |
+| I/T | XSS almacenado en nombre de indicador, categoría, notas, unidad o en el mensaje de error que repite la celda | Todo por `textContent`; `el()` rechaza `on*` de texto y URL `javascript:` | `front-m02-m04.test.js` › XSS, `front-f05.test.js` |
+| E | Ser gestora da escritura en mediciones de KPIs que no custodia | `measurements_insert` exige `is_custodian_of` | `api/m02-m04.test.js` › multirol |
+
 ## Trazabilidad: amenazas de riesgo Alto → prueba automática
 
 | Amenaza | Prueba (archivo › caso) | Estado |
