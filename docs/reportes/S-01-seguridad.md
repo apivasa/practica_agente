@@ -29,3 +29,8 @@ Hallazgos:
 Verificado sin hallazgos: 5 (Actions: permisos mínimos, SHA, sin `pull_request_target`, sin inyección de expresiones, sin secretos en logs), 6 (secretos en historial, SAST, CodeQL, dependencias de producción, firmas del registro), 4 (secretos en `src/` y `dist/`). Categorías 1, 2, 3, 7, 8: no aplican a este ítem.
 
 Versiones fijadas: actions/checkout v7.0.1 `3d3c42e5…`, actions/setup-node v7.1.0 `949feb24…`, actions/upload-artifact v7.0.2 `cf430e03…`, actions/setup-python v7.1.0 `6d4fd22b…`, supabase/setup-cli v3.2.0 `689adcfb…` (CLI 3.2.0), github/codeql-action v4.39.3 `33d7b85d…` (commit del tag anotado), gitleaks 8.30.1, semgrep 1.185.0.
+
+## Intento 2 (bloqueante de arquitectura)
+- `lockfile.yml` ahora relanza `ci.yml` **y** `seguridad.yml` sobre el commit del bot (`gh workflow run ... --ref "${GITHUB_REF_NAME}"`); nuevo caso en `tests/security/workflows.test.js` que exige ambos y que `seguridad.yml` acepte `workflow_dispatch` (verificado por mutación: quitar el relanzamiento de `seguridad.yml` hace fallar el caso). 58 casos en `tests/security/`, todos pasan.
+- semgrep incluye `--config p/sql-injection` (sugerencia de QA). El ruleset existe (semgrep no da error), pero el conteo sigue en 116 reglas: sus reglas apuntan a SQL construido desde lenguajes de aplicación y se solapan con `p/javascript`; semgrep no analiza archivos `.sql` de migraciones. La revisión de SQL (RLS, `security definer`, `search_path`) queda en pgTAP (`supabase/tests/security/`, S-02/S-03).
+- Runs en `item/S-01` @ `d1020af`: Seguridad 44599716526 success (semgrep: 116 reglas, 53 archivos, 0 hallazgos), CI 44599716262 success.
