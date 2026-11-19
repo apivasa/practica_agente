@@ -49,8 +49,8 @@ Superficie nueva: en S-04 el constructor es seguridad (permiso del orquestador p
 - `.zap/rules.tsv` pone en `FAIL` las reglas 10003 (librería JS vulnerable), 10017 (JS de otro dominio), 10062 (PII) y 90003 (falta SRI). El resto queda en `WARN`, y ninguna está en `IGNORE`.
 
 ## Resultados del pipeline (rama `item/S-04`)
-- Seguridad, run 44610609487 (https://github.com/apivasa/practica_agente/actions/runs/44610609487): pasan gitleaks, semgrep, npm audit, CodeQL (JS y Actions), las pruebas de seguridad, el pentest API y el DAST.
-- CI, run 44610609561 (https://github.com/apivasa/practica_agente/actions/runs/44610609561): pasan build, db y e2e. El e2e completo da 43 pruebas, incluidas las de `e2e/security`.
+- Seguridad, run 44611568177 (https://github.com/apivasa/practica_agente/actions/runs/44611568177), con el digest fijado; antes, run 44610609487: pasan gitleaks, semgrep, npm audit, CodeQL (JS y Actions), las pruebas de seguridad, el pentest API y el DAST.
+- CI, run 44611567900 (https://github.com/apivasa/practica_agente/actions/runs/44611567900): pasan build, db y e2e. El e2e completo da 43 pruebas, incluidas las de `e2e/security`.
 - DAST:
   - e2e de seguridad: 19 pasan y 5 son fixme (CSV).
   - ZAP baseline con `zaproxy/zap-stable@sha256:9624669d…328af`, sobre 9 URL: `FAIL-NEW: 0`, `WARN-NEW: 7`, `PASS: 61`, y 0 alertas de riesgo alto.
