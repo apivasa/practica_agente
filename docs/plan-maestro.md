@@ -95,7 +95,7 @@ El orquestador toma el **primer ítem `Pendiente`** cuyas dependencias estén `H
 |---|---|---|---|---|---|
 | 1 | F-01 | Hecho | 0 | #1 |  |
 | 2 | F-02 | Hecho | 0 | #1 |  |
-| 3 | S-01 | Pendiente | 0 | | Constructor: seguridad |
+| 3 | S-01 | En curso | 0 | | Constructor: seguridad |
 | 4 | F-03 | En curso | 0 | |  |
 | 5 | S-02 | Pendiente | 0 | | Constructor: seguridad |
 | 6 | M-01 | Hecho | 1 | #2 | Puede ir en paralelo a F-03 (solo depende de F-01) |
