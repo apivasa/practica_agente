@@ -140,3 +140,50 @@ jobs:
         env:
           SECURITY_REQUIRE_DIST: '1'
         run: node --test 'tests/security/*.test.js'
+
+  # S-03: pentest de la API real (PostgREST + Auth) contra Supabase local con
+  # seed. Matriz rol × tabla × operación, IDOR, escalada, JWT manipulado,
+  # upsert indebido y esquemas no expuestos. Cualquier tabla sin RLS o sin fila
+  # en la matriz hace fallar el job.
+  pentest-api:
+    name: pentest API (PostgREST/Auth, Supabase local)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+      - uses: supabase/setup-cli@689adcfb80d947100a1eab127289b97d1fb07b13 # v3.2.0
+        with:
+          # Misma versión fija que ci.yml (H-002).
+          version: 3.2.0
+      - name: Levantar Supabase local (migraciones + seed)
+        run: supabase start -x studio,imgproxy,realtime,storage-api,edge-runtime,logflare,vector
+      - name: Exportar URL y claves locales al entorno del job
+        run: |
+          set -euo pipefail
+          supabase status -o env > /tmp/sb.env
+          # Solo nombres, nunca valores: las claves locales no son secretos
+          # reales, pero no se vuelcan al log.
+          cut -d= -f1 /tmp/sb.env
+          get() { grep -E "^$1=" /tmp/sb.env | head -n1 | cut -d= -f2- | tr -d '"'; }
+          echo "::add-mask::$(get SECRET_KEY)"
+          echo "::add-mask::$(get JWT_SECRET)"
+          {
+            echo "PENTEST_API_URL=$(get API_URL)"
+            echo "PENTEST_PUBLISHABLE_KEY=$(get PUBLISHABLE_KEY)"
+            echo "PENTEST_SECRET_KEY=$(get SECRET_KEY)"
+            echo "PENTEST_JWT_SECRET=$(get JWT_SECRET)"
+            echo "PENTEST_DB_URL=$(get DB_URL)"
+          } >> "$GITHUB_ENV"
+          rm -f /tmp/sb.env
+      - name: Pentest de la API
+        env:
+          PENTEST_REQUIRE: '1'
+        run: node --test --test-concurrency=1 'tests/security/api/*.test.js'
+      - name: Detener Supabase
+        if: always()
+        run: supabase stop --no-backup
