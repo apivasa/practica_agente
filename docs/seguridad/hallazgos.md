@@ -19,3 +19,11 @@ Registro de hallazgos que no bloquean el merge. Cada uno se propone como ítem o
 | H-M01-02 | M-01 | Baja | 3 Entradas | `engine/measure.js:83,111` | Sin límites de rango: sumas que desbordan (`1e308`×2) dan `value: Infinity` y `evaluateColor` lanza (un custodio puede romper la evaluación de un indicador); valores negativos se aceptan (`cumulative_target` = -5000 %). | CHECK de rango en BD y validación en CSV/formulario; en Actions, capturar el error por indicador y registrarlo en auditoría; opcionalmente que `measure` devuelva error explícito si el resultado no es finito. | Parcial: `measure` neutraliza no finitos y negativos (M-01 intento 2); falta CHECK en BD y CSV (F-03, M-04) |
 | H-M01-03 | M-01 | Baja | 3 Entradas | `engine/indicator.js:124-127` | Una categoría llamada `__proto__` (posible vía `JSON.parse`) pasa la validación pero se descarta en silencio: la asignación cambia el prototipo del objeto local (sin contaminación global) y la categoría usa los umbrales generales. | Construir `byCategory` con `Object.create(null)` o `Map`, o rechazar claves reservadas en `validateIndicator`. | Corregido (M-01 intento 2, Object.create(null)) |
 | H-M01-04 | M-01 | Informativo | 3 XSS | `engine/color.js:37`, `engine/indicator.js:94` | `reason` y los mensajes de error incluyen el nombre de categoría tal cual (`<img src=x onerror=...>` llega intacto). No es explotable en el motor; sí lo sería si el front usa `innerHTML`. | El front renderiza con `textContent`; prueba XSS almacenado cuando exista UI. | Abierto |
+
+## Motor de escalada (C-01)
+
+| ID | Ítem | Severidad | Categoría | Descripción | Propuesta |
+|---|---|---|---|---|---|
+| H-C01-01 | C-01 | Baja | 3 Entradas | **Corregido** (89c762b). `DATE_RE` aceptaba fechas imposibles (`2026-02-31`). La vigencia indebida no pasa del mes indicado. | Validar la fecha real (ida y vuelta con `Date.UTC`). |
+| H-C01-02 | C-01 | Baja | 5 Automatizaciones | **Parcialmente corregido** (89c762b). Ya se rechazan los huecos entre meses y los meses posteriores a `asOf`. Falta rechazar un historial de un trimestre anterior que no contiene `asOf`. | Resto en C-03: el último mes del historial debe ser el de `asOf` o el anterior. |
+| H-C01-03 | C-01 | Info | 1 RLS | El motor no vincula la excepción con la unidad ni limita su duración. | Controlarlo con RLS y pgTAP en la tabla `exceptions`. |
