@@ -50,6 +50,8 @@ Tasa de fallos observada: en `main`, los fallos/cancelaciones del 2026-11-19 vie
 
 S-04 (2026-11-19, rama `item/S-04`): job dast medido en Seguridad runs 44610609487 (162 s), 44611568177 (185 s) y 44612384789 (177 s), todos `success`. En el último, pentest-api tardó 169 s (base 74–93 s): primera vez sobre el doble de la base; si se repite en el siguiente run se registra como ítem (regla de abajo). Probable causa: dast y pentest-api levantan cada uno su Supabase local en paralelo y compiten por la descarga de imágenes. Los fallos de los dos primeros commits de la rama (runs 44609093018, 44609853829) fueron defectos reales de las pruebas de anti-framing, corregidos; no intermitencia.
 
+V-04 (2026-11-19, rama `item/V-04`): **primer paso intermitente confirmado.** `pentest-api` falló en Seguridad run 44638730859 en `supabase start` con `failed to bind host port 0.0.0.0:54322/tcp: address already in use` y pasó al relanzarlo sin cambios. Por la regla de abajo se propone como ítem de plan (ver informe `docs/reportes/V-04-arquitectura.md`): fijar puertos propios por job en `supabase/config.toml` no es posible (un solo archivo), así que la propuesta es un paso previo que verifique el puerto libre con reintento, o `supabase start` con un reintento acotado y log de quién ocupa el puerto (`ss -ltnp`). CI run 44638730844: integration 87 s con el paso nuevo `scripts/ci/health.sh` (base 69–77 s; el paso añade ~12 s por el reintento de 10 s de la caída simulada).
+
 Regla: un job que supera dos veces seguidas el doble de su base, o que falla y pasa al relanzarlo sin cambios, se registra como ítem de plan (paso intermitente).
 
 ## Qué hacer si falla seguridad.yml
@@ -76,6 +78,7 @@ Primero identifica el job fallido (consulta de jobs arriba) y lee su log. Nunca 
    - Una prueba de `workflows.test.js` falla: un workflow incumple la política (acción sin SHA, `latest`, permisos, `--ignore-scripts`...). Corregir el workflow, no la prueba.
    - `static-secrets.test.js` falla en `dist/`: un secreto se coló en el bundle (p. ej. una variable `VITE_*` con la clave secreta). Tratar como gitleaks real.
 6. **pentest-api** (`tests/security/api/`, Supabase local)
+   - Falla `supabase start` con `address already in use` (puerto 54322): intermitente conocido (V-04). Relanzar solo el job (`rerun-failed-jobs`); no es un defecto del ítem.
    - Falla `supabase start` o `supabase status` (sin `not ok` en el log): problema de la CLI o de Docker en el runner. Relanzar una vez; si se repite, revisar si cambió la imagen del runner o la versión fija de la CLI (debe ser la misma que en `ci.yml`).
    - `PENTEST_REQUIRE=1 pero faltan ...`: el paso "Obtener URL y claves locales" no encontró `API_URL`, `PUBLISHABLE_KEY` o `SECRET_KEY` en `supabase status -o env` (la CLI cambió los nombres). Ajustar el paso; nunca quitar `PENTEST_REQUIRE`.
    - `catálogo › toda tabla de public tiene fila en la matriz`: una migración añadió una tabla o vista. Añadir su fila en `tests/security/api/matrix.js` (seguridad) en la misma rama, con lo que diga ADR 0005; no es un falso positivo.
