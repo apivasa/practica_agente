@@ -201,3 +201,25 @@ test('EVALUATE_ALLOW_FUTURE solo en la integración contra Supabase local', () =
   const dates = readFileSync(join(ROOT, 'scripts', 'lib', 'dates.js'), 'utf8');
   assert.match(dates, /EVALUATE_ALLOW_FUTURE solo se admite contra Supabase local/);
 });
+
+test('seguridad.yml: job dast (S-04) con ZAP fijado por digest, e2e de seguridad y fallo por riesgo alto', () => {
+  const wf = workflows.find((w) => w.name === 'seguridad.yml').text;
+  const jobs = wf.split(/^ {2}(?=[\w-]+:\s*$)/m);
+  const dast = jobs.find((j) => j.startsWith('dast:'));
+  assert.ok(dast, 'falta el job dast');
+  assert.match(dast, /ZAP_IMAGE:\s*zaproxy\/zap-stable@sha256:[0-9a-f]{64}\s*$/m, 'imagen ZAP sin digest');
+  assert.doesNotMatch(dast, /zap-stable:(latest|stable|\d)/, 'imagen ZAP por etiqueta móvil');
+  assert.match(dast, /supabase start/);
+  assert.match(dast, /sb_publishable_\*/);
+  assert.doesNotMatch(dast, /SECRET_KEY/, 'el build del DAST no debe ver la clave secreta');
+  assert.match(dast, /npx playwright test e2e\/security/);
+  assert.match(dast, /zap-baseline\.py -t http:\/\/127\.0\.0\.1:4173\/practica_agente\//, 'ZAP solo contra el front local');
+  assert.match(dast, /-c rules\.tsv/);
+  assert.match(dast, /\[ "\$status" -eq 0 \]/, 'el código de salida de ZAP debe comprobarse');
+  assert.match(dast, /riskcode \| tonumber\) >= 3/);
+  assert.doesNotMatch(dast, /\|\|\s*true/);
+  // Ninguna regla de ZAP se ignora para que el job pase.
+  const rules = readFileSync(join(ROOT, '.zap', 'rules.tsv'), 'utf8');
+  assert.doesNotMatch(rules, /\tIGNORE\t/);
+  for (const id of ['10003', '10017', '10062', '90003']) assert.match(rules, new RegExp(`^${id}\\tFAIL\\t`, 'm'));
+});

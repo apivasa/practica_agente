@@ -1,5 +1,7 @@
 // Punto de entrada del front: arma el marco de la app, carga sesión y roles,
 // y delega en el router por hash qué vista mostrar.
+// S-04: primero el anti-framing; si la página está enmarcada, elimina #app y la app no arranca.
+import './security/anti-framing.js';
 import './styles.css';
 import { createRouter } from './lib/router.js';
 import { distinctRoles, ROLE_LABELS, CHOOSER_PATH, LOGIN_PATH } from './lib/route-logic.js';

@@ -30,7 +30,8 @@ Medidos en `item/S-01` y actualizados en `item/S-02-S-03` e `item/C-03-C-04` (20
 | | | CodeQL (javascript-typescript) | 50–62 s | > 6 min |
 | | | pruebas de seguridad (258 casos; las de `tests/security/api/` se omiten aquí) | 7–25 s | > 2 min |
 | | | pentest-api (Supabase local + 428 casos PostgREST/Auth) | 74–93 s | > 5 min (timeout del job: 30 min) |
-| | | **total de pared** | **~75–95 s** (lo marca pentest-api) | > 7 min |
+| | | dast (desde S-04: Supabase local + build + e2e de seguridad + ZAP baseline) | 162–185 s (de ellos `supabase start` ~68 s, ZAP baseline ~64 s, Playwright install ~16 s, e2e ~11 s) | > 6 min (timeout del job: 30 min) |
+| | | **total de pared** | **~3 min** (desde S-04 lo marca dast; antes ~75–95 s por pentest-api) | > 7 min |
 | `evaluacion-mensual.yml` | cron `7 11 1 * *` (día 1, 06:07 Guayaquil); manual con `as_of` | evaluate (mensual) | sin base (aún sin producción); < 10 s si se omite | > 5 min (timeout 15 min) |
 | `ritmo-diario.yml` | cron `23 11 * * *` (06:23 Guayaquil); manual con `as_of` | evaluate (diario) | sin base; < 10 s si se omite | > 5 min (timeout 15 min) |
 | `lockfile.yml` | push a `item/**`, `fix/**` que cambie `package.json`; manual (nunca en `main`) | lockfile | < 30 s | > 2 min |
@@ -42,6 +43,8 @@ Fuentes: CI run 44597648985, Seguridad run 44597649643 (ambos `success`); refere
 Fuentes: CI run 44606812249 (C-03+C-04: build 12 s, db 67 s, integration 69 s, e2e 29 s) y 44606007143 (integration 71 s); CI run 44597648985, Seguridad run 44597649643 (S-01); CI run 44605484960 y Seguridad run 44605484997 (S-02+S-03, ambos `success`); referencia previa CI run 44594674729.
 
 Tasa de fallos observada: en `main`, los fallos/cancelaciones del 2026-11-19 vienen de la puesta en marcha (cancelaciones por concurrencia y un fallo antes del lockfile), no de pasos intermitentes. En `item/S-01`, un solo fallo de Seguridad (run 44595333304) causado por la rama `ensayo/s01-secreto` y corregido en el ítem. Ningún paso intermitente detectado todavía. En `item/S-02-S-03`, los dos fallos de `pentest-api` (runs 44604283956 y 44604729716) fueron defectos reales de las pruebas, corregidos en commits posteriores; no son intermitencia.
+
+S-04 (2026-11-19, rama `item/S-04`): job dast medido en Seguridad runs 44610609487 (162 s), 44611568177 (185 s) y 44612384789 (177 s), todos `success`. En el último, pentest-api tardó 169 s (base 74–93 s): primera vez sobre el doble de la base; si se repite en el siguiente run se registra como ítem (regla de abajo). Probable causa: dast y pentest-api levantan cada uno su Supabase local en paralelo y compiten por la descarga de imágenes. Los fallos de los dos primeros commits de la rama (runs 44609093018, 44609853829) fueron defectos reales de las pruebas de anti-framing, corregidos; no intermitencia.
 
 Regla: un job que supera dos veces seguidas el doble de su base, o que falla y pasa al relanzarlo sin cambios, se registra como ítem de plan (paso intermitente).
 
@@ -75,6 +78,13 @@ Primero identifica el job fallido (consulta de jobs arriba) y lee su log. Nunca 
    - Una celda de la matriz, un caso de IDOR o de escalada falla: la RLS o los grants son más abiertos (o más cerrados) que el diseño. Corrige el desarrollador en `supabase/migrations/`; si el diseño mismo está en duda, decide el arquitecto (ADR).
    - Fuera de este job las pruebas de `tests/security/api/` se omiten (`# SKIP`) a propósito; dentro deben salir con `skipped 0`.
    - El log de `supabase start` muestra las claves locales por defecto de la CLI (públicas y solo válidas en el runner efímero). No es una fuga; una clave `sb_secret_` de producción en ese log sí lo sería.
+6b. **dast** (S-04: build contra Supabase local, `e2e/security`, ZAP baseline pasivo contra `http://127.0.0.1:4173/practica_agente/`)
+   - `Build conectado a Supabase local` falla con `CSP: origen de Supabase no permitido`: `VITE_SUPABASE_URL` apunta a un origen que no es el proyecto del repo ni loopback (ver ADR 0011). Corregir la variable; si el proyecto de Supabase cambió de verdad, actualizar `PRODUCTION_SUPABASE_ORIGIN` en `src/security/csp.js` en un PR revisado por seguridad.
+   - `La CSP del build admite Supabase local y nada más` falla: el plugin `csp-meta` de `vite.config.js` no inyectó el `<meta>` o apareció `unsafe-inline`/`unsafe-eval` (p. ej. un cambio de Vite que inyecta script inline). Corregir el build, nunca relajar la CSP.
+   - `OWASP ZAP baseline` sale con código 1: una regla `FAIL` de `.zap/rules.tsv` saltó. Ver el artefacto `zap-baseline` (HTML/JSON). Código 3: error de ZAP o de la imagen (relanzar una vez). No se pasan reglas a `IGNORE` (lo impide `workflows.test.js`).
+   - `Sin alertas de riesgo alto` falla: hallazgo alto real; corregir en la rama.
+   - Subir la imagen ZAP: versión y digest `sha256` juntos en un PR; nunca por etiqueta móvil.
+   - `Servir dist/` falla: el puerto 4173 ocupado o `vite preview` cambió; ver `preview.log` en el log del paso.
 7. **Run semanal** (lunes) falla sin cambios de código: casi siempre es una CVE nueva (npm audit) o una regla nueva (semgrep/CodeQL). Abrir rama `fix/seguridad-<fecha>`; el orquestador lo trata en el paso 3 del ciclo ("salud primero").
 8. **Dependabot** propone subir una acción: verificar que el SHA corresponde al tag del comentario y que CI y Seguridad pasan en el PR antes de fusionar.
 9. **Dependabot npm (versión mayor):** fusionar de a uno, pidiendo antes `@dependabot rebase` sobre el `main` actual (los lockfiles de varios PR chocan entre sí). Paquetes acoplados (`eslint` y `@eslint/js`) van juntos: primero `eslint`, luego rebase del otro. Un PR que falla por `ERESOLVE` (dependencia par) no se fuerza con `--legacy-peer-deps`: se espera al PR del paquete par.
