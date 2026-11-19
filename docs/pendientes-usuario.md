@@ -11,6 +11,7 @@ El orquestador solo escribe aquí cuando algo **de verdad** te necesita (ver reg
   2. **No** conectes este proyecto con la integración de GitHub de Supabase: las migraciones las aplica `deploy.yml` (V-05) con la CLI.
   3. Copia de Project Settings → API: *Project URL*, *anon key* y *service_role key*. El *project ref* es el código de la URL (`https://<ref>.supabase.co`). En Account → Access Tokens genera un token.
   4. En GitHub → `practica_agente` → Settings → Secrets and variables → Actions → **New repository secret**, crea: `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `SUPABASE_PROJECT_REF`, `SUPABASE_ACCESS_TOKEN`, `SUPABASE_DB_PASSWORD`. No pegues los valores aquí.
+  Avance (2026-11-19): proyecto nuevo creado, dedicado a esta app. URL `https://oehtspdtpwdhfhhhkgao.supabase.co`, project ref `oehtspdtpwdhfhhhkgao` (datos públicos, no son secretos). Falta confirmar que los 6 secretos están cargados en GitHub. El primer job de `deploy.yml` debe verificar que existen y fallar con un mensaje claro si falta alguno.
   Respuesta:
 - **P-03 · GitHub Pages (decidido 2026-11-19: el repo pasa a público).** Revisado: el historial del repo no contiene secretos.
   1. GitHub → `practica_agente` → **Settings → General** → al final, *Danger Zone* → **Change visibility** → **Make public** y confirma.
