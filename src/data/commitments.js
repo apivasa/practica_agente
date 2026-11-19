@@ -28,3 +28,12 @@ export async function saveCommitment(unitId, indicatorId, fields) {
   if (error) raise(error, MSG_SAVE, { '23505': 'Ya existe un compromiso para esa unidad y periodo.' });
   return data;
 }
+
+/** V-01: compromisos de una unidad (RLS: el líder lee los de su unidad). */
+export async function listUnitCommitments(unitId) {
+  const { data, error } = await db()
+    .from('commitments').select(COLUMNS).eq('unit_id', unitId)
+    .order('period', { ascending: false });
+  if (error) raise(error, MSG_LOAD);
+  return data ?? [];
+}

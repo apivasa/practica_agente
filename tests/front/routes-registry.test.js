@@ -24,7 +24,7 @@ test('cada ruta tiene path, role, view y label; paths y views únicos; prefijo d
 });
 
 test('subrutas de M-02, M-03 y M-04', () => {
-  assert.deepEqual(routesForRole('kpi_manager').map((r) => r.path), ['/gestora', '/gestora/indicadores']);
+  assert.deepEqual(routesForRole('kpi_manager').map((r) => r.path), ['/gestora', '/gestora/indicadores', '/gestora/completitud']);
   assert.deepEqual(routesForRole('custodian').map((r) => r.path), ['/custodio', '/custodio/compromisos', '/custodio/mediciones']);
   assert.equal(roleForView('kpi-indicators'), 'kpi_manager');
   assert.equal(roleForView('nada'), null);

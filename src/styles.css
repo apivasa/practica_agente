@@ -298,3 +298,43 @@ form .btn-primary,
 [hidden] {
   display: none !important;
 }
+/* V-01..V-03: tableros */
+.badge {
+  display: inline-block;
+  padding: 0.125rem 0.5rem;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  font-weight: 600;
+  font-size: 0.875rem;
+}
+
+.badge-green { background: #d8f0dc; color: #14532d; border-color: #2f855a; }
+.badge-yellow { background: #fdf1c7; color: #6b4e00; border-color: #b7791f; }
+.badge-red { background: #fbdcdc; color: #7f1d1d; border-color: #c53030; }
+.badge-not_evaluated { background: #eceff3; color: var(--muted); }
+
+.small { font-size: 0.875rem; margin: 0.25rem 0 0; }
+.ok { color: #14532d; }
+
+.filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+}
+
+.restrictions { margin: 0.25rem 0 0; padding-left: 1.25rem; }
+
+.matrix { overflow-x: auto; }
+
+.alerts-list { list-style: none; padding: 0; }
+
+.alert-item {
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 0.5rem 0.75rem;
+  margin-bottom: 0.5rem;
+}
+
+.alert-item.is-high { border-left: 4px solid var(--danger); }
+.alert-item.is-read { opacity: 0.75; }
+.alert-head, .alert-message { margin: 0.25rem 0; }
