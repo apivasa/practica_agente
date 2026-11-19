@@ -89,10 +89,10 @@ select throws_ok($$ update public.commitments set created_by = 'aaaaaaaa-0000-40
 set local request.jwt.claims = '{"sub":"aaaaaaaa-0000-4000-8000-000000000004","role":"authenticated"}';
 select throws_ok($$ update public.exceptions set unit_id = 'bbbbbbbb-0000-4000-8000-000000000002' where id = '88888888-0000-4000-8000-000000000001' $$, '42501', null, 'comité: no cambia la unidad de una excepción');
 select throws_ok(
-  $$ insert into public.exceptions (unit_id, reason, expires_on) values ('bbbbbbbb-0000-4000-8000-000000000001', 'vencida', current_date - 1) $$,
+  $$ insert into public.exceptions (unit_id, reason, expires_on) values ('bbbbbbbb-0000-4000-8000-000000000001', 'vencida', (now() at time zone 'America/Guayaquil')::date - 1) $$,
   '42501', null, 'comité: no crea excepciones ya vencidas');
 select lives_ok(
-  $$ insert into public.exceptions (unit_id, scope, reason, expires_on) values ('bbbbbbbb-0000-4000-8000-000000000001', 'all', 'vence hoy', current_date) $$,
+  $$ insert into public.exceptions (unit_id, scope, reason, expires_on) values ('bbbbbbbb-0000-4000-8000-000000000001', 'all', 'vence hoy', (now() at time zone 'America/Guayaquil')::date) $$,
   'comité: crea excepción que vence hoy');
 
 -- Gestora: RESTRICT preserva historial
