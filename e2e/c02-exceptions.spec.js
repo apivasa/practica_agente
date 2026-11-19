@@ -58,7 +58,9 @@ test('C-02: el comité aprueba una excepción de inicio puntual y la revoca', as
 
 test('C-02: vencimiento mayor al tope se rechaza en el formulario', async ({ page }) => {
   await login(page, 'comite@example.test');
+  await expect(page).toHaveURL(/#\/comite$/); // sesión lista antes de navegar
   await page.goto('./#/comite/excepciones');
+  await expect(page.getByRole('heading', { level: 2 })).toHaveText('Excepciones del comité');
   await page.getByLabel('Unidad', { exact: true }).selectOption({ label: 'Unidad Beta' });
   await page.getByLabel('Alcance', { exact: true }).selectOption('all');
   await expect(page.getByLabel('Change autorizado', { exact: true })).toBeHidden();
