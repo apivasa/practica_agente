@@ -2,7 +2,7 @@
 -- Cada bloque falla con un mensaje claro si la condición no se cumple.
 \set ON_ERROR_STOP on
 
-create temporary function pg_temp.expect(cond boolean, msg text) returns void
+create function pg_temp.expect(cond boolean, msg text) returns void
 language plpgsql as $$
 begin
   if cond is not true then
