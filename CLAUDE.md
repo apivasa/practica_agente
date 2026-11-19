@@ -57,7 +57,7 @@ Si todo lo que queda espera al usuario: no hagas nada, no vuelvas a notificar lo
 
 ## 4. Reglas de seguridad (no negociables)
 
-- Nunca subas secretos al repo. La `SUPABASE_SERVICE_ROLE_KEY` vive solo en secretos de GitHub Actions; el front usa únicamente la anon key.
+- Nunca subas secretos al repo. La clave secreta `SUPABASE_SECRET_KEY` (`sb_secret_...`) vive solo en secretos de GitHub Actions; el front usa únicamente la clave publicable `SUPABASE_PUBLISHABLE_KEY` (`sb_publishable_...`). No se usan las claves legadas `anon` / `service_role`: Supabase las retira a fines de 2026.
 - Toda tabla tiene RLS activado y al menos una prueba pgTAP por rol.
 - Los datos semilla son ficticios: sin nombres, correos o datos reales de personas.
 - No desactives pruebas, linters ni pasos de CI para que algo pase.

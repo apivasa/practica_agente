@@ -67,7 +67,7 @@ Tallas: **S** = 1 ciclo · **M** = 2 ciclos · **L** = 3 ciclos.
 |---|---|---|---|---|---|
 | C-01 | P0 | Motor de escalada: verde normal; mes 1 amarillo/rojo → no change nuevo; mes 2 rojo → se frena todo el change; cierre de trimestre → arrastre. Regla "amarillo en mes 2" **configurable** (por defecto = mes 1) hasta que se decida (Q-03) | M | M-01 | Tabla de verdad completa en pruebas; historial guardado en Evaluaciones |
 | C-02 | P0 | Excepciones del comité: motivo, vencimiento, visibles para todo el comité; suspenden el candado mientras estén vigentes | M | C-01, F-04 | e2e: el comité aprueba; vencida → el candado vuelve; RLS: el líder no puede crear excepciones |
-| C-03 | P0 | GitHub Action `evaluacion-mensual.yml` (día 1, 06:00 America/Guayaquil) y `ritmo-diario.yml` que evalúan colores, escaladas y atrasos con la service role desde secretos | M | C-01, M-05 | Se ejecuta contra Supabase local en CI con datos semilla; idempotente (correr dos veces no duplica) |
+| C-03 | P0 | GitHub Action `evaluacion-mensual.yml` (día 1, 06:00 America/Guayaquil) y `ritmo-diario.yml` que evalúan colores, escaladas y atrasos con la clave secreta (`SUPABASE_SECRET_KEY`) desde secretos | M | C-01, M-05 | Se ejecuta contra Supabase local en CI con datos semilla; idempotente (correr dos veces no duplica) |
 | C-04 | P0 | Alertas: cambio de color, atraso frente al ritmo, ingreso de P0/P1 que recalcula la meta, vencimiento de excepciones. Registro en tabla Alertas + bandeja en la app. Canal externo según Q-04 | M | C-03 | Cada disparador genera exactamente una alerta por destinatario; agrupación sin duplicados |
 | C-05 | P1 | Envío de correo de alertas (proveedor según Q-04) | S | C-04, Q-04 | Bloqueado hasta respuesta Q-04 |
 
@@ -135,7 +135,7 @@ Estados válidos: `Pendiente`, `En curso`, `En revisión`, `Hecho`, `Bloqueado`.
 | Supabase local en CI tarda o falla | CI lento o intermitente | Caché de imágenes; reintento único; el arquitecto-SRE vigila la duración |
 | Plan gratuito de Supabase pausa proyectos inactivos | Caída en producción | `salud.yml` hace una consulta liviana periódica y alerta |
 | Ciclos que se solapan si uno dura más de 3 h | Conflictos en ramas | Candado de ciclo en `docs/estado.md` |
-| Fuga de la service role key | Acceso total a la BD | Solo en secretos de Actions; el revisor de seguridad lo verifica en cada PR |
+| Fuga de la clave secreta de Supabase | Acceso total a la BD | Solo en secretos de Actions; el revisor de seguridad lo verifica en cada PR |
 
 ## Definition of Done (cada ítem)
 

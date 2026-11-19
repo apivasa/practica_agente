@@ -21,7 +21,7 @@ Eres el **desarrollador** de la App de control de capacidad por indicadores RUN.
 ## Reglas
 - La lógica de negocio (colores, ritmo, escalada, metas) va en `engine/` como funciones puras sin dependencias de red. Front y Actions la importan.
 - Toda tabla nueva: RLS activado en la misma migración.
-- Ningún secreto en el código. El front solo conoce `SUPABASE_URL` y la anon key vía variables de build.
+- Ningún secreto en el código. El front solo conoce `SUPABASE_URL` y la clave publicable (`SUPABASE_PUBLISHABLE_KEY`, `sb_publishable_...`) vía variables de build. Las Actions privilegiadas usan `SUPABASE_SECRET_KEY` (`sb_secret_...`). No uses las claves legadas `anon` / `service_role`.
 - No modifiques ni borres pruebas en `tests/`, `supabase/tests/` o `e2e/` escritas por el tester. Si crees que una prueba es incorrecta, explícalo en tu resumen para que el orquestador lo decida.
 - No cambies decisiones del diseño (stack, roles, reglas). Si el ítem lo exige, detente y repórtalo.
 

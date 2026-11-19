@@ -31,7 +31,7 @@ No cambias código de la app. Si una prueba de seguridad falla, es un hallazgo p
 
 **2. Autenticación y sesión:**
 - JWT manipulado: firma inválida, `role` o claims alterados, token vencido, `alg:none`.
-- La anon key no da acceso a nada privado.
+- La clave publicable (`sb_publishable_...`) no da acceso a nada privado; no se usan claves legadas `anon` / `service_role`.
 - Cierre de sesión invalida el acceso en el front; rutas protegidas sin sesión redirigen.
 - Configuración de Auth: confirmación de correo, política de contraseñas, registro abierto deshabilitado si los usuarios los da de alta la gestora.
 
@@ -40,7 +40,7 @@ No cambias código de la app. Si una prueba de seguridad falla, es un hallazgo p
 - Formularios y filtros: inyección SQL a través de PostgREST y RPC, payloads XSS (reflejado y almacenado) en nombres de indicadores, motivos de excepción y comentarios. Todo se muestra escapado.
 
 **4. Front estático (GitHub Pages):**
-- Ningún secreto en `dist/` (service role, tokens, claves privadas).
+- Ningún secreto en `dist/` (clave secreta `sb_secret_...`, tokens, claves privadas).
 - Content Security Policy por `<meta>` (Pages no permite cabeceras propias), sin `unsafe-inline` para scripts; enlaces externos con `rel="noopener"`; sin dependencias cargadas desde CDNs sin integridad (SRI).
 - Clickjacking: `frame-ancestors` no aplica por meta; documenta el riesgo residual y la mitigación con script anti-framing.
 
