@@ -71,7 +71,7 @@ Escala de riesgo: **Alto** = acceso a datos de otra unidad, escalada de rol, alt
 | `measurements` | Alta (entrada del color) | ídem `commitments` | custodio de su KPI (insert/update) |
 | `targets` | Media | gestora, comité, custodios; líder de su unidad | gestora |
 | `evaluations` | Alta (decide los candados) | gestora, comité; custodio de su KPI; líder de su unidad | solo backend (`service_role`) |
-| `exceptions` | Alta (levanta candados) | gestora, comité; líder de su unidad | comité (insert/update, `approved_by = auth.uid()`) |
+| `exceptions` | Alta (levanta candados) | gestora, comité; líder de su unidad | comité: inserta firmando con `auth.uid()`; solo quien aprobó edita o revoca (C-02, trigger `enforce_exception_rules`); `approved_by`, `created_at`, `revoked_by`, `unit_id` inmutables; tope 90 días; sin DELETE |
 | `alerts` | Baja | destinatario; gestora y comité | backend; el destinatario solo `read_at` |
 | `audit_log` | Alta (evidencia) | gestora y comité | solo triggers `security definer` y backend |
 | `auth.users` (semilla) | Crítica | Supabase Auth | gestora vía panel/Auth admin |
@@ -238,5 +238,9 @@ Ver "Superficie de CI/CD (S-01)" y T-CI-01..10 arriba. El job `pentest-api` (S-0
 | T-FE-06 (unidad ajena) | `api/idor-escalation.test.js` › lote mixto | Activa (S-04 añade el CSV) |
 | T-JOB-01, T-JOB-02 | `tests/security/workflows.test.js` › inputs solo por env, › SUPABASE_SECRET_KEY solo schedule/dispatch; `automation-c03.test.js` | Activa |
 | T-JOB-05, T-JOB-11 | `automation-c03.test.js` › auditoría de efectos; › db.js | Activa |
+| T-EXC-01 (E: comité toma o extiende la excepción de otro, H-S03-04/H-F03-05) | pgTAP `070`, `044`; `api/exceptions-c02.test.js` | Activa (C-02) |
+| T-EXC-02 (T: forjar `created_at`/`revoked_at`/`revoked_by` para evadir el tope o fingir la revocación) | `044`; `api/exceptions-c02.test.js` › servidor fija campos | Activa (C-02) |
+| T-EXC-03 (T/E: la evaluación programada aplica una excepción revocada y quita candados indebidamente, H-C02-01) | `tests/security/exceptions-c02.test.js` › automatización | **Falla: H-C02-01** |
+| T-EXC-04 (I/T: XSS almacenado en motivo y `change_ref`) | `tests/security/exceptions-c02.test.js` › XSS; `api/exceptions-c02.test.js` › XSS | Activa (C-02) |
 | T-CI-01..09 | `tests/security/workflows.test.js`; jobs gitleaks, semgrep, npm-audit, CodeQL | Activa |
 | T-CI-10 | `workflows.test.js` (caso deploy) | **Asignada a V-05** |

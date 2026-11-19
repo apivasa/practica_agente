@@ -1,5 +1,6 @@
 // C-04: decisión de alertas (funciones puras). Cada alerta lleva una `dedupe_key`
 // única por disparador y destinatario: insertar dos veces la misma alerta no la duplica.
+import { exceptionFromRow, exceptionStatus } from '../../engine/index.js';
 
 export const ALERT_KINDS = Object.freeze(['color_change', 'pace_behind', 'critical_intake', 'exception_expired']);
 
@@ -141,6 +142,8 @@ export function intakeAlerts({ unit, indicator, asOf, quarter, recalc, recipient
 export function exceptionAlerts({ exceptions, asOf, units, recipientsByUnit }) {
   return exceptions.flatMap((ex) => {
     if (ex.expires_on > asOf) return [];
+    // C-02: una revocada ya no rige; no se avisa su vencimiento.
+    if (exceptionStatus(exceptionFromRow(ex), asOf) === 'revoked') return [];
     const state = ex.expires_on === asOf ? 'expires_today' : 'expired';
     const unit = units.get(ex.unit_id) ?? { id: ex.unit_id, name: ex.unit_id };
     const message =

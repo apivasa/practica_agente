@@ -42,7 +42,20 @@ export function createFakeDb(data) {
         ),
       ),
     evaluations: async (months) => clone(t.evaluations.filter((e) => months.includes(e.month))),
-    exceptions: async ({ expiresFrom }) => clone(t.exceptions.filter((e) => e.expires_on >= expiresFrom)),
+    // Misma proyección que scripts/lib/db.js (C-02: change_ref y revoked_at).
+    exceptions: async ({ expiresFrom }) =>
+      clone(
+        t.exceptions
+          .filter((e) => e.expires_on >= expiresFrom)
+          .map((e) => ({
+            id: e.id,
+            unit_id: e.unit_id,
+            scope: e.scope,
+            change_ref: e.change_ref ?? null,
+            expires_on: e.expires_on,
+            revoked_at: e.revoked_at ?? null,
+          })),
+      ),
     async upsertEvaluations(rows) {
       return rows.map((r) => {
         const i = t.evaluations.findIndex(
@@ -178,8 +191,8 @@ export function seedScenario() {
       m(U.gamma, I.obs, '2027-01-31', { app_id: 'app-gamma-01', compliant: true }),
     ],
     exceptions: [
-      { id: 'ex-beta', unit_id: U.beta, scope: 'change_start', expires_on: '2027-02-10' },
-      { id: 'ex-gamma', unit_id: U.gamma, scope: 'all', expires_on: '2027-02-05' },
+      { id: 'ex-beta', unit_id: U.beta, scope: 'change_start', change_ref: 'CHG-BETA', expires_on: '2027-02-10', revoked_at: null },
+      { id: 'ex-gamma', unit_id: U.gamma, scope: 'all', change_ref: null, expires_on: '2027-02-05', revoked_at: null },
     ],
   };
 }
