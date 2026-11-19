@@ -3,7 +3,7 @@
 import { describe, test, before } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  skipReason, loginAll, as, adminInsert, adminGet, USERS, UNIT, KPI, DENIED,
+  skipReason, loginAll, as, adminInsert, adminGet, USERS, UNIT, KPI, DENIED, dateInDays,
 } from './_lib.js';
 
 const skip = skipReason();
@@ -26,7 +26,7 @@ describe('pentest-api: IDOR y escalada', { skip }, () => {
     C2 = as('custodio2', tokens);
     CM = as('comite', tokens);
     G = as('gestora', tokens);
-    const exp = new Date(Date.now() + 30 * 86_400_000).toISOString().slice(0, 10);
+    const exp = dateInDays(30);
     const [excA, excB] = await adminInsert('exceptions', [
       { unit_id: UNIT.alfa, scope: 'all', reason: 'idor-fixture A', expires_on: exp, approved_by: USERS.comite.id },
       { unit_id: UNIT.beta, scope: 'all', reason: 'idor-fixture B', expires_on: exp, approved_by: USERS.comite.id },
@@ -222,11 +222,11 @@ describe('pentest-api: IDOR y escalada', { skip }, () => {
     });
 
     test('líder y gestora: crear o extender una excepción', async () => {
-      const body = { unit_id: UNIT.alfa, scope: 'all', reason: 'auto', expires_on: '2099-12-31', approved_by: USERS.comite.id };
+      const body = { unit_id: UNIT.alfa, scope: 'all', reason: 'auto', expires_on: dateInDays(30), approved_by: USERS.comite.id };
       for (const call of [L1, G]) {
         const ins = await call('exceptions', { method: 'POST', body, headers: REPR });
         assert.ok(DENIED.includes(ins.status), fmt(ins));
-        const upd = await call(`exceptions?id=eq.${fx.excA.id}`, { method: 'PATCH', body: { expires_on: '2099-12-31' }, headers: REPR });
+        const upd = await call(`exceptions?id=eq.${fx.excA.id}`, { method: 'PATCH', body: { expires_on: dateInDays(60) }, headers: REPR });
         assert.ok(deniedOrEmpty(upd), fmt(upd));
       }
       const [now] = await adminGet(`exceptions?id=eq.${fx.excA.id}`);
@@ -234,7 +234,7 @@ describe('pentest-api: IDOR y escalada', { skip }, () => {
     });
 
     test('comité: no firma a nombre de otro, no mueve de unidad, no crea vencidas', async () => {
-      const ins = await CM('exceptions', { method: 'POST', body: { unit_id: UNIT.alfa, scope: 'all', reason: 'x', expires_on: '2099-01-01', approved_by: USERS.gestora.id }, headers: REPR });
+      const ins = await CM('exceptions', { method: 'POST', body: { unit_id: UNIT.alfa, scope: 'all', reason: 'x', expires_on: dateInDays(30), approved_by: USERS.gestora.id }, headers: REPR });
       assert.ok(DENIED.includes(ins.status), fmt(ins));
       const past = await CM('exceptions', { method: 'POST', body: { unit_id: UNIT.alfa, scope: 'all', reason: 'x', expires_on: '2020-01-01', approved_by: USERS.comite.id }, headers: REPR });
       assert.ok(DENIED.includes(past.status), fmt(past));
@@ -325,7 +325,7 @@ describe('pentest-api: IDOR y escalada', { skip }, () => {
 
     test('Prefer: tx=commit / missing=default no amplían permisos', async () => {
       const r = await L1('exceptions', {
-        method: 'POST', body: { unit_id: UNIT.alfa, reason: 'x', expires_on: '2099-01-01' },
+        method: 'POST', body: { unit_id: UNIT.alfa, scope: 'all', reason: 'x', expires_on: dateInDays(30) },
         headers: { Prefer: 'return=representation,tx=commit,missing=default' },
       });
       assert.ok(DENIED.includes(r.status) || r.status === 400, fmt(r));

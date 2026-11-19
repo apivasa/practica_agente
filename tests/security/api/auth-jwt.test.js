@@ -5,7 +5,7 @@ import { describe, test, before } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   skipReason, assertKeyFormats, env, loginAll, login, request, decode, encodeUnsigned, signHS256,
-  USERS, ROLES,
+  USERS, ROLES, dateInDays,
 } from './_lib.js';
 
 const skip = skipReason();
@@ -97,7 +97,7 @@ describe('pentest-api: autenticación y JWT', { skip }, () => {
         assert.equal(r.status, 200, `${t}: ${fmt(r)}`);
         assert.deepEqual(r.json, [], `${t}: claims inventados ven datos`);
       }
-      const w = await rest('exceptions', token, { method: 'POST', body: { unit_id: '22222222-2222-4222-8222-000000000001', scope: 'all', reason: 'x', expires_on: '2099-01-01', approved_by: ghost } });
+      const w = await rest('exceptions', token, { method: 'POST', body: { unit_id: '22222222-2222-4222-8222-000000000001', scope: 'all', reason: 'x', expires_on: dateInDays(30), approved_by: ghost } });
       assert.ok([401, 403].includes(w.status), fmt(w));
     });
 
@@ -107,7 +107,7 @@ describe('pentest-api: autenticación y JWT', { skip }, () => {
       const token = signHS256({ ...payload, app_metadata: { ...payload.app_metadata, role: 'committee' }, user_role: 'committee', exp: now() + 300 }, env.jwtSecret);
       const r = await rest('exceptions', token, {
         method: 'POST',
-        body: { unit_id: '22222222-2222-4222-8222-000000000001', reason: 'x', expires_on: '2099-01-01', approved_by: USERS.lider1.id },
+        body: { unit_id: '22222222-2222-4222-8222-000000000001', scope: 'all', reason: 'x', expires_on: dateInDays(30), approved_by: USERS.lider1.id },
       });
       assert.equal(r.status, 403, fmt(r));
     });

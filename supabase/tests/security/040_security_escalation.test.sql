@@ -40,8 +40,8 @@ insert into public.evaluations (id, unit_id, indicator_id, month, color, sample_
   ('5ec60000-0000-4000-8000-000000000001', '5ec10000-0000-4000-8000-000000000001', null, '2027-01', 'red', 0),
   ('5ec60000-0000-4000-8000-000000000002', '5ec10000-0000-4000-8000-000000000002', null, '2027-01', 'red', 0);
 insert into public.exceptions (id, unit_id, scope, reason, expires_on, approved_by) values
-  ('5ec70000-0000-4000-8000-000000000001', '5ec10000-0000-4000-8000-000000000001', 'all', 'SEC urgente A', '2027-02-28', '5ec00000-0000-4000-8000-000000000004'),
-  ('5ec70000-0000-4000-8000-000000000002', '5ec10000-0000-4000-8000-000000000002', 'all', 'SEC urgente B', '2027-02-28', '5ec00000-0000-4000-8000-000000000004');
+  ('5ec70000-0000-4000-8000-000000000001', '5ec10000-0000-4000-8000-000000000001', 'all', 'SEC urgente A', current_date + 30, '5ec00000-0000-4000-8000-000000000004'),
+  ('5ec70000-0000-4000-8000-000000000002', '5ec10000-0000-4000-8000-000000000002', 'all', 'SEC urgente B', current_date + 30, '5ec00000-0000-4000-8000-000000000004');
 insert into public.alerts (id, unit_id, recipient_user_id, kind, payload) values
   ('5ec80000-0000-4000-8000-000000000001', '5ec10000-0000-4000-8000-000000000001', '5ec00000-0000-4000-8000-000000000005', 'color_change', '{}'),
   ('5ec80000-0000-4000-8000-000000000002', '5ec10000-0000-4000-8000-000000000002', '5ec00000-0000-4000-8000-000000000006', 'color_change', '{}');
@@ -68,7 +68,7 @@ select throws_ok(
 set local request.jwt.claims = '{"sub":"5ec00000-0000-4000-8000-000000000007","role":"authenticated","app_metadata":{"role":"kpi_manager"},"user_role":"committee"}';
 select is((select count(*)::int from public.units where id::text like '5ec1%'), 0, 'claims app_metadata.role inventados: no ve unidades');
 select throws_ok(
-  $$ insert into public.exceptions (unit_id, scope, reason, expires_on) values ('5ec10000-0000-4000-8000-000000000001', 'all', 'x', '2027-12-31') $$,
+  $$ insert into public.exceptions (unit_id, scope, reason, expires_on) values ('5ec10000-0000-4000-8000-000000000001', 'all', 'x', current_date + 30) $$,
   '42501', null, 'claims user_role=committee inventados: no aprueba excepciones');
 
 -- JWT sin sub (p. ej. clave publicable sin sesión pero rol authenticated)
@@ -100,10 +100,10 @@ with u as (update public.user_roles set role = 'committee', unit_id = null where
 select is(count(*)::int, 0, 'líder: no se cambia el rol a comité') from u;
 with u as (update public.units set leader_user_id = auth.uid() where id = '5ec10000-0000-4000-8000-000000000002' returning 1)
 select is(count(*)::int, 0, 'líder: no se apropia de otra unidad vía units.leader_user_id') from u;
-with u as (update public.exceptions set expires_on = '2099-12-31' where id = '5ec70000-0000-4000-8000-000000000001' returning 1)
+with u as (update public.exceptions set expires_on = current_date + 60 where id = '5ec70000-0000-4000-8000-000000000001' returning 1)
 select is(count(*)::int, 0, 'líder: no extiende la excepción de su unidad') from u;
 select throws_ok(
-  $$ insert into public.exceptions (unit_id, scope, reason, expires_on, approved_by) values ('5ec10000-0000-4000-8000-000000000001', 'all', 'auto', '2099-12-31', '5ec00000-0000-4000-8000-000000000004') $$,
+  $$ insert into public.exceptions (unit_id, scope, reason, expires_on, approved_by) values ('5ec10000-0000-4000-8000-000000000001', 'all', 'auto', current_date + 30, '5ec00000-0000-4000-8000-000000000004') $$,
   '42501', null, 'líder: no crea excepción suplantando al comité');
 select throws_ok(
   $$ update public.evaluations set color = 'green' where unit_id = '5ec10000-0000-4000-8000-000000000001' $$,
@@ -142,7 +142,7 @@ select throws_ok(
   $$ update public.exceptions set approved_by = '5ec00000-0000-4000-8000-000000000001' where id = '5ec70000-0000-4000-8000-000000000001' $$,
   '42501', null, 'comité: no atribuye la aprobación a otro usuario');
 select throws_ok(
-  $$ insert into public.exceptions (unit_id, scope, reason, expires_on, approved_by) values ('5ec10000-0000-4000-8000-000000000002', 'all', 'x', '2027-03-31', '5ec00000-0000-4000-8000-000000000004') $$,
+  $$ insert into public.exceptions (unit_id, scope, reason, expires_on, approved_by) values ('5ec10000-0000-4000-8000-000000000002', 'all', 'x', current_date + 30, '5ec00000-0000-4000-8000-000000000004') $$,
   '42501', null, 'comité: no aprueba a nombre de otro miembro');
 select throws_ok(
   $$ update public.exceptions set reason = 'editado' where id = '5ec70000-0000-4000-8000-000000000001' $$,
@@ -153,9 +153,9 @@ select throws_ok(
 -- ---------------------------------------------------------------------------
 set local request.jwt.claims = '{"sub":"5ec00000-0000-4000-8000-000000000001","role":"authenticated"}';
 select throws_ok(
-  $$ insert into public.exceptions (unit_id, scope, reason, expires_on) values ('5ec10000-0000-4000-8000-000000000001', 'all', 'x', '2027-03-31') $$,
+  $$ insert into public.exceptions (unit_id, scope, reason, expires_on) values ('5ec10000-0000-4000-8000-000000000001', 'all', 'x', current_date + 30) $$,
   '42501', null, 'gestora: no aprueba excepciones');
-with u as (update public.exceptions set expires_on = '2099-12-31' where id = '5ec70000-0000-4000-8000-000000000002' returning 1)
+with u as (update public.exceptions set expires_on = current_date + 60 where id = '5ec70000-0000-4000-8000-000000000002' returning 1)
 select is(count(*)::int, 0, 'gestora: no extiende excepciones') from u;
 select throws_ok(
   $$ insert into public.alerts (recipient_user_id, kind) values ('5ec00000-0000-4000-8000-000000000005', 'fake') $$,
