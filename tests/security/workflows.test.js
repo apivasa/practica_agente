@@ -106,6 +106,17 @@ test('lockfile.yml: solo ramas de trabajo y escritura a nivel de job', () => {
   assert.match(wf.text, /if:\s*github\.ref_name != 'main'/);
 });
 
+test('lockfile.yml: relanza CI y Seguridad sobre el commit del bot', () => {
+  // Los commits con GITHUB_TOKEN no disparan push: sin relanzar, el commit del
+  // lockfile quedaría sin npm audit ni pruebas de seguridad.
+  const wf = workflows.find((w) => w.name === 'lockfile.yml').text;
+  for (const name of ['ci.yml', 'seguridad.yml']) {
+    assert.match(wf, new RegExp(`gh workflow run ${name.replace('.', '\\.')} --ref "\\$\\{GITHUB_REF_NAME\\}"`), `no relanza ${name}`);
+  }
+  const target = workflows.find((w) => w.name === 'seguridad.yml').text;
+  assert.match(target, /^\s{2}workflow_dispatch:/m, 'seguridad.yml debe aceptar workflow_dispatch');
+});
+
 test('seguridad.yml: security-events: write solo en el job de CodeQL', () => {
   const wf = workflows.find((w) => w.name === 'seguridad.yml');
   const occurrences = wf.text.match(/security-events:\s*write/g) ?? [];
