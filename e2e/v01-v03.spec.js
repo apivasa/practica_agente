@@ -112,7 +112,10 @@ test.describe('V-02 · vista del comité', () => {
     await expect(page.getByRole('heading', { level: 2 })).toHaveText('Comité de delivery');
     const matrix = page.getByRole('table', { name: 'Matriz unidad por indicador' });
     await expect(matrix.locator('caption')).toHaveText('Color por unidad e indicador · 2027-02');
-    await expect(matrix.locator('tbody tr')).toHaveCount(3);
+    // Otras pruebas e2e pueden crear unidades: se exigen las 3 de la semilla.
+    for (const name of ['Unidad Alfa', 'Unidad Beta', 'Unidad Gamma']) {
+      await expect(matrix.locator(`tr[data-unit="${name}"]`)).toHaveCount(1);
+    }
     for (const code of ['VULN', 'AVAIL', 'MTTR', 'OBS']) {
       await expect(matrix.getByRole('columnheader', { name: code, exact: true })).toBeVisible();
     }
