@@ -33,8 +33,8 @@ describe('pentest-api: matriz rol × tabla × operación', { skip }, () => {
       { unit_id: UNIT.beta, reason: 'pentest-fixture B', expires_on: exp, approved_by: USERS.comite.id },
     ]);
     await adminInsert('alerts', [
-      { unit_id: UNIT.alfa, recipient_user_id: USERS.lider1.id, kind: 'pentest-fixture' },
-      { unit_id: UNIT.beta, recipient_user_id: USERS.lider2.id, kind: 'pentest-fixture' },
+      { unit_id: UNIT.alfa, recipient_user_id: USERS.lider1.id, kind: 'color_change', dedupe_key: 'pentest-fixture:alfa' },
+      { unit_id: UNIT.beta, recipient_user_id: USERS.lider2.id, kind: 'color_change', dedupe_key: 'pentest-fixture:beta' },
     ]);
   });
 

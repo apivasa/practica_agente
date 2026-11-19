@@ -171,7 +171,7 @@ Superficie: 10 tablas de `public` (CRUD según grants y políticas), filtros (`e
 
 ## 4. GitHub Actions programadas con la clave secreta (C-03, C-04, V-04)
 
-Superficie: `evaluacion-mensual.yml`, `ritmo-diario.yml`, alertas (C-03/C-04, aún no construidos), `salud.yml` (V-04). Usan `SUPABASE_SECRET_KEY` (BYPASSRLS) para escribir `evaluations`, `alerts` y `audit_log`. Leen mediciones cargadas por custodios (datos no confiables) y las pasan a `engine/`.
+Superficie: `evaluacion-mensual.yml`, `ritmo-diario.yml`, `scripts/evaluate.js` + `scripts/lib/` (C-03/C-04, construidos; `workflow_dispatch` con input `as_of`, guarda `vars.EVALUATION_ENABLED`), `salud.yml` (V-04). Usan `SUPABASE_SECRET_KEY` (BYPASSRLS) para escribir `evaluations`, `alerts` y `audit_log`. Leen mediciones cargadas por custodios (datos no confiables) y las pasan a `engine/`.
 
 | ID | STRIDE | Amenaza | Riesgo | Control | Prueba |
 |---|---|---|---|---|---|
@@ -183,6 +183,9 @@ Superficie: `evaluacion-mensual.yml`, `ritmo-diario.yml`, alertas (C-03/C-04, a�
 | T-JOB-06 | Tampering | Excepción extendida o creada fuera del comité que suspende el candado | Alto | Solo comité, `approved_by = auth.uid()`, `expires_on >= current_date`, `unit_id` inmutable | `api/idor-escalation.test.js` › líder y gestora: crear o extender; › comité: no firma a nombre de otro |
 | T-JOB-07 | DoS | El job falla en silencio (motor lanza por un dato) y no se aplica el candado | Medio | Error por indicador registrado en auditoría; `salud.yml` alerta si un programado no corrió (V-04) | C-03 / V-04 |
 | T-JOB-08 | Elevation | Clave secreta con más alcance del necesario o compartida con CI | Medio | Solo en el environment de los jobs programados y de despliegue; `ci.yml` y `seguridad.yml` no usan secretos | `workflows.test.js` › pentest-api sin `secrets.` |
+| T-JOB-09 | Tampering | `workflow_dispatch` con `as_of` futuro o pasado: candado anticipado, re-cierre de un mes viejo, vencimiento de excepción anticipado que consume la `dedupe_key` y silencia la alerta real | Medio | Formato validado (`parseArgs`), `as_of` > hoy rechazado, re-cierre solo con `--reprocess` auditado; inputs `AS_OF`/`REPROCESS` solo por `env:` (H-C03-01 corregido) | `automation-c03.test.js` › parseArgs |
+| T-JOB-10 | Tampering | Custodio relaja `green_override` o `package_by_category` del compromiso (incluso de un periodo cerrado) para quitar un candado o callar el ritmo | Bajo | Auditado por `audit_commitments`; rol con potestad de negociar (diseño). Falta congelar periodos cerrados (H-C03-03) | `api/idor-escalation.test.js` (RLS de commitments) |
+| T-JOB-11 | Tampering / Repudiation | Alguien pre-inserta alertas con la `dedupe_key` futura o falsifica `pace_snapshot` en `audit_log` para silenciar alertas | Alto | `authenticated` sin INSERT en `alerts` ni `audit_log`; `read_at` única columna editable; snapshots filtrados por `actor = 'system:evaluate'` | `041`; `automation-c03.test.js` › db.js snapshots, alertas |
 
 ## 5. CI/CD
 
@@ -212,6 +215,7 @@ Ver "Superficie de CI/CD (S-01)" y T-CI-01..10 arriba. El job `pentest-api` (S-0
 | T-FE-01 | `tests/security/static-secrets.test.js` | Activa |
 | T-FE-02, T-FE-07 | `e2e/security/xss.spec.js` | **Asignada a S-04** (la UI con datos no existe aún: F-05/M-02..M-04) |
 | T-FE-06 (unidad ajena) | `api/idor-escalation.test.js` › lote mixto | Activa (S-04 añade el CSV) |
-| T-JOB-01, T-JOB-02 | `tests/security/workflows.test.js` | Activa (C-03 añade inputs) |
+| T-JOB-01, T-JOB-02 | `tests/security/workflows.test.js` › inputs solo por env, › SUPABASE_SECRET_KEY solo schedule/dispatch; `automation-c03.test.js` | Activa |
+| T-JOB-05, T-JOB-11 | `automation-c03.test.js` › auditoría de efectos; › db.js | Activa |
 | T-CI-01..09 | `tests/security/workflows.test.js`; jobs gitleaks, semgrep, npm-audit, CodeQL | Activa |
 | T-CI-10 | `workflows.test.js` (caso deploy) | **Asignada a V-05** |

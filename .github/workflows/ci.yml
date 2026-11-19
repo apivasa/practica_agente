@@ -56,6 +56,30 @@ jobs:
         if: always()
         run: supabase stop --no-backup
 
+  integration:
+    name: integración (evaluate.js contra Supabase local)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+      - name: Instalar dependencias de producción
+        run: |
+          if [ -f package-lock.json ]; then npm ci --ignore-scripts --omit=dev; else npm install --ignore-scripts --omit=dev; fi
+      - uses: supabase/setup-cli@689adcfb80d947100a1eab127289b97d1fb07b13 # v3.2.0
+        with:
+          version: 3.2.0
+      - name: Levantar Supabase local (BD + API) con la semilla
+        run: supabase start -x studio,imgproxy,mailpit,edge-runtime,logflare,vector,realtime,storage-api,supavisor,postgres-meta
+      - name: Evaluación mensual y diaria, dos veces cada una
+        run: bash scripts/ci/integration.sh
+      - name: Detener Supabase
+        if: always()
+        run: supabase stop --no-backup
+
   e2e:
     name: e2e (Playwright)
     needs: build

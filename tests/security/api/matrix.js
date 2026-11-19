@@ -151,10 +151,11 @@ export const MATRIX = {
             mustInclude: a === 'lider1' || a === 'lider2' ? has('recipient_user_id', [USERS[a].id]) : null,
           },
     insert: [],
-    insertBody: (a) => ({ recipient_user_id: uid(a), unit_id: ownUnit(a), kind: 'pentest' }),
+    // C-04: kind válido (alerts_kind_allowed) para que la negación sea por privilegios, no por CHECK.
+    insertBody: (a) => ({ recipient_user_id: uid(a), unit_id: ownUnit(a), kind: 'color_change', dedupe_key: `pentest:forged:${a}` }),
     update: ['lider1'],
     updateTarget: () => ({
-      filter: `recipient_user_id=eq.${USERS.lider1.id}&kind=eq.pentest-fixture`,
+      filter: `recipient_user_id=eq.${USERS.lider1.id}&dedupe_key=eq.pentest-fixture:alfa`,
       change: { read_at: new Date().toISOString() }, restore: ['read_at'],
     }),
     remove: [],
