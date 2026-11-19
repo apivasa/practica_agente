@@ -4,7 +4,7 @@
 import './security/anti-framing.js';
 import './styles.css';
 import { createRouter } from './lib/router.js';
-import { distinctRoles, ROLE_LABELS, CHOOSER_PATH, LOGIN_PATH } from './lib/route-logic.js';
+import { distinctRoles, findRoute, ROLE_LABELS, CHOOSER_PATH, LOGIN_PATH } from './lib/route-logic.js';
 import { getSupabase } from './lib/supabase.js';
 import { getRoles, getSession, onSessionChange, signIn, signOut, MSG_NOT_CONFIGURED } from './lib/session.js';
 import { el } from './views/dom.js';
@@ -12,6 +12,10 @@ import { renderLogin } from './views/login.js';
 import { renderRoleHome } from './views/role-home.js';
 import { renderChooser } from './views/chooser.js';
 import { renderNoRole } from './views/no-role.js';
+import { renderRoleShell } from './views/role-shell.js';
+import { renderIndicators } from './views/kpi_manager/indicators.js';
+import { renderCommitments } from './views/custodian/commitments.js';
+import { renderMeasurements } from './views/custodian/measurements.js';
 
 export const APP_TITLE = 'App de control de capacidad RUN';
 
@@ -50,21 +54,33 @@ let router;
 let header;
 let content;
 
-function render(view) {
+const home = (ctx) => renderRoleHome({ role: ctx.role, rows: ctx.rows });
+
+// Vista registrada (ROUTES[].view) -> función que la pinta (ADR 0009).
+const VIEWS = Object.freeze({
+  login: () => renderLogin({ onSubmit: handleLogin, notice: getSupabase() ? null : MSG_NOT_CONFIGURED }),
+  chooser: (ctx) => renderChooser({ roles: ctx.roles }),
+  'no-role': () => renderNoRole({ message: state.rolesError }),
+  kpi_manager: home,
+  custodian: home,
+  committee: home,
+  unit_leader: home,
+  'kpi-indicators': (ctx) => renderIndicators(ctx),
+  'custodian-commitments': (ctx) => renderCommitments(ctx),
+  'custodian-measurements': (ctx) => renderMeasurements(ctx),
+});
+
+function render(view, path) {
   const { roles } = viewState();
   renderHeader(header, roles);
-  let node;
-  if (view === 'login') {
-    node = renderLogin({ onSubmit: handleLogin, notice: getSupabase() ? null : MSG_NOT_CONFIGURED });
-  } else if (view === 'chooser') {
-    node = renderChooser({ roles });
-  } else if (view === 'no-role') {
-    node = renderNoRole({ message: state.rolesError });
-  } else {
-    node = renderRoleHome({ role: view, rows: state.rows });
-  }
+  const route = findRoute(path);
+  const ctx = { role: route?.role ?? null, path, rows: state.rows, roles, session: state.session };
+  const paint = Object.prototype.hasOwnProperty.call(VIEWS, view) ? VIEWS[view] : VIEWS['no-role'];
+  let node = paint(ctx);
+  if (route) node = renderRoleShell({ role: route.role, path, content: node });
   content.replaceChildren(node);
-  document.title = view in ROLE_LABELS ? `${ROLE_LABELS[view]} · ${APP_TITLE}` : APP_TITLE;
+  const title = route && route.view !== route.role ? `${route.label} · ${ROLE_LABELS[route.role]}` : ROLE_LABELS[view];
+  document.title = title ? `${title} · ${APP_TITLE}` : APP_TITLE;
 }
 
 async function handleLogin(email, password) {

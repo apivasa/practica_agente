@@ -156,3 +156,111 @@ input:focus-visible {
 .placeholder {
   color: var(--muted);
 }
+
+/* M-02..M-04: pantallas por rol */
+.app-main:has(.role-shell) {
+  max-width: 64rem;
+}
+
+.role-nav ul {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  list-style: none;
+  padding: 0;
+  margin: 0 0 1rem;
+}
+
+.role-nav a {
+  display: inline-block;
+  padding: 0.25rem 0.75rem;
+  border-radius: 0.375rem;
+  color: var(--primary);
+}
+
+.role-nav a[aria-current='page'] {
+  background: var(--primary);
+  color: #fff;
+}
+
+select,
+textarea {
+  font: inherit;
+  padding: 0.5rem 0.625rem;
+  border: 1px solid var(--muted);
+  border-radius: 0.375rem;
+}
+
+select:focus-visible,
+textarea:focus-visible {
+  outline: 3px solid var(--focus);
+  outline-offset: 2px;
+}
+
+.hint {
+  color: var(--muted);
+}
+
+.field-inline {
+  flex-direction: row;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+form .btn-primary,
+.csv-import .btn-primary,
+.card > .btn-primary {
+  width: auto;
+}
+
+.form-actions,
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.cat-editor {
+  border: 1px solid var(--border);
+  border-radius: 0.375rem;
+  margin: 0 0 1rem;
+}
+
+.cat-row {
+  display: grid;
+  grid-template-columns: 2fr 1fr 1fr auto;
+  gap: 0.5rem;
+  margin-bottom: 0.5rem;
+}
+
+.data-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 1rem 0;
+}
+
+.data-table caption {
+  text-align: left;
+  font-weight: 600;
+  padding-bottom: 0.5rem;
+}
+
+.data-table th,
+.data-table td {
+  border-bottom: 1px solid var(--border);
+  padding: 0.375rem 0.5rem;
+  text-align: left;
+  vertical-align: top;
+}
+
+.warn,
+.csv-errors {
+  color: var(--danger);
+}
+
+.form-box,
+.csv-import,
+.measurement-form,
+.commitment-form {
+  margin: 1.5rem 0;
+}
