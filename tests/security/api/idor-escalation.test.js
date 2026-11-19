@@ -58,7 +58,8 @@ describe('pentest-api: IDOR y escalada', { skip }, () => {
           `${t}?or=(${c}.eq.${UNIT.beta},${c}.eq.${UNIT.gamma})`,
           `${t}?or=(${c}.eq.${UNIT.beta},${c}.is.null,${c}.neq.${UNIT.alfa})`,
           `${t}?${c}=neq.${UNIT.alfa}`,
-          `${t}?not.${c}.eq.${UNIT.alfa}`,
+          `${t}?${c}=not.eq.${UNIT.alfa}`,
+          `${t}?not.and=(${c}.eq.${UNIT.alfa})`,
           `${t}?select=${c}&${c}=not.is.null&${c}=neq.${UNIT.alfa}`,
           `${t}?and=(${c}.neq.${UNIT.alfa})&or=(id.not.is.null)`,
         ];

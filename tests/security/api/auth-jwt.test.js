@@ -114,10 +114,14 @@ describe('pentest-api: autenticación y JWT', { skip }, () => {
   });
 
   describe('clave publicable y apikey', () => {
-    test('sin apikey o con apikey inventada → 401', async () => {
-      for (const apikey of ['', 'sb_publishable_invented000000000000', 'sb_secret_invented00000000000000000']) {
-        const r = await request('/rest/v1/units?select=id', { apikey, token: tokens.gestora });
-        assert.equal(r.status, 401, `apikey=${apikey.slice(0, 16)}: ${fmt(r)}`);
+    test('sin apikey ni sesión, o con apikey inventada → 401', async () => {
+      const none = await request('/rest/v1/units?select=id', { apikey: '' });
+      assert.equal(none.status, 401, `sin apikey: ${fmt(none)}`);
+      for (const apikey of ['sb_publishable_invented000000000000', 'sb_secret_invented00000000000000000']) {
+        for (const token of [undefined, tokens.gestora]) {
+          const r = await request('/rest/v1/units?select=id', { apikey, token });
+          assert.equal(r.status, 401, `apikey=${apikey.slice(0, 16)} token=${Boolean(token)}: ${fmt(r)}`);
+        }
       }
     });
 
