@@ -47,3 +47,9 @@ Si falta el paquete o compromiso (`target` ausente o `null`), el motor responde 
 
 ### H-3 (baja, informativa): meta acumulada sin mediciones → "sin evaluar", no rojo
 Si una unidad tiene paquete (`target > 0`) y no hay ninguna medición en la ventana, el resultado es `not_evaluated` en vez de 0 % (rojo). Es coherente con "ventana vacía → sin evaluar" y con el tablero de completitud de la gestora (el dato falta). Se deja anotado para que M-05 y C-01 no traten "sin evaluar" como verde.
+
+## Re-verificación del orquestador (intento 2)
+Fecha: 2026-11-19. El desarrollador corrigió H-1 (tolerancia en empates, coverage como ok*100/n), H-2 (meta ausente → not_evaluated), H-M01-01 (sampleSize inválido → not_evaluated) y documentó el comando de pruebas.
+Resultado: `node --test --experimental-test-coverage --test-coverage-exclude='tests/**' 'tests/**/*.test.js'` → 115/115 pruebas, incluida `qa-m01.test.js` sin modificar; cobertura engine/ 100 % líneas, ramas y funciones.
+Desviaciones aceptadas: valores no finitos se neutralizan en `measure` (devuelve null + REASON_OUT_OF_RANGE) en vez de en `evaluateColor`, y la categoría `__proto__` se descarta en `normalizeIndicator` con objetos sin prototipo, porque así lo exigen las pruebas de seguridad.
+**Veredicto final: VERDE.**
