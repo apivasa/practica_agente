@@ -8,71 +8,152 @@ La construye un orquestador con cinco subagentes en modo autónomo (ver [`CLAUDE
 
 ## Estado actual (2026-11-19)
 
-Lo que existe hoy en `main`:
+Lo que existe hoy en `main` y pasó CI:
 
-- **Estructura del proyecto** (F-01): front Vite estático con una pantalla mínima de inicio, carpeta `supabase/` (sin migraciones todavía), `engine/`, `scripts/`, pruebas.
-- **CI** (F-02): `ci.yml` corre lint, pruebas unitarias, build, pruebas de base de datos (pgTAP sobre Supabase local) y e2e (Playwright). `lockfile.yml` regenera `package-lock.json` cuando cambia `package.json`.
-- **Motor de color** (M-01): funciones puras en `engine/` que validan un indicador genérico, calculan su valor en la ventana y devuelven su color.
-- **Motor de escalada** (C-01): funciones puras en `engine/` que calculan el candado de una unidad (normal, restringido, congelado, excepción) y el arrastre del paquete de vulnerabilidades.
+- **Base de datos** (F-03, F-04, F-06): 9 tablas del diseño más `audit_log`, con RLS por rol, auditoría por trigger y datos semilla ficticios. Ver [`docs/modelo-datos.md`](docs/modelo-datos.md).
+- **Login y rutas por rol** (F-05): correo y contraseña con Supabase Auth. Sin registro abierto. Cada rol llega a su pantalla.
+- **Pantallas por rol:**
+  - Gestora: alta y edición de indicadores (M-02) y tablero de completitud por custodio (V-03).
+  - Custodio: compromisos con umbral negociado (M-03) y captura manual o CSV de mediciones (M-04).
+  - Comité: matriz unidad × indicador con alertas (V-02) y aprobación y revocación de excepciones (C-02).
+  - Líder: sus indicadores, color, meta, ritmo, restricciones y alertas (V-01).
+- **Motor** (`engine/`): color (M-01), escalada y excepciones (C-01, C-02), vulnerabilidades: paquete, ritmo y metas (M-05).
+- **Evaluación programada y alertas** (C-03, C-04): workflows mensual y diario. Hoy no hacen nada en producción: esperan el despliegue (ver "Workflows").
+- **Seguridad** (S-01 a S-04): pipeline de seguridad, modelo de amenazas, pentest de API y RLS, CSP, anti-framing y DAST con ZAP.
 
-Todavía **no** existen: tablas en Supabase, login, pantallas por rol, captura de mediciones, cálculo programado, alertas ni despliegue a GitHub Pages. Ver el orden de trabajo en [`docs/plan-maestro.md`](docs/plan-maestro.md).
+Todavía **no** existen: publicación en GitHub Pages y migraciones en Supabase real (V-05), vigilancia de salud (`salud.yml`, V-04), correo u otro canal externo de alertas (C-05, espera Q-04), fuentes automáticas de mediciones (V-07, espera Q-02) y pantalla para cargar metas mensuales (`targets`). Ver [`docs/plan-maestro.md`](docs/plan-maestro.md).
+
+## Manuales por rol
+
+- [Gestora de KPIs](docs/manual-gestora.md)
+- [Custodio de indicador](docs/manual-custodio.md)
+- [Comité de delivery](docs/manual-comite.md)
+- [Líder de unidad](docs/manual-lider.md)
+- [Cómo configurar indicadores, compromisos y mediciones](docs/indicadores.md)
 
 ## Requisitos
 
-- **Node 22** o superior. Las pruebas unitarias usan opciones de `node --test` que no existen en Node 20 (ver [ADR 0002](docs/adr/0002-pruebas-node-test.md)). CI usa Node 22.
-- Supabase CLI y Docker, solo para las pruebas de base de datos.
+- **Node 22** o superior. Las pruebas unitarias usan opciones de `node --test` que no existen en Node 20 ([ADR 0002](docs/adr/0002-pruebas-node-test.md)).
+- **Supabase CLI** (CI fija la 3.2.0) y **Docker**, para la base local, las pruebas de BD, e2e e integración.
+
+## Correr en local
+
+```bash
+npm ci                                  # instala dependencias (usa package-lock.json)
+supabase start                          # Postgres, Auth y API locales; aplica migraciones y supabase/seed.sql
+supabase status -o env                  # muestra API_URL y PUBLISHABLE_KEY
+```
+
+Crea `.env` a partir de `.env.example`:
+
+```
+VITE_SUPABASE_URL=http://127.0.0.1:54321        # API_URL de supabase status
+VITE_SUPABASE_PUBLISHABLE_KEY=sb_publishable_... # PUBLISHABLE_KEY de supabase status
+```
+
+Nunca pongas la clave secreta (`sb_secret_...`) en una variable `VITE_*`: termina en el navegador.
+
+```bash
+npm run dev     # http://localhost:5173/practica_agente/
+```
+
+Usuarios de la semilla (solo local). Contraseña de todos: `Local-Only-Pass-2026`.
+
+| Correo | Rol |
+|---|---|
+| `gestora@example.test` | Gestora de KPIs |
+| `custodio1@example.test` | Custodio de VULN |
+| `custodio2@example.test` | Custodio de AVAIL, MTTR y OBS |
+| `custodio3@example.test` | Custodio de CHG (inactivo) |
+| `comite@example.test` | Comité de delivery |
+| `lider1@example.test` / `lider2` / `lider3` | Líder de Unidad Alfa / Beta / Gamma |
+| `multirol@example.test` | Gestora y custodio de LAT (inactivo) |
+| `sinrol@example.test` | Sin rol (ve "Sin acceso") |
+
+La semilla trae mediciones de enero y febrero de 2027, pero no evaluaciones. Para ver colores y alertas en los tableros, corre la misma evaluación que usa CI:
+
+```bash
+bash scripts/ci/seed-evaluations.sh     # cierra 2027-01 y 2027-02 y corre el ritmo del 2027-02-10
+```
+
+El script solo acepta Supabase local (`127.0.0.1` o `localhost`).
+
+Para volver a la semilla limpia: `supabase db reset`.
 
 ## Comandos
 
 ```bash
-npm ci              # instala dependencias (usa package-lock.json)
-npm run dev         # servidor de desarrollo Vite
-npm run build       # genera dist/ (sitio estático para GitHub Pages)
-npm run preview     # sirve dist/ en local
+npm run dev         # servidor de desarrollo Vite (sin CSP)
+npm run build       # genera dist/ con la CSP inyectada; falla si VITE_SUPABASE_URL no es local ni el proyecto del repo
+npm run preview     # sirve dist/ en local (puerto 4173)
 npm run lint        # ESLint
 ```
 
 ### Pruebas
 
-```bash
-npm run test:unit   # unitarias y de seguridad del motor (node:test) con cobertura
-npm run test:e2e    # e2e con Playwright; antes: npm run build y npx playwright install chromium
-npm run test:db     # pgTAP; antes: supabase db start (o supabase start)
-```
+| Tipo | Comando | Necesita |
+|---|---|---|
+| Unitarias (motor, front, scripts, seguridad estática) | `npm run test:unit` | Nada. Muestra cobertura. |
+| Base de datos (pgTAP: esquema, RLS por rol, auditoría, privilegios) | `npm run test:db` | `supabase db start` o `supabase start` |
+| e2e (Playwright, una prueba por pantalla) | `npm run build && npm run test:e2e` | `supabase start`, `.env` local, `bash scripts/ci/seed-evaluations.sh` y `npx playwright install chromium` |
+| Integración de la evaluación | `bash scripts/ci/integration.sh` | `supabase start` y `psql` |
+| Seguridad estática | `node --test 'tests/security/*.test.js'` | `npm run build` antes, para revisar `dist/` |
+| Pentest de API (PostgREST y Auth) | `node --test --test-concurrency=1 'tests/security/api/*.test.js'` | `supabase start` y las variables `PENTEST_*` (ver `seguridad.yml`). Sin ellas se omiten. |
+| e2e de seguridad (XSS, CSV, CSP, framing) | `npx playwright test e2e/security` | Igual que e2e |
 
-`test:unit` ejecuta `tests/**/*.test.js` con el runner nativo de Node y muestra la cobertura de `engine/`. No necesita dependencias instaladas.
+Las pruebas de `tests/security/api/` se omiten en `test:unit` a propósito. En CI corren en el job `pentest-api`.
 
-### Variables de build
+## Workflows
 
-Copia `.env.example` a `.env` y rellena `VITE_SUPABASE_URL` y `VITE_SUPABASE_PUBLISHABLE_KEY` (clave publicable `sb_publishable_...`). Nunca pongas la clave secreta en el front. Hoy el front todavía no se conecta a Supabase.
+| Workflow | Cuándo corre | Qué hace |
+|---|---|---|
+| `ci.yml` | PR; push a `main`, `item/**`, `fix/**`; manual | `build`: lint, unitarias y build. `db`: pgTAP sobre Postgres local. `integration`: corre `evaluate.js` mensual y diario dos veces contra Supabase local y verifica que no duplica. `e2e`: Supabase local, evalúa la semilla, build y Playwright. |
+| `seguridad.yml` | PR; push a `main`, `item/**`, `fix/**`, `ensayo/**`; lunes 01:17 Guayaquil; manual | gitleaks, semgrep, `npm audit`, CodeQL, pruebas de seguridad, pentest de API contra Supabase local y DAST (e2e de seguridad y ZAP baseline). |
+| `evaluacion-mensual.yml` | Día 1 de cada mes, 06:07 Guayaquil; manual con `as_of` y `reprocess` | Cierra el mes anterior: colores, candados, auditoría y alertas `color_change` y de excepciones. |
+| `ritmo-diario.yml` | Cada día, 06:23 Guayaquil; manual con `as_of` | Ritmo de vulnerabilidades, ingreso de P0/P1 y vencimiento de excepciones. Genera alertas. |
+| `lockfile.yml` | Push a `item/**` o `fix/**` que cambie `package.json`; manual (nunca en `main`) | Regenera y sube `package-lock.json` y relanza CI y Seguridad. |
+
+Los dos workflows de evaluación solo actúan si existen los secretos `SUPABASE_URL` y `SUPABASE_SECRET_KEY` y la variable de repositorio `EVALUATION_ENABLED=true`. Si falta algo, terminan en verde con un aviso y no escriben nada. Detalle, reprocesos y qué hacer si fallan: [`docs/operacion.md`](docs/operacion.md).
 
 ## Estructura del repo
 
 ```
 engine/                 Lógica pura compartida por el front y las Actions
-  indicator.js          Validación y valores por defecto de un indicador
-  measure.js            Valor del indicador en su ventana
-  color.js              Color verde / amarillo / rojo / sin evaluar
+  indicator.js          Validación de un indicador (7 atributos)
+  measure.js, color.js  Valor en la ventana y color
   escalation.js         Candados, color de la unidad y arrastre
-  README.md             API del motor de color
-  ESCALATION.md         API y tabla de verdad del motor de escalada
-src/main.js             Front (pantalla mínima)
-index.html              Entrada del front
-supabase/               config.toml, migrations/ (vacía), seed.sql, tests/ (pgTAP)
-scripts/                Scripts para las Actions (vacía)
-tests/engine/           Pruebas unitarias del motor
-tests/security/         Pruebas de seguridad del motor
-tests/smoke.test.js     Prueba mínima del front
-e2e/                    Pruebas Playwright
-.github/workflows/      ci.yml, lockfile.yml
-docs/                   Diseño, plan, ADR, informes y guías
+  exceptions.js         Vigencia, tope de 90 días y validación de excepciones
+  commitment.js         Compromisos y umbral efectivo
+  measurements-input.js Validación de mediciones y parser CSV
+  vulnerabilities.js    Paquete trimestral, ritmo y metas mensuales
+  rows.js, calendar.js  Filas de la BD -> entradas del motor; meses y trimestres
+src/
+  main.js               Arranque, sesión y mapa de vistas
+  lib/                  Rutas (route-logic.js), sesión, formularios y lógica de tableros (sin DOM)
+  data/                 Único acceso a Supabase (una función por consulta)
+  views/<rol>/          Una pantalla por archivo
+  security/             CSP y anti-framing
+supabase/
+  migrations/           Esquema, RLS, auditoría, endurecimiento, alertas y excepciones
+  seed.sql              Datos ficticios para local y CI
+  tests/                pgTAP (y tests/security/)
+scripts/
+  evaluate.js           Evaluación mensual o diaria (Actions)
+  lib/                  Lectura de BD, armado de entradas, alertas y escritura
+  ci/                   integration.sh, seed-evaluations.sh, verify-evaluate.sql
+tests/                  node:test: engine/, front/, scripts/, security/ (y security/api/)
+e2e/                    Playwright por pantalla; e2e/security/
+.github/workflows/      ci, seguridad, evaluacion-mensual, ritmo-diario, lockfile
+docs/                   Diseño, plan, ADR, manuales, modelo de datos, operación, seguridad
 ```
 
 ## Documentación
 
 - Diseño: [`docs/diseno.md`](docs/diseno.md)
-- Cómo se configura un indicador y cómo funcionan los candados: [`docs/indicadores.md`](docs/indicadores.md)
+- Modelo de datos y RLS: [`docs/modelo-datos.md`](docs/modelo-datos.md)
+- Indicadores, compromisos, CSV y candados: [`docs/indicadores.md`](docs/indicadores.md)
 - API del motor: [`engine/README.md`](engine/README.md) y [`engine/ESCALATION.md`](engine/ESCALATION.md)
+- Operación y runbook: [`docs/operacion.md`](docs/operacion.md)
 - Decisiones técnicas: [`docs/adr/`](docs/adr/)
 - Seguridad: [`docs/seguridad/`](docs/seguridad/)
 - Cambios por ítem: [`CHANGELOG.md`](CHANGELOG.md)
