@@ -5,7 +5,7 @@ import { describe, test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   skipReason, assertKeyFormats, loginAll, as, admin, adminInsert, adminGet, sql,
-  ACTORS, USERS, UNIT, KPI, DENIED,
+  ACTORS, USERS, UNIT, KPI, DENIED, dateInDays,
 } from './_lib.js';
 import { MATRIX, RPC_ALLOWLIST } from './matrix.js';
 
@@ -27,10 +27,10 @@ describe('pentest-api: matriz rol × tabla × operación', { skip }, () => {
       { unit_id: UNIT.beta, indicator_id: null, month: '2027-01', color: 'red', sample_size: 0 },
       { unit_id: UNIT.alfa, indicator_id: KPI.vuln, month: '2027-01', color: 'yellow', sample_size: 1 },
     ]);
-    const exp = new Date(Date.now() + 60 * 86_400_000).toISOString().slice(0, 10);
+    const exp = dateInDays(30);
     await adminInsert('exceptions', [
-      { unit_id: UNIT.alfa, reason: 'pentest-fixture A', expires_on: exp, approved_by: USERS.comite.id },
-      { unit_id: UNIT.beta, reason: 'pentest-fixture B', expires_on: exp, approved_by: USERS.comite.id },
+      { unit_id: UNIT.alfa, scope: 'all', reason: 'pentest-fixture A', expires_on: exp, approved_by: USERS.comite.id },
+      { unit_id: UNIT.beta, scope: 'all', reason: 'pentest-fixture B', expires_on: exp, approved_by: USERS.comite.id },
     ]);
     await adminInsert('alerts', [
       { unit_id: UNIT.alfa, recipient_user_id: USERS.lider1.id, kind: 'color_change', dedupe_key: 'pentest-fixture:alfa' },

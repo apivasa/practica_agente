@@ -45,6 +45,11 @@ export function assertKeyFormats() {
 // ---------------------------------------------------------------------------
 // Datos del seed (supabase/seed.sql)
 // ---------------------------------------------------------------------------
+// Fecha YYYY-MM-DD a +d días en la zona de negocio (America/Guayaquil). Las
+// excepciones tienen tope de vigencia (C-02): las fechas de prueba son relativas.
+export const dateInDays = (d) =>
+  new Date(Date.now() + d * 86_400_000).toLocaleDateString('en-CA', { timeZone: 'America/Guayaquil' });
+
 export const PASSWORD = 'Local-Only-Pass-2026';
 export const USERS = {
   gestora: { id: '11111111-1111-4111-8111-000000000001', email: 'gestora@example.test' },

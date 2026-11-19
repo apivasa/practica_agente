@@ -2,7 +2,7 @@
 // docs/adr/0005-modelo-datos-y-rls.md y supabase/migrations/*rls*.sql.
 // Toda tabla de `public` debe tener entrada aquí: la prueba de catálogo falla
 // si aparece una tabla nueva sin fila en la matriz.
-import { USERS, UNIT, KPI, CUSTODIAN_KPIS, LEADER_UNIT } from './_lib.js';
+import { USERS, UNIT, KPI, CUSTODIAN_KPIS, LEADER_UNIT, dateInDays } from './_lib.js';
 
 const isLeader = (a) => a in LEADER_UNIT;
 const isCustodian = (a) => a in CUSTODIAN_KPIS;
@@ -14,7 +14,7 @@ const rand = () => Math.random().toString(36).slice(2, 10);
 const futureMonth = () =>
   `${2030 + Math.floor(Math.random() * 60)}-${String(1 + Math.floor(Math.random() * 12)).padStart(2, '0')}`;
 const futureQuarter = () => `${2030 + Math.floor(Math.random() * 60)}-Q${1 + Math.floor(Math.random() * 4)}`;
-const inDays = (d) => new Date(Date.now() + d * 86_400_000).toISOString().slice(0, 10);
+const inDays = dateInDays;
 
 /**
  * read(actor) → { visible(row): bool, mustInclude?: (rows) => string|null }
