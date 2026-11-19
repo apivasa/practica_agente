@@ -12,7 +12,7 @@
     "build": "vite build",
     "preview": "vite preview",
     "lint": "eslint .",
-    "test:unit": "node --test --experimental-test-coverage \"tests/**/*.test.js\"",
+    "test:unit": "node --test --experimental-test-coverage --test-coverage-exclude='tests/**' 'tests/**/*.test.js'",
     "test:e2e": "playwright test",
     "test:db": "supabase test db"
   },
