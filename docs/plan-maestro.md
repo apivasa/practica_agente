@@ -29,7 +29,7 @@ Tallas: **S** = 1 ciclo · **M** = 2 ciclos · **L** = 3 ciclos.
 | ID | Prioridad | Ítem | Talla | Depende de | Criterio de aceptación |
 |---|---|---|---|---|---|
 | F-01 | P0 | Estructura del repo: front Vite + JavaScript (ES modules), carpeta `supabase/`, `engine/` (lógica pura compartida), `scripts/` para Actions | S | — | `npm ci && npm run build` genera `dist/` estático; README con comandos |
-| F-02 | P0 | CI: lint, pruebas unitarias (Vitest), `supabase start` local, pruebas de BD (pgTAP) y de RLS, build | M | F-01 | Workflow `ci.yml` verde en PR y en `main`; falla si cualquier paso falla |
+| F-02 | P0 | CI: lint, pruebas unitarias (Vitest), `supabase start` local, pruebas de BD (pgTAP) y de RLS, build | M | F-01 | Workflow `ci.yml` verde en PR y en `main`; falla si cualquier paso falla. Workflow `lockfile.yml` genera y sube `package-lock.json` cuando cambia `package.json` (las sesiones de Claude no pueden instalar paquetes) |
 | F-03 | P0 | Migraciones del modelo de datos: Unidades, Usuarios y roles, Indicadores, Compromisos, Mediciones, Metas, Evaluaciones, Excepciones, Alertas | M | F-02 | `supabase db reset` aplica sin errores; pgTAP valida tablas, FKs y enums |
 | F-04 | P0 | RLS por rol: gestora (todo config), custodio (sus KPIs), comité (lectura total + excepciones), líder (solo su unidad) | L | F-03 | Pruebas pgTAP con un usuario por rol: cada rol ve y escribe solo lo permitido; ninguna tabla sin RLS |
 | F-05 | P0 | Login (Supabase Auth, correo + contraseña) y enrutamiento por rol en el front | M | F-04 | Prueba e2e (Playwright) entra con cada rol de seed y llega a su vista |

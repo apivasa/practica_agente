@@ -62,7 +62,19 @@ Si todo lo que queda espera al usuario: no hagas nada, no vuelvas a notificar lo
 - No hagas `git push --force` a `main`. No reescribas historia publicada.
 - Cada acción automática con efecto (candado aplicado, alerta enviada, excepción vencida) queda en una tabla de auditoría.
 
-## 5. Convenciones
+## 5. Entorno de las sesiones de Claude (límites conocidos)
+
+- **Sin instalación de paquetes:** `npm install`, `pip install` y similares están bloqueados en la sesión. No los intentes en bucle. Escribe el código y las pruebas, haz push y **valida en GitHub Actions**, donde sí hay red. Mientras no exista `package-lock.json`, CI usa `npm install`; el workflow `lockfile.yml` (lo crea F-02) genera y sube el lockfile cuando cambia `package.json`.
+- **GitHub solo por REST:** `gh pr list`, `gh pr create`, `gh run list` usan GraphQL y fallan. Usa:
+  - Abrir PR: `gh api repos/apivasa/practica_agente/pulls -f title='[<ID>] <título>' -f head='item/<ID>' -f base='main' -f body='<texto>'`
+  - Runs de una rama: `gh api 'repos/apivasa/practica_agente/actions/runs?branch=<rama>&per_page=5' --jq '.workflow_runs[] | {name, status, conclusion, html_url}'`
+  - Logs de un job fallido: `gh api repos/apivasa/practica_agente/actions/jobs/<job_id>/logs`
+  - Fusionar: `gh api -X PUT repos/apivasa/practica_agente/pulls/<n>/merge -f merge_method=squash`
+  - Borrar rama: `git push origin --delete item/<ID>`
+- **Push:** `git -c push.negotiate=true push -u origin <rama>`.
+- Si una de estas rutas queda bloqueada de forma persistente (403 de política), es un pendiente del usuario, no algo que se rodea.
+
+## 6. Convenciones
 
 - Idioma: código y nombres técnicos en inglés; interfaz, docs y mensajes de commit en español.
 - Commits: `<ID>: <qué cambió>`. PR: `[<ID>] <título>`.
