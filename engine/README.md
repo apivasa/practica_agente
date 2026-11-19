@@ -23,8 +23,27 @@ Funciones puras en JavaScript ESM, sin dependencias ni acceso a red. Las usan el
 - `isValidPeriod(p)`: `YYYY-Qn` o `YYYY-MM` (mismo patrón que `commitments.period`).
 - `validateCommitment(indicator, { period, greenOverride?, yellowOverride?, packageByCategory? })` → `{ ok, errors[] }`. El umbral negociado va en pareja (verde y amarillo) y debe ser coherente con `direction`. `packageByCategory` solo en `cumulative_target`, enteros >= 0.
 - `effectiveThresholds(indicator, commitment)` → `{ green, yellow, overridden, reason? }`. Aplica el umbral negociado del compromiso sobre el general. Acepta el indicador del motor (`thresholds`) o la fila de la BD (`green_threshold`, `yellow_threshold`) y el compromiso en camelCase o snake_case (`green_override`). Un override incompleto o incoherente no se aplica y `reason` lo explica. Para evaluar con él: `evaluateColor({ ...cfg, thresholds: { green, yellow } }, measured)`.
-- Es la **única** regla de umbral negociado: `scripts/lib/build.js` (`indicatorConfig`, C-03) la usa también. La BD impide overrides a medias (`commitments_override_pair`).
+- Es la **única** regla de umbral negociado: `indicatorConfig` (`rows.js`) la usa, y con ella las Actions (C-03) y el front (V-01). La BD impide overrides a medias (`commitments_override_pair`).
 - `packageTotal(packageByCategory)`: suma (para `commitments.package_total`).
+
+### Filas de la BD → contratos del motor (V-01) — `rows.js`
+
+Lo comparten `scripts/lib/build.js` (Actions, que lo reexporta) y `src/lib/dashboard.js` (front). El front nunca importa de `scripts/` (lo verifica `tests/front/boundaries.test.js`).
+
+- `num(v)` → número finito o `null` (PostgREST puede devolver `numeric` como texto).
+- `pickCommitment(commitments, unitId, indicatorId, month)` → compromiso del mes (`YYYY-MM`) o, si no hay, el del trimestre (`YYYY-Qn`); `null` si ninguno.
+- `indicatorConfig(row, commitment?)` → `{ cfg, thresholdSource: 'commitment' | 'indicator', note? }`: configuración del motor desde una fila de `indicators`, con los umbrales efectivos de `effectiveThresholds`.
+- `isResolved(row)` → `true` si `kind` es `resolved` o nulo (filas anteriores a M-05).
+- `buildPackageInput({ indicator, commitment, measurements, asOf })` → `{ ok: true, input }` para `packageStatus`, o `{ ok: false, reason }` si el compromiso no trae `package_by_category`. Filtra las mediciones fuera del trimestre de `asOf` o posteriores a `asOf`.
+
+### Calendario (V-01) — `calendar.js`
+
+Puro, sin zona horaria (fechas de calendario). `scripts/lib/dates.js` lo reexporta.
+
+- `addMonths('YYYY-MM', n)` → mes desplazado `n` meses (n negativo hacia atrás).
+- `monthEnd('YYYY-MM')` → último día `'YYYY-MM-DD'`.
+- `quarterBounds('YYYY-MM')` → `{ quarter, start, end, months }` del trimestre calendario del mes.
+- Meses inválidos lanzan `TypeError`.
 
 ### Fecha de negocio — `dates.js`
 

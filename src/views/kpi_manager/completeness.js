@@ -2,7 +2,7 @@
 // anterior): % de unidades con mediciones cargadas en el mes y lista de faltantes.
 import { el } from '../dom.js';
 import { field, messages, select } from '../form.js';
-import { completeness, completenessMonths } from '../../lib/dashboard.js';
+import { completeness, completenessMonths, pctLabel } from '../../lib/dashboard.js';
 import { custodianCandidates } from '../../lib/indicator-form.js';
 import { todayInBusinessTz } from '../../lib/dates.js';
 import { monthEnd } from '../../../engine/index.js';
@@ -22,13 +22,13 @@ export function renderCompleteness() {
   function show() {
     const groups = completeness({ ...state, month: state.month });
     body.replaceChildren(...(groups.length ? groups.map((g) => el('section', { class: 'custodian-block', 'data-custodian': g.custodian }, [
-      el('h3', { text: `${g.custodian}: ${g.pct} % cargado` }),
+      el('h3', { text: g.pct === null ? `${g.custodian}: sin unidades` : `${g.custodian}: ${g.pct} % cargado` }),
       el('table', { class: 'data-table', 'aria-label': `Completitud de ${g.custodian}` }, [
         el('thead', {}, [el('tr', {}, ['KPI', 'Unidades con datos', '% cargado', 'Faltan'].map((h) => el('th', { scope: 'col', text: h })))]),
         el('tbody', {}, g.items.map((it) => el('tr', { 'data-indicator': it.indicator.code }, [
           el('th', { scope: 'row', text: `${it.indicator.code} · ${it.indicator.name}` }),
           el('td', { text: `${it.loaded} de ${it.total}` }),
-          el('td', { class: it.pct < 100 ? 'warn' : 'ok', text: `${it.pct} %` }),
+          el('td', { class: it.pct === null ? 'muted' : it.pct < 100 ? 'warn' : 'ok', text: pctLabel(it.pct) }),
           el('td', { text: it.missing.length ? it.missing.join(', ') : 'Completo' }),
         ]))),
       ]),

@@ -4,7 +4,7 @@
 import { el } from '../dom.js';
 import { field, messages, select } from '../form.js';
 import {
-  activeExceptions, evaluatedMonths, formatNumber, leaderIndicatorRows, leaderMeasurementsRange,
+  activeExceptions, historySince, evaluatedMonths, formatNumber, leaderIndicatorRows, leaderMeasurementsRange,
   monthOptions, paceAsOf, pickMonth, unitEvaluation,
 } from '../../lib/dashboard.js';
 import { todayInBusinessTz } from '../../lib/dates.js';
@@ -58,7 +58,7 @@ export function renderLeaderHome({ rows, session }) {
     const unitId = state.unitId;
     body.replaceChildren(el('p', { text: 'Cargando…' }));
     try {
-      const evaluations = await listEvaluations({ unitId });
+      const evaluations = await listEvaluations({ unitId, since: historySince(today) });
       const evaluated = evaluatedMonths(evaluations);
       const month = pickMonth(state.month, evaluated, today);
       state.month = month;

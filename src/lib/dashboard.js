@@ -214,6 +214,15 @@ export function leaderMeasurementsRange(month, today) {
   return { from, to: paceAsOf(month, today) };
 }
 
+/** Texto de un porcentaje de completitud ('Sin unidades' si no aplica). */
+export const pctLabel = (pct) => (pct === null || pct === undefined ? 'Sin unidades' : `${pct} %`);
+
+/** Mes mínimo del historial que leen los tableros: 12 meses antes del mes en curso. */
+export const HISTORY_MONTHS = 12;
+export function historySince(today, months = HISTORY_MONTHS) {
+  return addMonths(today.slice(0, 7), -months);
+}
+
 /** Meses del tablero de completitud: el actual y el anterior. */
 export function completenessMonths(today) {
   const current = today.slice(0, 7);
@@ -225,8 +234,8 @@ export function completenessMonths(today) {
  * tiene al menos una medición con fecha dentro del mes.
  * @param {{ indicators: any[], units: any[], measurements: any[], month: string,
  *   custodians?: { userId: string, label: string }[] }} input
- * @returns {{ custodianId: string|null, custodian: string, loaded: number, total: number, pct: number,
- *   items: { indicator: any, loaded: number, total: number, pct: number, missing: string[] }[] }[]}
+ * @returns {{ custodianId: string|null, custodian: string, loaded: number, total: number, pct: number|null,
+ *   items: { indicator: any, loaded: number, total: number, pct: number|null, missing: string[] }[] }[]}
  */
 export function completeness({ indicators, units, measurements, month, custodians = [] }) {
   const start = `${month}-01`;
@@ -239,7 +248,8 @@ export function completeness({ indicators, units, measurements, month, custodian
   }
   const sortedUnits = [...(units ?? [])].sort((a, b) => String(a.name).localeCompare(String(b.name)));
   const total = sortedUnits.length;
-  const pct = (n, d) => (d === 0 ? 100 : Math.round((n * 100) / d));
+  // Sin unidades no hay nada que medir: pct null (la vista muestra "Sin unidades"), no 100 %.
+  const pct = (n, d) => (d === 0 ? null : Math.round((n * 100) / d));
   const labelOf = (id) => (id ? custodians.find((c) => c.userId === id)?.label ?? `usuario ${id.slice(0, 8)}…` : 'Sin custodio');
 
   const groups = new Map();

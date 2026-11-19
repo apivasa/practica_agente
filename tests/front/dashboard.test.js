@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import {
   activeExceptions, committeeMatrix, completeness, completenessMonths, describeAlert, evaluatedMonths,
   formatNumber, latestMonth, leaderIndicatorRows, leaderMeasurementsRange, monthOptions, paceAsOf,
-  pickMonth, unitEvaluation, colorKey, colorLabel, levelLabel, restrictionLabel, packagePace,
+  pickMonth, unitEvaluation, pctLabel, historySince, colorKey, colorLabel, levelLabel, restrictionLabel, packagePace,
 } from '../../src/lib/dashboard.js';
 
 const U1 = 'u1';
@@ -155,7 +155,10 @@ test('completitud por custodio y KPI en el mes, con faltantes', () => {
   assert.equal(oct.find((g) => g.custodianId === 'c2').pct, 0);
   assert.match(oct[0].custodian, /^usuario c/);
   const none = completeness({ indicators: [{ ...AVAIL, custodian_user_id: null }], units: [], measurements: [], month: '2026-10' });
-  assert.deepEqual(none.map((g) => [g.custodian, g.pct]), [['Sin custodio', 100]]);
+  assert.deepEqual(none.map((g) => [g.custodian, g.pct]), [['Sin custodio', null]]);
+  assert.equal(pctLabel(null), 'Sin unidades');
+  assert.equal(pctLabel(50), '50 %');
+  assert.equal(historySince('2026-11-19'), '2025-11');
   assert.deepEqual(completenessMonths('2026-01-10'), ['2026-01', '2025-12']);
 });
 

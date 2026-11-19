@@ -3,7 +3,7 @@
 import { el } from '../dom.js';
 import { messages } from '../form.js';
 import {
-  activeExceptions, committeeMatrix, evaluatedMonths, formatNumber, monthOptions, pickMonth,
+  activeExceptions, historySince, committeeMatrix, evaluatedMonths, formatNumber, monthOptions, pickMonth,
 } from '../../lib/dashboard.js';
 import { todayInBusinessTz } from '../../lib/dates.js';
 import { ROLE_LABELS, findRoute } from '../../lib/route-logic.js';
@@ -79,7 +79,7 @@ export function renderCommitteeHome({ session }) {
   async function load() {
     try {
       const [units, indicators, evaluations, exceptions] = await Promise.all([
-        listUnits(), listIndicators(), listEvaluations(), listCurrentExceptions(today),
+        listUnits(), listIndicators(), listEvaluations({ since: historySince(today) }), listCurrentExceptions(today),
       ]);
       Object.assign(state, { units, indicators, evaluations });
       showMatrix();
