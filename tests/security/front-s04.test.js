@@ -191,3 +191,21 @@ test('4 · dist/index.html: sin scripts inline, sin manejadores inline, sin recu
     }
   }
 });
+
+// ---------------------------------------------------------------------------
+// T-FE-08: enlaces a pestaña nueva con rel="noopener"
+// ---------------------------------------------------------------------------
+test('4 · src/ y dist/: todo target=_blank va con rel noopener', async () => {
+  const { readdirSync, statSync } = await import('node:fs');
+  const walk = (dir) => (existsSync(dir) ? readdirSync(dir).flatMap((n) => {
+    const p = join(dir, n);
+    return statSync(p).isDirectory() ? walk(p) : /\.(js|html)$/.test(p) ? [p] : [];
+  }) : []);
+  for (const f of [...walk(join(ROOT, 'src')), join(ROOT, 'index.html'), ...walk(join(ROOT, 'dist'))]) {
+    const text = readFileSync(f, 'utf8');
+    for (const m of text.matchAll(/target['"]?\s*[:=]\s*['"]_blank['"]/g)) {
+      const around = text.slice(Math.max(0, m.index - 200), m.index + 200);
+      assert.match(around, /noopener/, `${f}: target=_blank sin rel="noopener"`);
+    }
+  }
+});

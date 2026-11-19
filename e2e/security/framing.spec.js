@@ -18,11 +18,22 @@ async function framedApp(page, baseURL, hash = '#/login') {
   );
   await page.goto(ATTACKER);
   const frame = page.frameLocator('#victim');
-  const handle = await page.locator('#victim').elementHandle();
-  const f = await handle.contentFrame();
-  await f.waitForLoadState('load');
-  // Deja que el módulo anti-framing se ejecute (los module scripts son diferidos).
-  await f.waitForFunction(() => document.documentElement.hidden === true, null, { timeout: 10_000 });
+  let f;
+  await expect.poll(() => {
+    f = page.frames().find((fr) => fr.url().includes('/practica_agente/'));
+    return f ? f.url() : page.frames().map((fr) => fr.url()).join(' | ');
+  }, { message: 'el iframe no navegó a la app' }).toContain('/practica_agente/');
+  // Los module scripts son diferidos: se espera a que el anti-framing actúe y se
+  // devuelve el estado completo para que un fallo sea diagnosticable.
+  const state = () => f.evaluate(() => ({
+    ready: document.readyState,
+    framed: window.top !== window.self,
+    htmlHidden: document.documentElement.hidden,
+    bodyHidden: document.body?.hidden ?? null,
+    app: Boolean(document.getElementById('app')),
+    scripts: [...document.scripts].map((s) => s.src),
+  })).catch((e) => ({ error: String(e) }));
+  await expect.poll(state, { timeout: 10_000 }).toMatchObject({ framed: true, htmlHidden: true, bodyHidden: true, app: false });
   return { frame, f };
 }
 
