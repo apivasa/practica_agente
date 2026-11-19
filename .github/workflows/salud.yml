@@ -1,0 +1,73 @@
+name: Salud
+
+# V-04 (dueño: arquitecto-SRE). Cada 6 h comprueba:
+# - disponibilidad de la web de Pages y de Supabase (solo con producción activa,
+#   vars.EVALUATION_ENABLED == 'true'); la consulta a Supabase evita además la pausa
+#   por inactividad del plan gratuito;
+# - que ritmo-diario, evaluacion-mensual, el run semanal de seguridad y CI en main
+#   corrieron cuando tocaba, terminaron bien y no están deshabilitados.
+# Si algo falla, el run queda en rojo y se abre (o comenta) un issue con la etiqueta
+# `salud` sin datos sensibles. Runbook: docs/operacion.md § Salud del sistema.
+on:
+  schedule:
+    - cron: '41 */6 * * *' # 00:41, 06:41, 12:41, 18:41 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: salud
+  cancel-in-progress: false
+
+jobs:
+  check:
+    name: comprobar (disponibilidad y workflows programados)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      actions: read
+    outputs:
+      failures: ${{ steps.health.outputs.failures }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+      # Sin dependencias npm: solo módulos de Node y fetch nativo.
+      - name: Comprobar salud
+        id: health
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          EVALUATION_ENABLED: ${{ vars.EVALUATION_ENABLED }}
+          PAGES_URL: ${{ vars.PAGES_URL }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          # Solo la clave publicable; la secreta nunca llega a este workflow.
+          SUPABASE_PUBLISHABLE_KEY: ${{ secrets.SUPABASE_PUBLISHABLE_KEY || vars.SUPABASE_PUBLISHABLE_KEY }}
+        run: node scripts/health/check.js
+
+  alert:
+    name: abrir o actualizar issue de salud
+    needs: check
+    if: always() && needs.check.result == 'failure'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+      - name: Issue con la etiqueta salud
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          FAILURES: ${{ needs.check.outputs.failures }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: node scripts/health/issue.js
