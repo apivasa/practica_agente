@@ -1,0 +1,2 @@
+-- Datos semilla para el entorno local (supabase db reset).
+-- Solo datos ficticios: sin nombres, correos ni datos reales de personas.
