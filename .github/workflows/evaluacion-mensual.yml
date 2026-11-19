@@ -65,9 +65,10 @@ jobs:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
           AS_OF: ${{ inputs.as_of }}
-        # reprocess se lee del payload del evento como dato (nunca se interpola en la shell).
+          REPROCESS: ${{ inputs.reprocess }}
+        # Los inputs llegan solo por env (nunca se interpolan en la shell).
         # EVALUATE_ALLOW_FUTURE nunca se define aquí: producción rechaza fechas futuras.
         run: |
           args=(--mode=monthly)
-          if [ "$(jq -r '.inputs.reprocess // false' "$GITHUB_EVENT_PATH")" = "true" ]; then args+=(--reprocess); fi
+          if [ "${REPROCESS}" = "true" ]; then args+=(--reprocess); fi
           node scripts/evaluate.js "${args[@]}" --as-of="${AS_OF}"

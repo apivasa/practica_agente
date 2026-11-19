@@ -60,12 +60,17 @@ for (const name of SCHEDULED) {
     test('input as_of solo por env (sin interpolación en run:) y entrecomillado', () => {
       for (const [i, l] of lines.entries()) {
         if (!/\$\{\{[^}]*(inputs\.|github\.event\.inputs)/.test(l)) continue;
-        assert.match(l, /^\s+AS_OF:\s*\$\{\{\s*inputs\.as_of\s*\}\}\s*$/, `${name}:${i + 1} interpola un input fuera de env`);
+        assert.match(l, /^\s+(AS_OF:\s*\$\{\{\s*inputs\.as_of|REPROCESS:\s*\$\{\{\s*inputs\.reprocess)\s*\}\}\s*$/, `${name}:${i + 1} interpola un input fuera de env`);
       }
       const runEval = lines.find((l) => /node scripts\/evaluate\.js/.test(l));
       assert.ok(runEval);
       assert.match(runEval, /--as-of="\$\{AS_OF\}"\s*$/, 'AS_OF debe ir entrecomillado');
       assert.doesNotMatch(runEval, /\$\{\{/);
+      // Sin lecturas ad hoc del payload del evento ni EVALUATE_ALLOW_FUTURE en producción.
+      assert.doesNotMatch(text, /GITHUB_EVENT_PATH|EVALUATE_ALLOW_FUTURE:/);
+      for (const l of lines.filter((x) => /\$\{?REPROCESS\b/.test(x) && !/REPROCESS:/.test(x))) {
+        assert.match(l, /\[ "\$\{REPROCESS\}" = "true" \]/, `uso de REPROCESS no acotado: ${l.trim()}`);
+      }
     });
 
     test('guarda EVALUATION_ENABLED y secretos: todo paso posterior depende del check', () => {
@@ -186,8 +191,29 @@ describe('scripts/evaluate.js no imprime la clave', () => {
   });
   test('backend inalcanzable (o sin dependencias): falla sin la clave', () => {
     // Puerto 9 local: conexión rechazada al instante. Nunca sale de la máquina.
-    const r = run(['--mode=daily', '--as-of=2027-02-10'], { SUPABASE_URL: 'http://127.0.0.1:9', SUPABASE_SECRET_KEY: FAKE_KEY });
-    assert.notEqual(r.status, 0);
+    // Fecha pasada: no la frena la guarda de fecha futura y llega a conectar.
+    const r = run(['--mode=daily', '--as-of=2025-02-10'], { SUPABASE_URL: 'http://127.0.0.1:9', SUPABASE_SECRET_KEY: FAKE_KEY });
+    assert.ok(![0, 2].includes(r.status), `debía fallar al conectar, no en la validación (status ${r.status}):\n${r.stderr}`);
+    noLeak(r);
+  });
+  test('fecha futura: sale 2 antes de conectar y sin la clave', () => {
+    const r = run(['--mode=daily', '--as-of=2999-01-01'], { SUPABASE_URL: 'https://x.supabase.co', SUPABASE_SECRET_KEY: FAKE_KEY });
+    assert.equal(r.status, 2);
+    assert.match(r.stderr, /posterior a hoy/);
+    noLeak(r);
+  });
+  test('EVALUATE_ALLOW_FUTURE no vale contra un host remoto', () => {
+    const r = run(['--mode=daily', '--as-of=2999-01-01'], {
+      SUPABASE_URL: 'https://x.supabase.co', SUPABASE_SECRET_KEY: FAKE_KEY, EVALUATE_ALLOW_FUTURE: '1',
+    });
+    assert.equal(r.status, 2);
+    noLeak(r);
+  });
+  test('EVALUATE_ALLOW_FUTURE con URL local inalcanzable: llega a conectar y falla sin la clave', () => {
+    const r = run(['--mode=daily', '--as-of=2999-01-01'], {
+      SUPABASE_URL: 'http://127.0.0.1:9', SUPABASE_SECRET_KEY: FAKE_KEY, EVALUATE_ALLOW_FUTURE: '1',
+    });
+    assert.ok(![0, 2].includes(r.status), `status ${r.status}:\n${r.stderr}`);
     noLeak(r);
   });
 });

@@ -3,9 +3,9 @@
 -- pudiera escribir dedupe_key, podría "reservar" la clave de una alerta futura
 -- y silenciarla.
 begin;
-select plan(9);
+select plan(10);
 
-select ok(has_column('public', 'alerts', 'dedupe_key'), 'alerts.dedupe_key existe');
+select has_column('public', 'alerts', 'dedupe_key', 'alerts.dedupe_key existe');
 select ok(not has_column_privilege('authenticated', 'public.alerts', 'dedupe_key', 'UPDATE'),
   'authenticated: no actualiza alerts.dedupe_key');
 select ok(not has_column_privilege('authenticated', 'public.alerts', 'dedupe_key', 'INSERT'),
@@ -34,6 +34,15 @@ select throws_ok(
   $$ insert into public.alerts (unit_id, recipient_user_id, kind)
      values ('5ec10000-0000-4000-8000-0000000000c1', '5ec00000-0000-4000-8000-0000000000c1', 'forged') $$,
   '23514', null, 'alerts.kind fuera de la lista se rechaza');
+
+-- H-C03-04: created_at de measurements lo fija la BD (no se falsifica el desempate).
+insert into public.indicators (id, code, name, measurement_type, direction, green_threshold, yellow_threshold) values
+  ('5ec20000-0000-4000-8000-0000000000c1', 'SEC3_X', 'SEC3 KPI', 'window_average', 'higher_is_better', 99, 95);
+insert into public.measurements (id, unit_id, indicator_id, measured_on, value, created_at) values
+  ('5ec50000-0000-4000-8000-0000000000c1', '5ec10000-0000-4000-8000-0000000000c1',
+   '5ec20000-0000-4000-8000-0000000000c1', '2027-01-15', 99.9, '2000-01-01T00:00:00Z');
+select is((select created_at from public.measurements where id = '5ec50000-0000-4000-8000-0000000000c1'),
+  now(), 'measurements.created_at enviado por el cliente se ignora (= now())');
 
 select * from finish();
 rollback;
