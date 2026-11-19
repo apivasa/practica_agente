@@ -19,3 +19,6 @@ Hallazgos:
 6. **Datos de e2e (correcto).** `supabase/seed.sql` no se tocó. `scripts/ci/seed-evaluations.sh` corre el `evaluate.js` real sobre la semilla, se niega a correr si la URL no es loopback, enmascara la clave secreta local y no la exporta a `GITHUB_ENV` ni al build. `EVALUATE_ALLOW_FUTURE` sigue limitado a local (ADR 0008).
 7. **Menor.** `engine/README.md` no documenta `rows.js` ni `calendar.js`. Debe hacerlo el desarrollador o el documentador en este ítem.
 8. **Observación de salud (fuera del ítem).** Seguridad run 44634155934 en `main` falló en pentest-api por el puerto 54324 ocupado (inbucket). Quedó en `docs/operacion.md` como posible intermitencia: si se repite, se abre un ítem.
+
+## Re-verificación del orquestador (intento 2)
+H-1 corregido: lecturas paginadas con allPages (src/lib/paginate.js con prueba), orden estable, corte de 12 meses para comité y líder; completitud sin unidades muestra "Sin unidades"; prueba de límites src/↛scripts/. CI 44637940940 y Seguridad 44637940923 en verde. Riesgo anotado: e2e con meses fijos de la semilla 2027 fallarán desde marzo de 2028 (ítem de mantenimiento). **Veredicto final: VERDE.**
