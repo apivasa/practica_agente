@@ -194,12 +194,53 @@ test('dependabot.yml cubre github-actions y npm', () => {
   assert.match(text, /package-ecosystem:\s*npm/);
 });
 
-test('EVALUATE_ALLOW_FUTURE solo en la integración contra Supabase local', () => {
-  const sh = readFileSync(join(ROOT, 'scripts', 'ci', 'integration.sh'), 'utf8');
-  assert.match(sh, /^export EVALUATE_ALLOW_FUTURE=1$/m);
+// C-03 + V-01..V-03: EVALUATE_ALLOW_FUTURE=1 solo lo exportan los dos scripts de CI que
+// corren contra Supabase local (integración y semilla de evaluaciones para e2e). Cualquier
+// otro script que lo defina es un hallazgo.
+const ALLOW_FUTURE_SCRIPTS = ['scripts/ci/integration.sh', 'scripts/ci/seed-evaluations.sh'];
+const walkFiles = (dir) => readdirSync(join(ROOT, dir), { withFileTypes: true }).flatMap((d) => {
+  const p = `${dir}/${d.name}`;
+  return d.isDirectory() ? walkFiles(p) : [p];
+});
+
+test('EVALUATE_ALLOW_FUTURE solo en los scripts de CI contra Supabase local', () => {
+  const setters = walkFiles('scripts').filter((p) => {
+    const text = readFileSync(join(ROOT, p), 'utf8');
+    return text.split('\n').some((l) => !/^\s*(#|\/\/|\*|\/\*)/.test(l)
+      && /EVALUATE_ALLOW_FUTURE\s*=|EVALUATE_ALLOW_FUTURE:\s*\S/.test(l));
+  });
+  assert.deepEqual(setters.sort(), [...ALLOW_FUTURE_SCRIPTS].sort());
+  for (const p of ALLOW_FUTURE_SCRIPTS) {
+    const sh = readFileSync(join(ROOT, p), 'utf8');
+    assert.match(sh, /^export EVALUATE_ALLOW_FUTURE=1$/m, p);
+    assert.match(sh, /^set -euo pipefail$/m, `${p}: sin modo estricto`);
+    assert.doesNotMatch(sh, /^set -[a-z]*x|set -o xtrace/m, `${p}: xtrace imprimiría la clave`);
+    // Guarda local antes de exportar nada.
+    const guard = sh.indexOf('http://127.0.0.1:*|http://localhost:*) ;;');
+    assert.ok(guard > 0, `${p}: falta la guarda de Supabase local`);
+    assert.ok(guard < sh.indexOf('export EVALUATE_ALLOW_FUTURE'), `${p}: exporta antes de la guarda`);
+    // La clave secreta local se enmascara y nunca se imprime ni pasa a GITHUB_ENV/OUTPUT.
+    assert.match(sh, /echo "::add-mask::\$\{SUPABASE_SECRET_KEY\}"/, `${p}: sin add-mask`);
+    for (const { l } of codeLines(sh)) {
+      if (/add-mask/.test(l)) continue;
+      assert.doesNotMatch(l, /(echo|printf)[^\n]*\$\{?SUPABASE_SECRET_KEY/, `${p}: imprime la clave: ${l}`);
+      assert.doesNotMatch(l, /GITHUB_ENV|GITHUB_OUTPUT/, `${p}: exporta a pasos siguientes: ${l}`);
+    }
+  }
   // El script además rechaza la variable si SUPABASE_URL no es local (allowFutureFromEnv).
   const dates = readFileSync(join(ROOT, 'scripts', 'lib', 'dates.js'), 'utf8');
   assert.match(dates, /EVALUATE_ALLOW_FUTURE solo se admite contra Supabase local/);
+});
+
+test('ci.yml: la semilla de evaluaciones corre en el job local y su clave no llega al build', () => {
+  const ci = workflows.find((w) => w.name === 'ci.yml').text;
+  const jobs = ci.split(/^ {2}(?=[\w-]+:\s*$)/m);
+  const job = jobs.find((j) => /bash scripts\/ci\/seed-evaluations\.sh/.test(j));
+  assert.ok(job, 'ningún job corre seed-evaluations.sh');
+  assert.match(job, /supabase start\b/, 'seed-evaluations.sh fuera del job con Supabase local');
+  assert.doesNotMatch(job, /secrets\./, 'el job e2e no necesita secretos del repo');
+  assert.doesNotMatch(job, /SECRET_KEY[^\n]*>>\s*"?\$GITHUB_ENV/, 'la clave secreta pasa a GITHUB_ENV');
+  assert.doesNotMatch(job, /^\s+permissions:[\s\S]*?write/m, 'permisos de escritura en el job e2e');
 });
 
 test('seguridad.yml: job dast (S-04) con ZAP fijado por digest, e2e de seguridad y fallo por riesgo alto', () => {
