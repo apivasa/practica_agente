@@ -68,8 +68,8 @@ select isnt_empty('select 1 from public.audit_log', 'comité: lee audit_log');
 
 -- Excepciones
 select lives_ok(
-  $$ insert into public.exceptions (id, unit_id, scope, reason, expires_on)
-     values ('88888888-0000-4000-8000-000000000009', 'bbbbbbbb-0000-4000-8000-000000000002', 'change_start', 'Arranque urgente', current_date + 30) $$,
+  $$ insert into public.exceptions (id, unit_id, scope, reason, change_ref, expires_on)
+     values ('88888888-0000-4000-8000-000000000009', 'bbbbbbbb-0000-4000-8000-000000000002', 'change_start', 'Arranque urgente', 'CHG-012', current_date + 30) $$,
   'comité: aprueba excepción (approved_by por defecto = quien aprueba)');
 select is((select approved_by from public.exceptions where id = '88888888-0000-4000-8000-000000000009'), 'aaaaaaaa-0000-4000-8000-000000000004'::uuid, 'comité: approved_by queda con su usuario');
 select lives_ok($$ update public.exceptions set expires_on = current_date + 45 where id = '88888888-0000-4000-8000-000000000001' $$, 'comité: actualiza excepción');

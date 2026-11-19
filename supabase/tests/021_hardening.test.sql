@@ -92,7 +92,7 @@ select throws_ok(
   $$ insert into public.exceptions (unit_id, reason, expires_on) values ('bbbbbbbb-0000-4000-8000-000000000001', 'vencida', current_date - 1) $$,
   '42501', null, 'comité: no crea excepciones ya vencidas');
 select lives_ok(
-  $$ insert into public.exceptions (unit_id, reason, expires_on) values ('bbbbbbbb-0000-4000-8000-000000000001', 'vence hoy', current_date) $$,
+  $$ insert into public.exceptions (unit_id, scope, reason, expires_on) values ('bbbbbbbb-0000-4000-8000-000000000001', 'all', 'vence hoy', current_date) $$,
   'comité: crea excepción que vence hoy');
 
 -- Gestora: RESTRICT preserva historial
