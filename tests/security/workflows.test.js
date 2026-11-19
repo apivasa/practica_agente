@@ -102,6 +102,14 @@ for (const wf of workflows) {
     assert.match(wf.text, /vars\.EVALUATION_ENABLED|environment:/, 'falta guarda de activación de producción');
   });
 
+  // C-03 (H-C03-01): las fechas futuras solo se permiten en la integración local
+  // (scripts/ci/integration.sh); ningún workflow define EVALUATE_ALLOW_FUTURE.
+  test(`${wf.name}: no habilita EVALUATE_ALLOW_FUTURE`, () => {
+    for (const { n, l } of codeLines(wf.text)) {
+      assert.doesNotMatch(l, /EVALUATE_ALLOW_FUTURE/, `${wf.name}:${n}`);
+    }
+  });
+
   test(`${wf.name}: no imprime secretos`, () => {
     for (const { n, l } of codeLines(wf.text)) {
       assert.doesNotMatch(l, /(echo|printf|cat)\b.*\$\{\{\s*secrets\./, `${wf.name}:${n}`);
@@ -184,4 +192,12 @@ test('dependabot.yml cubre github-actions y npm', () => {
   const text = readFileSync(p, 'utf8');
   assert.match(text, /package-ecosystem:\s*github-actions/);
   assert.match(text, /package-ecosystem:\s*npm/);
+});
+
+test('EVALUATE_ALLOW_FUTURE solo en la integración contra Supabase local', () => {
+  const sh = readFileSync(join(ROOT, 'scripts', 'ci', 'integration.sh'), 'utf8');
+  assert.match(sh, /^export EVALUATE_ALLOW_FUTURE=1$/m);
+  // El script además rechaza la variable si SUPABASE_URL no es local (allowFutureFromEnv).
+  const dates = readFileSync(join(ROOT, 'scripts', 'lib', 'dates.js'), 'utf8');
+  assert.match(dates, /EVALUATE_ALLOW_FUTURE solo se admite contra Supabase local/);
 });

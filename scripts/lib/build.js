@@ -8,6 +8,7 @@ import {
   unitColor,
   evaluateEscalation,
   quarterOf,
+  parseDay,
 } from '../../engine/index.js';
 import { addDays, addMonths, monthEnd, quarterBounds } from './dates.js';
 
@@ -90,6 +91,9 @@ export function toEngineMeasurements(rows) {
 }
 
 /** Una medición es "resuelta" si kind es 'resolved' o null (filas anteriores a M-05). */
+/** Días de a hasta b ('YYYY-MM-DD'). */
+const daysBetween = (a, b) => parseDay(b) - parseDay(a);
+
 const isResolved = (r) => r.kind === 'resolved' || r.kind === null || r.kind === undefined;
 
 /**
@@ -109,6 +113,10 @@ export function evaluateIndicatorMonth({ indicator, commitment = null, measureme
   if (cfg.measurementType === 'cumulative_target') {
     const { start } = quarterBounds(evalMonth);
     rows = rows.filter((r) => r.measured_on >= start && isResolved(r));
+    // El acumulado es del trimestre: la ventana debe cubrir desde su día 1 (Q3 y Q4 tienen
+    // 92 días; con window_days = 90 el motor descartaría el 1 de julio o de octubre).
+    const quarterDays = daysBetween(start, asOf) + 1;
+    if (quarterDays > cfg.windowDays) cfg.windowDays = quarterDays;
     opts.target = num(target?.target_value);
   }
   const measured = measure(cfg, toEngineMeasurements(rows), opts);

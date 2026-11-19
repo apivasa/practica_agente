@@ -11,6 +11,11 @@ on:
         description: 'Fecha de evaluación YYYY-MM-DD (vacío = hoy en America/Guayaquil). Cierra el mes anterior a esa fecha.'
         required: false
         default: ''
+      reprocess:
+        description: 'Volver a cerrar un mes ya evaluado (queda auditado como evaluation_reprocess).'
+        type: boolean
+        required: false
+        default: false
 
 permissions:
   contents: read
@@ -60,4 +65,9 @@ jobs:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
           AS_OF: ${{ inputs.as_of }}
-        run: node scripts/evaluate.js --mode=monthly --as-of="${AS_OF}"
+        # reprocess se lee del payload del evento como dato (nunca se interpola en la shell).
+        # EVALUATE_ALLOW_FUTURE nunca se define aquí: producción rechaza fechas futuras.
+        run: |
+          args=(--mode=monthly)
+          if [ "$(jq -r '.inputs.reprocess // false' "$GITHUB_EVENT_PATH")" = "true" ]; then args+=(--reprocess); fi
+          node scripts/evaluate.js "${args[@]}" --as-of="${AS_OF}"

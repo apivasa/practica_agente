@@ -1,7 +1,16 @@
 // C-03/C-04: funciones puras de scripts/lib (fechas, armado de entradas, alertas, configuración).
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
-import { todayInGuayaquil, addDays, addMonths, monthEnd, quarterBounds, parseArgs } from '../../scripts/lib/dates.js';
+import {
+  todayInGuayaquil,
+  addDays,
+  addMonths,
+  monthEnd,
+  quarterBounds,
+  parseArgs,
+  assertNotFuture,
+  allowFutureFromEnv,
+} from '../../scripts/lib/dates.js';
 import {
   pickCommitment,
   indicatorConfig,
@@ -50,9 +59,12 @@ describe('dates', () => {
   });
   test('parseArgs', () => {
     const now = new Date('2027-02-01T11:07:00Z');
-    assert.deepEqual(parseArgs(['--mode=monthly'], now), { mode: 'monthly', asOf: '2027-02-01' });
-    assert.deepEqual(parseArgs(['--mode=daily', '--as-of='], now), { mode: 'daily', asOf: '2027-02-01' });
-    assert.deepEqual(parseArgs(['--mode=daily', '--as-of=2027-02-10']), { mode: 'daily', asOf: '2027-02-10' });
+    assert.deepEqual(parseArgs(['--mode=monthly'], now), { mode: 'monthly', asOf: '2027-02-01', reprocess: false });
+    assert.deepEqual(parseArgs(['--mode=daily', '--as-of='], now), { mode: 'daily', asOf: '2027-02-01', reprocess: false });
+    assert.deepEqual(parseArgs(['--mode=daily', '--as-of=2027-02-10']), { mode: 'daily', asOf: '2027-02-10', reprocess: false });
+    assert.deepEqual(parseArgs(['--reprocess', '--mode=monthly', '--as-of=2027-02-01']), { mode: 'monthly', asOf: '2027-02-01', reprocess: true });
+    assert.throws(() => parseArgs(['--mode=daily', '--reprocess']), /solo aplica/);
+    assert.throws(() => parseArgs(['--mode=monthly', '--reprocess=true']), /desconocido/);
     assert.throws(() => parseArgs([]), /--mode/);
     assert.throws(() => parseArgs(['--mode=weekly']), /--mode/);
     assert.throws(() => parseArgs(['--mode=daily', '--as-of=2027-02-31']), TypeError);
@@ -75,6 +87,24 @@ const VULN = {
   source: 'manual',
 };
 const AVAIL = { ...VULN, id: 'a', code: 'AVAIL', measurement_type: 'window_average', window_days: 30, green_threshold: 99.9, yellow_threshold: 99.5, thresholds_by_category: {} };
+
+describe('H-C03-01: fechas futuras', () => {
+  const now = new Date('2026-11-20T04:00:00Z'); // 2026-11-19 23:00 en Guayaquil
+  test('rechaza asOf posterior a hoy en America/Guayaquil', () => {
+    assert.doesNotThrow(() => assertNotFuture('2026-11-19', { now }));
+    assert.doesNotThrow(() => assertNotFuture('2026-01-01', { now }));
+    assert.throws(() => assertNotFuture('2026-11-20', { now }), RangeError);
+    assert.throws(() => assertNotFuture('2027-02-10', { now }), /posterior a hoy \(2026-11-19/);
+    assert.doesNotThrow(() => assertNotFuture('2027-02-10', { now, allowFuture: true }));
+  });
+  test('EVALUATE_ALLOW_FUTURE=1 solo contra Supabase local', () => {
+    assert.equal(allowFutureFromEnv({}, 'https://x.supabase.co'), false);
+    assert.equal(allowFutureFromEnv({ EVALUATE_ALLOW_FUTURE: 'true' }, 'http://127.0.0.1:54321'), false);
+    assert.equal(allowFutureFromEnv({ EVALUATE_ALLOW_FUTURE: '1' }, 'http://127.0.0.1:54321'), true);
+    assert.equal(allowFutureFromEnv({ EVALUATE_ALLOW_FUTURE: '1' }, 'http://localhost:54321'), true);
+    assert.throws(() => allowFutureFromEnv({ EVALUATE_ALLOW_FUTURE: '1' }, 'https://x.supabase.co'), /local/);
+  });
+});
 
 describe('build', () => {
   test('pickCommitment: mes antes que trimestre', () => {

@@ -1,7 +1,15 @@
 // C-03/C-04: evaluación mensual y diaria contra una BD en memoria con el escenario de la semilla.
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
-import { runMonthly, runDaily, latestSnapshot, stableStringify, ACTOR } from '../../scripts/lib/run.js';
+import {
+  runMonthly,
+  runDaily,
+  latestSnapshot,
+  stableStringify,
+  measurementsFrom,
+  MonthClosedError,
+  ACTOR,
+} from '../../scripts/lib/run.js';
 import { createFakeDb, seedScenario, IDS } from './fake-db.js';
 
 const { U, I } = IDS;
@@ -244,4 +252,65 @@ test('stableStringify ignora el orden de claves (jsonb lo reordena)', () => {
   assert.equal(stableStringify({ b: 1, a: [{ d: 2, c: null }] }), stableStringify({ a: [{ c: null, d: 2 }], b: 1 }));
   assert.notEqual(stableStringify({ a: 1 }), stableStringify({ a: 2 }));
   assert.equal(stableStringify('x'), '"x"');
+});
+
+describe('carga de mediciones: trimestres de 92 días', () => {
+  test('measurementsFrom cubre el inicio del trimestre y la ventana más larga', () => {
+    assert.equal(measurementsFrom('2027-09', 90), '2027-07-01');
+    assert.equal(measurementsFrom('2027-12', 90), '2027-10-01');
+    assert.equal(measurementsFrom('2027-03', 90), '2026-12-31'); // ventana antes que el trimestre
+    assert.equal(measurementsFrom('2027-02', 30), '2027-01-01');
+    assert.equal(measurementsFrom('2027-01', 120), '2026-10-03');
+  });
+
+  for (const [first, close, asOf] of [
+    ['2027-07-01', '2027-09', '2027-10-01'],
+    ['2027-10-01', '2027-12', '2028-01-01'],
+  ]) {
+    test(`lo resuelto el ${first} cuenta en el cierre de ${close}`, async () => {
+      const q = first.slice(0, 4) + '-Q' + (first.slice(5, 7) === '07' ? '3' : '4');
+      const data = seedScenario();
+      data.indicators = data.indicators.filter((i) => i.id === I.vuln);
+      data.commitments = [];
+      data.exceptions = [];
+      data.targets = [{ unit_id: U.alfa, indicator_id: I.vuln, month: close, target_value: 100 }];
+      data.measurements = [
+        { unit_id: U.alfa, indicator_id: I.vuln, measured_on: first, value: 60, category: 'P0P1', kind: 'resolved', created_at: 'a' },
+        { unit_id: U.alfa, indicator_id: I.vuln, measured_on: `${close}-15`, value: 40, category: 'P0P1', kind: 'resolved', created_at: 'b' },
+      ];
+      const db = createFakeDb(data);
+      await runMonthly(db, { asOf });
+      const row = indRow(db, U.alfa, I.vuln, close);
+      assert.equal(row.value, 100, `${q}: 60 + 40 resueltas sobre meta 100`);
+      assert.equal(row.color, 'green');
+    });
+  }
+});
+
+describe('H-C03-01: re-cierre de un mes ya evaluado', () => {
+  test('con guardReclose, sin --reprocess se rechaza sin escribir', async () => {
+    const db = createFakeDb(seedScenario());
+    await runMonthly(db, { asOf: '2027-02-01', guardReclose: true });
+    const n = { ev: db.tables.evaluations.length, al: db.tables.alerts.length, au: db.tables.audit_log.length };
+    await assert.rejects(runMonthly(db, { asOf: '2027-02-01', guardReclose: true }), MonthClosedError);
+    assert.deepEqual({ ev: db.tables.evaluations.length, al: db.tables.alerts.length, au: db.tables.audit_log.length }, n);
+  });
+  test('con --reprocess vuelve a evaluar y queda auditado como evaluation_reprocess', async () => {
+    const db = createFakeDb(seedScenario());
+    const first = await runMonthly(db, { asOf: '2027-02-01', guardReclose: true, reprocess: true });
+    assert.equal(first.reprocessed, false, 'el primer cierre no es reproceso');
+    assert.equal(db.tables.audit_log.filter((a) => a.action === 'evaluation_reprocess').length, 0);
+    // Dato tardío: Beta resuelve lo pendiente de enero.
+    db.tables.measurements.push({
+      unit_id: U.beta, indicator_id: I.vuln, measured_on: '2027-01-31', value: 200, category: 'P2P3', kind: 'resolved', created_at: 'z',
+    });
+    const r = await runMonthly(db, { asOf: '2027-02-01', guardReclose: true, reprocess: true });
+    assert.equal(r.reprocessed, true);
+    assert.equal(r.written, 1, 'solo cambia el VULN de Beta (el global sigue rojo por OBS)');
+    const audit = db.tables.audit_log.filter((a) => a.action === 'evaluation_reprocess');
+    assert.equal(audit.length, 1);
+    assert.equal(audit[0].actor, ACTOR);
+    assert.equal(audit[0].entity_id, '2027-01');
+    assert.equal(audit[0].details.written, 1);
+  });
 });

@@ -106,3 +106,15 @@ select pg_temp.expect(
 select pg_temp.expect(
   (select count(*) from public.audit_log where actor = 'system:evaluate' and action = 'pace_snapshot') = 3,
   'auditoría: snapshot del ritmo por unidad, una vez por día');
+select pg_temp.expect(
+  (select count(*) = 2 and bool_and(entity_id in ('2027-01', '2027-02'))
+     from public.audit_log where actor = 'system:evaluate' and action = 'evaluation_reprocess'),
+  'auditoría: cada re-cierre con --reprocess queda como evaluation_reprocess');
+
+-- H-C03-04: created_at de measurements lo fija la BD, no quien inserta
+insert into public.measurements (unit_id, indicator_id, measured_on, value, created_at)
+values (:alfa, '33333333-3333-4333-8333-000000000002', '2027-01-20', 99.9, '2000-01-01');
+select pg_temp.expect(
+  (select created_at > now() - interval '1 hour' from public.measurements
+    where unit_id = :alfa and measured_on = '2027-01-20' and value = 99.9),
+  'measurements.created_at forzado a now() al insertar');

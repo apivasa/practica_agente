@@ -90,11 +90,30 @@ async function sendAlerts(db, alerts, context) {
 }
 
 /**
- * Evaluación mensual: cierra el mes anterior al de asOf.
- * @param {Db} db
- * @param {{ asOf: string, log?: (msg: string) => void }} options
+ * Primera fecha de mediciones a leer para cerrar `evalMonth`: el inicio del trimestre
+ * (acumulados de cumulative_target) o el inicio de la ventana más larga, lo que sea antes.
+ * Q3 y Q4 tienen 92 días: un corte fijo de 90 perdería el día 1 del trimestre.
+ * @param {string} evalMonth
+ * @param {number} maxWindowDays
  */
-export async function runMonthly(db, { asOf, log = () => {} }) {
+export function measurementsFrom(evalMonth, maxWindowDays) {
+  const { start } = quarterBounds(evalMonth);
+  const windowStart = addDays(monthEnd(evalMonth), -Math.max(0, maxWindowDays));
+  return start < windowStart ? start : windowStart;
+}
+
+/** Re-cierre de un mes ya evaluado sin --reprocess (H-C03-01). */
+export class MonthClosedError extends Error {}
+
+/**
+ * Evaluación mensual: cierra el mes anterior al de asOf.
+ * - `guardReclose`: si el mes ya tiene evaluación de unidad guardada, exige `reprocess`
+ *   (lo activa scripts/evaluate.js; la biblioteca por defecto es idempotente sin bandera).
+ * - `reprocess` sobre un mes cerrado queda auditado como `evaluation_reprocess`.
+ * @param {Db} db
+ * @param {{ asOf: string, reprocess?: boolean, guardReclose?: boolean, log?: (msg: string) => void }} options
+ */
+export async function runMonthly(db, { asOf, reprocess = false, guardReclose = false, log = () => {} }) {
   const evalMonth = monthToClose(asOf);
   const prevMonth = addMonths(evalMonth, -1);
   const { quarter, months: quarterMonths } = quarterBounds(evalMonth);
@@ -109,13 +128,20 @@ export async function runMonthly(db, { asOf, log = () => {} }) {
     db.evaluations([...new Set([...quarterMonths.filter((m) => m <= evalMonth), prevMonth])]),
     db.exceptions({ expiresFrom: addDays(asOf, -40) }),
   ]);
-  const maxWindow = Math.max(90, ...indicators.map((i) => Number(i.window_days) || 0));
+  const maxWindow = Math.max(0, ...indicators.map((i) => Number(i.window_days) || 0));
   const to = monthEnd(evalMonth);
+  const from = measurementsFrom(evalMonth, maxWindow);
   const measurements = indicators.length
-    ? await db.measurements({ indicatorIds: indicators.map((i) => i.id), from: addDays(to, -maxWindow), to })
+    ? await db.measurements({ indicatorIds: indicators.map((i) => i.id), from, to })
     : [];
 
   const storedByKey = new Map(stored.map((e) => [evalKey(e.unit_id, e.indicator_id, e.month), e]));
+  const closed = stored.some((e) => e.month === evalMonth && e.indicator_id === null);
+  if (closed && guardReclose && !reprocess) {
+    throw new MonthClosedError(
+      `El mes ${evalMonth} ya está cerrado; para volver a evaluarlo usa --reprocess (queda auditado)`,
+    );
+  }
   const rows = [];
   const pending = [];
   const errors = [];
@@ -215,7 +241,28 @@ export async function runMonthly(db, { asOf, log = () => {} }) {
     );
   }
   const alerts = await sendAlerts(db, pending, context);
-  return { mode: 'monthly', asOf, month: evalMonth, evaluations: rows.length, written: written.length, alerts: alerts.length, errors };
+  const reprocessed = closed && reprocess;
+  if (reprocessed) {
+    await db.insertAudit([
+      {
+        actor: ACTOR,
+        action: 'evaluation_reprocess',
+        entity: 'evaluations',
+        entity_id: evalMonth,
+        details: { ...context, written: written.length, alerts: alerts.length, errors: errors.length },
+      },
+    ]);
+  }
+  return {
+    mode: 'monthly',
+    asOf,
+    month: evalMonth,
+    evaluations: rows.length,
+    written: written.length,
+    alerts: alerts.length,
+    reprocessed,
+    errors,
+  };
 }
 
 /**
