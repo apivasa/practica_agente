@@ -2,14 +2,23 @@ import { test, expect } from '@playwright/test';
 
 // S-04 · categoría 4: clickjacking. frame-ancestors no aplica por <meta> y
 // GitHub Pages no admite X-Frame-Options; src/security/anti-framing.js vacía y
-// oculta el documento si la app está dentro de un marco. La página atacante se
-// sirve con page.route (no sale del runner) en otro origen de bucle local
-// (127.0.0.1 frente a localhost), para no chocar con Private Network Access.
+// oculta el documento si la app está dentro de un marco. La página atacante
+// y la víctima se sirven con page.route en dominios reservados (.example): la
+// víctima es el build local reenviado tal cual (route.fetch a vite preview), así
+// que el marco es de otro origen y nada sale del runner. (Un iframe directo a
+// localhost desde otro origen lo bloquea Chrome con Private Network Access.)
 
-const ATTACKER = 'http://127.0.0.1:4173/__atacante__.html';
+const ATTACKER = 'http://atacante.example/';
+const VICTIM = 'http://victima.example';
 
 async function framedApp(page, baseURL, hash = '#/login') {
-  const appUrl = new URL(`./${hash}`, baseURL).href;
+  const local = new URL(baseURL);
+  const appUrl = `${VICTIM}${local.pathname}${hash}`;
+  await page.route(/^http:\/\/victima\.example\//, async (route) => {
+    const u = new URL(route.request().url());
+    const response = await route.fetch({ url: `${local.origin}${u.pathname}${u.search}` });
+    await route.fulfill({ response });
+  });
   await page.route(ATTACKER, (route) =>
     route.fulfill({
       contentType: 'text/html',
