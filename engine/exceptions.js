@@ -1,5 +1,5 @@
 // Excepciones del comité (C-02) — funciones puras, sin dependencias.
-// Las mismas reglas que aplica la BD (migración 20261119130000_exceptions_c02.sql)
+// Las mismas reglas que aplica la BD (migración 20261122120000_exceptions_c02.sql)
 // para que el front valide antes de enviar y las Actions clasifiquen sin duplicar.
 
 /** Tope de vigencia en días desde la creación. Igual a private.exception_max_days(). */
