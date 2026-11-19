@@ -27,3 +27,18 @@ Registro de hallazgos que no bloquean el merge. Cada uno se propone como ítem o
 | H-C01-01 | C-01 | Baja | 3 Entradas | **Corregido** (89c762b). `DATE_RE` aceptaba fechas imposibles (`2026-02-31`). La vigencia indebida no pasa del mes indicado. | Validar la fecha real (ida y vuelta con `Date.UTC`). |
 | H-C01-02 | C-01 | Baja | 5 Automatizaciones | **Parcialmente corregido** (89c762b). Ya se rechazan los huecos entre meses y los meses posteriores a `asOf`. Falta rechazar un historial de un trimestre anterior que no contiene `asOf`. | Resto en C-03: el último mes del historial debe ser el de `asOf` o el anterior. |
 | H-C01-03 | C-01 | Info | 1 RLS | El motor no vincula la excepción con la unidad ni limita su duración. | Controlarlo con RLS y pgTAP en la tabla `exceptions`. |
+
+## Modelo de datos, RLS y auditoría (F-03+F-04+F-06)
+
+Detalle y reproducción en `docs/reportes/F-03-F-04-F-06-seguridad.md`.
+
+| ID | Ítem | Severidad | Categoría | Ubicación | Resumen | Corrección sugerida | Ítem propuesto | Estado |
+|---|---|---|---|---|---|---|---|---|
+| H-F03-01 | F-04 | Media | 1/8 | `rls_policies.sql` `measurements_update`, `commitments_update` | El custodio, al actualizar, puede falsificar `created_by`, marcar `source='automatic'` y cambiar `unit_id`/`measured_on`. En el INSERT también puede declarar `source='automatic'`. | WITH CHECK `created_by = auth.uid()`; grants de columna; `source='automatic'` solo para el backend. | M-04 (carga de mediciones) o fix inmediato | Abierto |
+| H-F03-02 | F-04 | Media | 8 | `audit_triggers.sql` | Sin trigger de auditoría en `measurements` (ni en `targets`, `units` ni `alerts`): las mediciones se pueden reescribir sin dejar rastro. | `audit_measurements`, `audit_targets`, `audit_units`; auditoría explícita del backend para evaluaciones y alertas. | M-04 / C-02 | Abierto |
+| H-F03-03 | F-04 | Baja | 8 | `audit_log` | `service_role` puede hacer UPDATE, DELETE y TRUNCATE sobre la auditoría. | Revocarlos y añadir un trigger que bloquee UPDATE/DELETE (append-only). | S-03 | Abierto |
+| H-F03-04 | F-04 | Baja | 1 | default privileges de `public` y `private` | Las tablas y funciones nuevas nacen con ALL/EXECUTE para anon/PUBLIC. Mitigado por la prueba de regresión 041. | `alter default privileges … revoke`. | S-03 | Abierto |
+| H-F03-05 | F-04 | Baja | 1 | `exceptions_update` | Un miembro del comité reescribe la excepción de otro: toma la firma, extiende la vigencia sin tope y la cambia de unidad. | `unit_id` inmutable; CHECK de vigencia (ligado a H-C01-03). | C-0x (excepciones) | Abierto |
+| H-F03-06 | F-04 | Baja | 2 | `config.toml` / panel de Auth | Registro abierto activo (`enable_signup` por defecto). | `enable_signup = false`; verificar en S-05. | S-05 | Abierto |
+| H-F03-07 | F-06 | Info | 8 | `seed.sql` | Contraseña local común para 7 cuentas. Solo es seguro mientras `seed.sql` no llegue a producción. | Guarda en `tests/security/db-static-f03.test.js`; en `deploy.yml` (V-05) usar `db push` sin `--include-seed`. | V-05 | Mitigado |
+| H-F03-08 | F-04 | Info | 1 | `units_select`, `indicators_select` | El custodio ve todas las unidades; todo rol ve la configuración de todos los indicadores. | Revisar si se añade asignación indicador↔unidad. | — | Aceptado |
