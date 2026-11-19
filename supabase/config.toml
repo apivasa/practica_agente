@@ -6,5 +6,3 @@ project_id = "practica-agente"
 # en local); un usuario autenticado sin fila en user_roles no ve nada.
 enable_signup = false
 
-[auth.email]
-enable_signup = false
