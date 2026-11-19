@@ -1,9 +1,9 @@
 # S-02 + S-03 — Informe de seguridad
-Veredicto: ROJO
+Veredicto: VERDE
 Requiere cambiar alcance: no
 Superficie nueva: ninguna de la app. El ítem añade el job `pentest-api` en `seguridad.yml`: levanta Supabase local efímero (CLI 3.2.0, migraciones + seed) y ataca la API real (`/rest/v1`, `/auth/v1`) con los 7 usuarios del seed y como anónimo. Las claves locales las genera la CLI; no se usan secretos del repo ni hosts externos.
 
-El veredicto es `ROJO` solo por H-S03-00, un defecto de configuración de una línea (fuera de mi carpeta) que deja el job `pentest-api` en rojo en la rama. La capa de datos y la API no tienen hallazgos altos ni críticos: con ese único cambio aplicado (rama `ensayo/s03-pentest`, que no se fusiona) pasan los 428 casos.
+Intento 1 salió `ROJO` por H-S03-00, un defecto de configuración que impedía iniciar sesión. El desarrollador lo corrigió en `main`, la rama se rebasó sobre `main` y ahora `pentest-api` pasa con la configuración real. Sin hallazgos altos ni críticos en la API ni en la capa de datos.
 
 ## S-02: modelo de amenazas
 `docs/seguridad/modelo-amenazas.md` tiene ahora:
@@ -36,7 +36,7 @@ Criterio "cualquier tabla sin RLS hace fallar el job": el caso › catálogo con
 - ZAP: no aplica (S-04).
 
 ## Hallazgos
-**H-S03-00 · Alta (disponibilidad) · 2 Auth · `supabase/config.toml:9-10`**
+**H-S03-00 · Alta (disponibilidad) · 2 Auth · `supabase/config.toml:9-10` — Corregido en `main`**
 - Causa: `[auth.email] enable_signup = false` la CLI lo traduce a `GOTRUE_EXTERNAL_EMAIL_ENABLED=false`, lo que apaga el proveedor de correo entero, también el inicio de sesión.
 - Reproducción:
   ```
