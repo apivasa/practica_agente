@@ -1,10 +1,10 @@
 # Estado del modo autónomo
 
 ## Candado de ciclo
-Estado: LIBRE
-Desde:
-Latido:
-Sesión:
+Estado: EN CURSO
+Desde: 2026-11-19 13:47
+Latido: 2026-11-19 13:47
+Sesión: interactiva (session_013PQePWEzq4D4wxGZ4vzQjC)
 
 ## Log de ciclos (más reciente arriba)
 

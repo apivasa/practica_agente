@@ -93,12 +93,12 @@ El orquestador toma el **primer ítem `Pendiente`** cuyas dependencias estén `H
 
 | # | ID | Estado | Intentos | PR | Nota |
 |---|---|---|---|---|---|
-| 1 | F-01 | Pendiente | 0 | |  |
-| 2 | F-02 | Pendiente | 0 | |  |
+| 1 | F-01 | En curso | 0 | |  |
+| 2 | F-02 | En curso | 0 | |  |
 | 3 | S-01 | Pendiente | 0 | | Constructor: seguridad |
 | 4 | F-03 | Pendiente | 0 | |  |
 | 5 | S-02 | Pendiente | 0 | | Constructor: seguridad |
-| 6 | M-01 | Pendiente | 0 | | Puede ir en paralelo a F-03 (solo depende de F-01) |
+| 6 | M-01 | En curso | 0 | | Puede ir en paralelo a F-03 (solo depende de F-01) |
 | 7 | F-04 | Pendiente | 0 | |  |
 | 8 | F-06 | Pendiente | 0 | |  |
 | 9 | S-03 | Pendiente | 0 | | Constructor: seguridad |
