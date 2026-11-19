@@ -3,6 +3,8 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!-- S-04: la Content-Security-Policy la inyecta el build (vite.config.js, src/security/csp.js) como primer elemento de <head>. -->
+    <meta name="referrer" content="no-referrer" />
     <title>App de control de capacidad RUN</title>
   </head>
   <body>

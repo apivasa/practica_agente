@@ -1,0 +1,4 @@
+10003	FAIL	(Vulnerable JS Library)
+10017	FAIL	(Cross-Domain JavaScript Source File Inclusion)
+10062	FAIL	(PII Disclosure)
+90003	FAIL	(Sub Resource Integrity Attribute Missing)
