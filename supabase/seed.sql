@@ -34,9 +34,10 @@ from (values
   ('11111111-1111-4111-8111-000000000006'::uuid, 'lider2@example.test',    'Líder Unidad Beta (ficticio)'),
   ('11111111-1111-4111-8111-000000000007'::uuid, 'lider3@example.test',    'Líder Unidad Gamma (ficticio)'),
   -- M-02..M-04 (e2e): custodio propio para no alterar los alcances que
-  -- verifican otras pruebas, un usuario con dos roles y uno sin rol.
+  -- verifican otras pruebas, un usuario con dos roles y uno sin rol. Ninguno
+  -- es líder ni comité: no reciben alertas de C-04.
   ('11111111-1111-4111-8111-000000000008'::uuid, 'custodio3@example.test', 'Custodio cambios (ficticio)'),
-  ('11111111-1111-4111-8111-000000000009'::uuid, 'multirol@example.test',  'Comité y líder (ficticio)'),
+  ('11111111-1111-4111-8111-000000000009'::uuid, 'multirol@example.test',  'Gestora y custodio (ficticio)'),
   ('11111111-1111-4111-8111-000000000010'::uuid, 'sinrol@example.test',    'Usuario sin rol (ficticio)')
 ) as u (id, email, display_name);
 
@@ -86,7 +87,13 @@ insert into public.indicators (
   ('33333333-3333-4333-8333-000000000005', 'CHG', 'Cambios fallidos',
    'Porcentaje de cambios que terminan en incidente (ficticio, para e2e).',
    'window_average', 'lower_is_better', 30, 5, 10, '{}',
-   'monthly', 0, 'manual', '11111111-1111-4111-8111-000000000008', true);
+   'monthly', 0, 'manual', '11111111-1111-4111-8111-000000000008', false),
+  ('33333333-3333-4333-8333-000000000006', 'LAT', 'Latencia',
+   'Latencia p95 de los servicios en ms (ficticio, para e2e).',
+   'window_average', 'lower_is_better', 30, 300, 500, '{}',
+   'monthly', 0, 'manual', '11111111-1111-4111-8111-000000000009', false);
+-- CHG y LAT están inactivos: no entran en la evaluación programada (C-03) ni
+-- cambian sus conteos; solo dan a custodio3 y multirol un rol de custodio.
 
 -- ---------------------------------------------------------------------------
 -- Roles
@@ -102,8 +109,8 @@ insert into public.user_roles (user_id, role, unit_id, indicator_id) values
   ('11111111-1111-4111-8111-000000000006', 'unit_leader', '22222222-2222-4222-8222-000000000002', null),
   ('11111111-1111-4111-8111-000000000007', 'unit_leader', '22222222-2222-4222-8222-000000000003', null),
   ('11111111-1111-4111-8111-000000000008', 'custodian',   null, '33333333-3333-4333-8333-000000000005'),
-  ('11111111-1111-4111-8111-000000000009', 'committee',   null, null),
-  ('11111111-1111-4111-8111-000000000009', 'unit_leader', '22222222-2222-4222-8222-000000000003', null);
+  ('11111111-1111-4111-8111-000000000009', 'kpi_manager', null, null),
+  ('11111111-1111-4111-8111-000000000009', 'custodian',   null, '33333333-3333-4333-8333-000000000006');
 -- sinrol@example.test no tiene filas en user_roles.
 
 -- ---------------------------------------------------------------------------

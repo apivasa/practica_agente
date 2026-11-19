@@ -11,6 +11,9 @@ async function login(page, email) {
   await page.getByLabel('Correo').fill(email);
   await page.getByLabel('Contraseña').fill(PASSWORD);
   await page.getByRole('button', { name: 'Entrar' }).click();
+  // Espera a que el login termine de redirigir antes de navegar a otra ruta.
+  await expect(page.getByRole('button', { name: 'Cerrar sesión' })).toBeVisible();
+  await expect(page).not.toHaveURL(/#\/(login)?$/);
 }
 
 async function logout(page) {
@@ -19,6 +22,7 @@ async function logout(page) {
 }
 
 const status = (page) => page.locator('.form-status');
+const rowOf = (page, code) => page.getByRole('row').filter({ has: page.getByRole('cell', { name: code, exact: true }) });
 const unique = () => `E2E${Date.now().toString(36).toUpperCase()}${Math.floor(Math.random() * 1000)}`;
 
 test.describe('M-02 · indicadores (gestora)', () => {
@@ -53,7 +57,7 @@ test.describe('M-02 · indicadores (gestora)', () => {
     await page.getByLabel('Mínimo de muestra').fill('2');
     await page.getByRole('button', { name: 'Guardar indicador' }).click();
     await expect(status(page)).toHaveText(`Indicador ${code} guardado.`);
-    const row = page.getByRole('row').filter({ hasText: code });
+    const row = rowOf(page, code);
     await expect(row).toContainText('Activo');
     await expect(row).not.toContainText('incoherentes');
 
@@ -62,8 +66,8 @@ test.describe('M-02 · indicadores (gestora)', () => {
     await login(page, 'custodio3@example.test');
     await expect(page).toHaveURL(/#\/custodio$/);
     await page.getByRole('link', { name: 'Mediciones' }).click();
-    await expect(page.getByLabel('Indicador')).toContainText(code);
-    await page.getByLabel('Indicador').selectOption({ label: `${code} · Tiempo de aprovisionamiento (e2e)` });
+    await expect(page.getByLabel('Indicador', { exact: true })).toContainText(code);
+    await page.getByLabel('Indicador', { exact: true }).selectOption({ label: `${code} · Tiempo de aprovisionamiento (e2e)` });
     await page.getByLabel('Valor').fill('20');
     await page.getByRole('button', { name: 'Guardar medición' }).click();
     await expect(status(page)).toContainText('guardada');
@@ -82,9 +86,9 @@ test.describe('M-02 · indicadores (gestora)', () => {
     await page.getByRole('button', { name: 'Guardar indicador' }).click();
     await expect(status(page)).toHaveText(`Indicador ${code} guardado.`);
     await page.getByRole('button', { name: `Desactivar ${code}` }).click();
-    await expect(page.getByRole('row').filter({ hasText: code })).toContainText('Inactivo');
+    await expect(rowOf(page, code)).toContainText('Inactivo');
     await page.getByRole('button', { name: `Activar ${code}` }).click();
-    await expect(page.getByRole('row').filter({ hasText: code })).toContainText('Activo');
+    await expect(rowOf(page, code)).toContainText('Activo');
   });
 
   test('un custodio que pide #/gestora/indicadores vuelve a su inicio', async ({ page }) => {
@@ -103,7 +107,7 @@ test.describe('M-03 · compromisos (custodio)', () => {
     await login(page, 'custodio2@example.test');
     await page.getByRole('link', { name: 'Compromisos' }).click();
     await expect(page).toHaveURL(/#\/custodio\/compromisos$/);
-    await page.getByLabel('Indicador').selectOption({ label: 'AVAIL · Disponibilidad' });
+    await page.getByLabel('Indicador', { exact: true }).selectOption({ label: 'AVAIL · Disponibilidad' });
     await expect(page.locator('.general-thresholds')).toHaveText('Umbral general: verde 99.9, amarillo 99.5.');
 
     await page.getByLabel('Unidad', { exact: true }).selectOption({ label: 'Unidad Beta' });
@@ -118,7 +122,7 @@ test.describe('M-03 · compromisos (custodio)', () => {
     await page.getByLabel('Umbral amarillo negociado').fill('99');
     await page.getByRole('button', { name: 'Guardar compromiso' }).click();
     await expect(status(page)).toHaveText(`Compromiso de Unidad Beta para ${period} guardado.`);
-    const row = page.getByRole('row').filter({ hasText: period });
+    const row = rowOf(page, period);
     await expect(row.getByRole('cell')).toHaveText(['Unidad Beta', period, '99.5', '99', 'Negociado', '—', 'Editar']);
   });
 
@@ -126,14 +130,14 @@ test.describe('M-03 · compromisos (custodio)', () => {
     const period = `${2030 + Math.floor(Math.random() * 60)}-0${1 + Math.floor(Math.random() * 9)}`;
     await login(page, 'custodio1@example.test');
     await page.goto('./#/custodio/compromisos');
-    await expect(page.getByLabel('Indicador')).toContainText('VULN');
+    await expect(page.getByLabel('Indicador', { exact: true })).toContainText('VULN');
     await page.getByLabel('Unidad', { exact: true }).selectOption({ label: 'Unidad Gamma' });
     await page.getByLabel('Periodo').fill(period);
     await page.getByLabel('Paquete P0P1').fill('1500');
     await page.getByLabel('Paquete P2P3').fill('500');
     await page.getByRole('button', { name: 'Guardar compromiso' }).click();
     await expect(status(page)).toContainText('guardado');
-    const row = page.getByRole('row').filter({ hasText: period });
+    const row = rowOf(page, period);
     await expect(row).toContainText('P0P1: 1500, P2P3: 500');
     await expect(row).toContainText('General');
   });
@@ -144,7 +148,7 @@ test.describe('M-04 · mediciones (custodio)', () => {
     await login(page, 'custodio2@example.test');
     await page.getByRole('link', { name: 'Mediciones' }).click();
     await expect(page).toHaveURL(/#\/custodio\/mediciones$/);
-    await page.getByLabel('Indicador').selectOption({ label: 'AVAIL · Disponibilidad' });
+    await page.getByLabel('Indicador', { exact: true }).selectOption({ label: 'AVAIL · Disponibilidad' });
     const csv = [
       'fecha,unidad,valor',
       '2026-02-30,Unidad Alfa,99.9',
@@ -167,7 +171,7 @@ test.describe('M-04 · mediciones (custodio)', () => {
   test('CSV válido se carga y aparece en las últimas mediciones', async ({ page }) => {
     await login(page, 'custodio2@example.test');
     await page.goto('./#/custodio/mediciones');
-    await page.getByLabel('Indicador').selectOption({ label: 'OBS · Observabilidad' });
+    await page.getByLabel('Indicador', { exact: true }).selectOption({ label: 'OBS · Observabilidad' });
     const app = unique().toLowerCase();
     const csv = `fecha;unidad;app_id;cumple\r\n2026-11-02;Unidad Alfa;${app}-a;sí\r\n2026-11-02;unidad beta;${app}-b;no\r\n`;
     await page.getByLabel('Archivo CSV').setInputFiles({ name: 'ok.csv', mimeType: 'text/csv', buffer: Buffer.from(csv) });
@@ -182,7 +186,7 @@ test.describe('M-04 · mediciones (custodio)', () => {
   test('captura manual de vulnerabilidades con categoría y tipo', async ({ page }) => {
     await login(page, 'custodio1@example.test');
     await page.goto('./#/custodio/mediciones');
-    await expect(page.getByLabel('Indicador')).toContainText('VULN');
+    await expect(page.getByLabel('Indicador', { exact: true })).toContainText('VULN');
     await page.getByLabel('Fecha').fill('2026-11-03');
     await page.getByLabel('Unidad', { exact: true }).selectOption({ label: 'Unidad Beta' });
     await page.getByLabel('Valor').fill('1.5');
@@ -198,10 +202,15 @@ test.describe('M-04 · mediciones (custodio)', () => {
 });
 
 test.describe('usuarios del seed con varios roles o sin rol', () => {
-  test('multirol@example.test (comité y líder) ve el menú de elección', async ({ page }) => {
+  test('multirol@example.test (gestora y custodio) elige rol y solo ve indicadores activos', async ({ page }) => {
     await login(page, 'multirol@example.test');
     await expect(page).toHaveURL(/#\/inicio$/);
-    await expect(page.locator('.role-list a')).toHaveText(['Comité de delivery', 'Líder de unidad']);
+    await expect(page.locator('.role-list a')).toHaveText(['Gestora de KPIs', 'Custodio de indicador']);
+    await page.getByRole('link', { name: 'Custodio de indicador' }).click();
+    await page.getByRole('link', { name: 'Mediciones' }).click();
+    await expect(page.getByText('No custodias indicadores activos.')).toBeVisible();
+    await page.goto('./#/gestora/indicadores');
+    await expect(page.getByRole('heading', { level: 2 })).toHaveText('Indicadores');
   });
 
   test('sinrol@example.test entra pero solo ve "Sin acceso"', async ({ page }) => {
