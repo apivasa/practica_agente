@@ -11,3 +11,9 @@ export {
 export { measure, parseDay, REASON_MISSING_TARGET, REASON_OUT_OF_RANGE } from './measure.js';
 export { evaluateColor, tolerance } from './color.js';
 export * from './escalation.js';
+export {
+  packageStatus,
+  paceStatus,
+  recalculateOnNewCritical,
+  DEFAULT_COMPLIANCE_THRESHOLDS,
+} from './vulnerabilities.js';
