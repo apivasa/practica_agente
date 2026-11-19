@@ -8,6 +8,8 @@ export const CHANGE_REF_MAX_LEN = 200;
 export const REASON_MAX_LEN = 2000;
 export const EXCEPTION_SCOPES = Object.freeze(['change_start', 'all']);
 
+import { businessDate } from './dates.js';
+
 const DATE_RE = /^(\d{4})-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$/;
 
 /** @param {unknown} s @returns {s is string} */
@@ -51,6 +53,28 @@ export function exceptionStatus(ex, asOf) {
   if (revokedOn !== null && !isDate(revokedOn)) throw new TypeError('revokedOn inválido');
   if (revokedOn !== null && revokedOn <= asOf) return 'revoked';
   return ex.expiresOn >= asOf ? 'active' : 'expired';
+}
+
+/**
+ * Fila de public.exceptions (snake_case, revoked_at timestamptz) -> excepción del motor.
+ * La fecha de revocación se toma en America/Guayaquil. Lo usan el front y las Actions.
+ * @param {{ id: string, scope: string, expires_on: string, change_ref?: string | null, revoked_at?: string | null }} row
+ */
+export function exceptionFromRow(row) {
+  if (!row || typeof row !== 'object') throw new TypeError('Fila de excepción inválida');
+  let revokedOn = null;
+  if (row.revoked_at !== null && row.revoked_at !== undefined) {
+    const d = new Date(row.revoked_at);
+    if (Number.isNaN(d.getTime())) throw new TypeError(`revoked_at inválido: ${String(row.revoked_at)}`);
+    revokedOn = businessDate(d);
+  }
+  return {
+    id: row.id,
+    scope: row.scope,
+    expiresOn: row.expires_on,
+    changeRef: row.change_ref ?? null,
+    revokedOn,
+  };
 }
 
 /**

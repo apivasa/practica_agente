@@ -3,7 +3,7 @@
 -- solo quien aprobó edita su excepción (H-S03-04 / H-F03-05), revocación,
 -- y el líder ni crea ni edita excepciones.
 begin;
-select plan(36);
+select plan(38);
 
 insert into auth.users (id, email, aud, role) values
   ('c0200000-0000-4000-8000-000000000001', 'c02-comite1@example.test',  'authenticated', 'authenticated'),
@@ -30,6 +30,12 @@ select has_column('public', 'exceptions', 'revoked_at', 'exceptions.revoked_at e
 select has_column('public', 'exceptions', 'revoked_by', 'exceptions.revoked_by existe');
 select has_trigger('public', 'exceptions', 'exceptions_enforce_rules', 'trigger de reglas de excepciones');
 select is(private.exception_max_days(), 90, 'tope de vigencia por defecto: 90 días');
+select ok(
+  (select pg_get_expr(polwithcheck, polrelid) from pg_policy where polname = 'exceptions_insert') like '%America/Guayaquil%',
+  'política de alta: compara con la fecha de America/Guayaquil');
+select ok(
+  (select position('current_date' in prosrc) = 0 from pg_proc where proname = 'enforce_exception_rules'),
+  'trigger: no usa current_date (UTC)');
 
 -- ---------------------------------------------------------------------------
 -- Comité 1 aprueba

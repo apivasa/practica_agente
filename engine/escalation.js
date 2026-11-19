@@ -1,6 +1,7 @@
 // Motor de escalada (candados) — funciones puras, sin dependencias.
 // Reglas: docs/diseno.md, secciones "Reglas de escalada", "Excepciones" y
 // "Caso: vulnerabilidades". Detalle de la tabla de verdad en engine/ESCALATION.md.
+import { exceptionStatus } from './exceptions.js';
 
 /** @typedef {'green' | 'yellow' | 'red' | 'not_evaluated'} Color */
 /** @typedef {'normal' | 'restricted' | 'frozen' | 'exception'} Level */
@@ -181,8 +182,10 @@ export function evaluateEscalation(history, options) {
     if (changeRef !== null && (typeof changeRef !== 'string' || changeRef.trim() === '')) {
       throw new TypeError('Excepción inválida: changeRef debe ser null o un texto no vacío');
     }
-    if (revokedOn !== null && revokedOn <= asOf) revokedExceptions.push(ex.id);
-    else if (ex.expiresOn >= asOf) valid.push(ex);
+    // Regla única de vigencia/revocación: engine/exceptions.js#exceptionStatus.
+    const status = exceptionStatus({ expiresOn: ex.expiresOn, revokedOn }, asOf);
+    if (status === 'revoked') revokedExceptions.push(ex.id);
+    else if (status === 'active') valid.push(ex);
     else expiredExceptions.push(ex.id);
   }
 

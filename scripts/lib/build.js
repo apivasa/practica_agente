@@ -9,6 +9,7 @@ import {
   evaluateEscalation,
   quarterOf,
   parseDay,
+  exceptionFromRow,
 } from '../../engine/index.js';
 import { addDays, addMonths, monthEnd, quarterBounds } from './dates.js';
 
@@ -176,7 +177,8 @@ export function evaluateUnitMonth({
   const escalation = evaluateEscalation(history, {
     asOf,
     yellowMonth2EscalatesLikeRed: yellowLikeRed,
-    activeExceptions: exceptions.map((e) => ({ id: e.id, scope: e.scope, expiresOn: e.expires_on })),
+    // C-02: revokedOn (fecha de Guayaquil) y changeRef llegan al motor.
+    activeExceptions: exceptions.map(exceptionFromRow),
   });
   return { color, history, escalation };
 }

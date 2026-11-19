@@ -42,5 +42,6 @@ export {
   addDays,
   maxExpiry,
   exceptionStatus,
+  exceptionFromRow,
   validateExceptionDraft,
 } from './exceptions.js';

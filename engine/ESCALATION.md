@@ -39,3 +39,5 @@ Una excepción está vigente si `expiresOn >= asOf` (se comparan fechas `YYYY-MM
 - `exceptionStatus({ expiresOn, revokedOn }, asOf)` devuelve `'active' | 'expired' | 'revoked'`.
 - `validateExceptionDraft(draft, today)` valida el formulario del comité (unidad, alcance, motivo, change si es `change_start`, vencimiento entre hoy y hoy + 90 días) y devuelve los errores por campo.
 - `addDays`, `maxExpiry`: aritmética de fechas de calendario.
+- `exceptionFromRow(row)`: fila de `public.exceptions` (`expires_on`, `change_ref`, `revoked_at`) al formato del motor; `revokedOn` es la fecha de `revoked_at` en America/Guayaquil. La usan el front y las Actions (`scripts/lib/build.js`, `scripts/lib/alerts.js`).
+- `evaluateEscalation` clasifica cada excepción con `exceptionStatus` (regla única).

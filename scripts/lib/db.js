@@ -89,7 +89,7 @@ export function createDb(sb) {
       fetchAll('exceptions', (a, b) =>
         sb
           .from('exceptions')
-          .select('id, unit_id, scope, expires_on')
+          .select('id, unit_id, scope, change_ref, expires_on, revoked_at')
           .gte('expires_on', expiresFrom)
           .order('expires_on')
           .order('id')

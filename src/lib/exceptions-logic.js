@@ -1,7 +1,7 @@
 // Lógica pura de la pantalla de excepciones del comité (sin DOM ni red).
 // Las reglas (estado, validación, tope) vienen de engine/; aquí solo se
 // adapta la fila de la BD a lo que muestra la vista.
-import { exceptionStatus } from '../../engine/exceptions.js';
+import { exceptionStatus, exceptionFromRow } from '../../engine/exceptions.js';
 import { businessDate } from '../../engine/dates.js';
 
 export const SCOPE_LABELS = Object.freeze({
@@ -29,19 +29,8 @@ export function guayaquilDate(date = new Date()) {
   return businessDate(d);
 }
 
-/**
- * Convierte una fila de public.exceptions al formato del motor.
- * @param {{ id: string, scope: string, expires_on: string, change_ref?: string | null, revoked_at?: string | null }} row
- */
-export function toEngineException(row) {
-  return {
-    id: row.id,
-    scope: row.scope,
-    expiresOn: row.expires_on,
-    changeRef: row.change_ref ?? null,
-    revokedOn: row.revoked_at ? guayaquilDate(row.revoked_at) : null,
-  };
-}
+/** Fila de public.exceptions -> formato del motor (engine/exceptions.js#exceptionFromRow). */
+export const toEngineException = exceptionFromRow;
 
 /**
  * Filas de la BD -> elementos para la vista, ordenados (vigentes primero,
