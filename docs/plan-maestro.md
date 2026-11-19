@@ -108,7 +108,7 @@ El orquestador toma el **primer ítem `Pendiente`** cuyas dependencias estén `H
 | 13 | M-04 | Pendiente | 0 | |  |
 | 14 | S-04 | Pendiente | 0 | | Constructor: seguridad |
 | 15 | M-05 | Pendiente | 0 | |  |
-| 16 | C-01 | Pendiente | 0 | |  |
+| 16 | C-01 | En curso | 0 | |  |
 | 17 | C-02 | Pendiente | 0 | |  |
 | 18 | C-03 | Pendiente | 0 | |  |
 | 19 | C-04 | Pendiente | 0 | |  |
