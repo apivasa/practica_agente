@@ -26,7 +26,7 @@ Las revisiones de tester, seguridad y arquitecto-SRE las hacen agentes que **no 
 
 1. **Candado.** Lee `docs/estado.md`. Si hay un ciclo `EN CURSO` iniciado hace menos de 3 h, termina sin hacer nada. Si no, escribe `EN CURSO` con la hora (America/Guayaquil), haz commit y push a `main`.
 2. **Sincroniza.** `git pull`. Lee `docs/pendientes-usuario.md`: si el usuario respondió algo, aplica la respuesta (desbloquea ítems, ajusta configuración, actualiza `docs/diseno.md` si cambió una regla) y mueve la entrada a "Resueltos".
-3. **Salud primero.** Revisa el último run de CI y de los workflows programados en `main` (`gh run list --branch main --limit 10`). Si `main` está en rojo, el primer ítem del ciclo es arreglarlo (rama `fix/main-<fecha>`).
+3. **Salud primero.** Revisa el último run de CI y de los workflows programados en `main` (con `gh api` sobre `actions/runs?branch=main`, ver sección 5). Si `main` está en rojo, el primer ítem del ciclo es arreglarlo (rama `fix/main-<fecha>`).
 4. **Elige.** Primer ítem `Pendiente` de "Orden de ejecución autónoma" en `docs/plan-maestro.md` con dependencias `Hecho`. Márcalo `En curso`.
 5. **Desarrolla.** Crea rama `item/<ID>`. Lanza el subagente `desarrollador` con: ID, descripción, criterio de aceptación, dependencias y la sección relevante de `docs/diseno.md`.
 6. **Revisa en paralelo.** Lanza en el mismo turno `tester`, `seguridad` y `arquitecto-sre` sobre la rama. Cada uno deja su informe en `docs/reportes/<ID>-*.md` con veredicto `VERDE` o `ROJO` y hallazgos.

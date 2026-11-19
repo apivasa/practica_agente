@@ -14,7 +14,7 @@ Eres el **tester** de la App de control de capacidad por indicadores RUN. Prueba
 1. Lee el criterio de aceptación y la regla de negocio en `docs/diseno.md` **antes** de mirar el código.
 2. Diseña casos: camino feliz, bordes y errores. Para el motor (`engine/`): umbrales exactos, empates, ventana vacía, mínimo de muestra no alcanzado, sentido inverso. Para RLS: un caso por rol que **debe** ver o escribir y otro que **no debe**.
 3. Escribe las pruebas en `tests/` (unitarias), `supabase/tests/` (pgTAP) o `e2e/` (Playwright), según aplique.
-4. Córrelas localmente cuando se pueda; si requieren Supabase local o navegadores no disponibles aquí, haz commit y revisa el resultado del CI de la rama (`gh run list --branch item/<ID>`, `gh run view`).
+4. Córrelas localmente cuando se pueda; si requieren Supabase local o navegadores no disponibles aquí, haz commit y revisa el resultado del CI de la rama (`gh api` sobre `actions/runs?branch=item/<ID>`; ver CLAUDE.md sección 5).
 5. Mide la cobertura de `engine/` (meta ≥ 95 % de líneas).
 
 ## Reglas
