@@ -14,11 +14,13 @@ Quien lee esto en la sesión principal es el **orquestador**. Los subagentes viv
 | Orquestador | este archivo | `docs/plan-maestro.md`, `docs/estado.md`, `docs/pendientes-usuario.md`, ramas, PRs, merges | Escribir código de la app él mismo |
 | Desarrollador | `.claude/agents/desarrollador.md` | `src/`, `engine/`, `supabase/`, `scripts/`, `.github/workflows/` (excepto `salud.yml`), `package.json` | Tocar pruebas del tester para hacerlas pasar |
 | Tester | `.claude/agents/tester.md` | `tests/`, `supabase/tests/`, `e2e/`, `docs/reportes/<ID>-qa.md` | Cambiar código de la app |
-| Seguridad | `.claude/agents/seguridad.md` | `docs/reportes/<ID>-seguridad.md` | Cambiar código |
+| Seguridad | `.claude/agents/seguridad.md` | `tests/security/`, `e2e/security/`, `supabase/tests/security/`, `.github/workflows/seguridad.yml`, `docs/seguridad/`, `docs/reportes/<ID>-seguridad.md` | Cambiar código de la app; atacar hosts que no sean de este proyecto; pruebas destructivas en producción |
 | Arquitecto-SRE | `.claude/agents/arquitecto-sre.md` | `docs/adr/`, `docs/operacion.md`, `.github/workflows/salud.yml`, `docs/reportes/<ID>-arquitectura.md` | Cambiar una decisión confirmada del diseño sin compuerta del usuario |
 | Documentador | `.claude/agents/documentador.md` | `README.md`, `docs/` (excepto plan, estado, pendientes, reportes, adr) | Inventar funcionalidades no construidas |
 
 Las revisiones de tester, seguridad y arquitecto-SRE las hacen agentes que **no escribieron el código**: así nadie se califica a sí mismo.
+
+Seguridad no solo revisa: en cada ítem **ejecuta pruebas activas** (pentest de API y RLS por rol, autenticación, inyección, XSS, IDOR, secretos, SAST, DAST) y su veredicto `ROJO` bloquea el merge igual que el de QA. En los ítems `S-xx` el constructor es `seguridad`, y los revisores son `tester` y `arquitecto-sre`.
 
 ---
 

@@ -35,6 +35,18 @@ Tallas: **S** = 1 ciclo · **M** = 2 ciclos · **L** = 3 ciclos.
 | F-05 | P0 | Login (Supabase Auth, correo + contraseña) y enrutamiento por rol en el front | M | F-04 | Prueba e2e (Playwright) entra con cada rol de seed y llega a su vista |
 | F-06 | P1 | Datos semilla ficticios: 3 unidades, 4 roles, indicadores de ejemplo (vulnerabilidades, disponibilidad, MTTR, cobertura) | S | F-03 | `seed.sql` sin datos personales reales; usado por pruebas |
 
+## Seguridad transversal (constructor: agente `seguridad`)
+**Objetivo:** que cada PR pase por pruebas de seguridad automáticas y que nada llegue a producción sin un pentest completo en verde.
+**Carga:** 11 ciclos repartidos entre sprints.
+
+| ID | Prioridad | Ítem | Talla | Depende de | Criterio de aceptación |
+|---|---|---|---|---|---|
+| S-01 | P0 | Pipeline `seguridad.yml`: gitleaks (diff + historial), semgrep (JS, SQL, Actions), `npm audit`, en cada PR y semanal | M | F-02 | Un secreto de prueba sembrado en una rama de ensayo hace fallar el pipeline; un PR limpio pasa |
+| S-02 | P0 | Modelo de amenazas STRIDE en `docs/seguridad/modelo-amenazas.md`: activos, roles, superficie, amenazas con control y prueba | S | F-03 | Cada amenaza alta tiene una prueba automática asignada |
+| S-03 | P0 | Pentest de RLS y API: por rol y anónimo, CRUD directo a PostgREST y RPC en cada tabla, IDOR entre unidades y KPIs, escalada de rol, JWT manipulado | L | F-04, F-06 | Matriz rol × tabla × operación completa en pruebas; cualquier tabla sin RLS hace fallar CI |
+| S-04 | P0 | DAST: OWASP ZAP baseline contra el front local + Supabase local; CSP por meta, SRI, sin secretos en `dist/`; pruebas XSS e inyección CSV | M | F-05, M-04 | ZAP sin alertas altas; payloads XSS y de fórmula escapados en e2e |
+| S-05 | P0 | **Pentest previo a producción** (compuerta de V-05): ZAP full scan no destructivo contra Pages, pentest asistido de la API real con usuarios de prueba de los 4 roles, revisión de configuración de Auth y secretos de Actions | M | V-01, V-02, C-04, P-02, P-03 | Informe `docs/seguridad/pentest-preproduccion.md` sin hallazgos altos ni críticos abiertos |
+
 ## Sprint 2 — Motor de indicadores
 **Objetivo:** cualquier indicador configurado de forma genérica produce un color correcto por unidad y mes, y el caso de vulnerabilidades calcula su ritmo y meta parcial.
 **Carga:** 12 ciclos (≈ 2 días).
@@ -69,7 +81,7 @@ Tallas: **S** = 1 ciclo · **M** = 2 ciclos · **L** = 3 ciclos.
 | V-02 | P0 | Vista comité: todas las unidades (matriz unidad × indicador), alertas, excepciones | M | C-02, C-04 | e2e con rol comité |
 | V-03 | P0 | Tablero de completitud por custodio (gestora): qué datos faltan para el comité del mes | S | M-04 | Muestra % cargado por custodio y KPI |
 | V-04 | P0 | Salud del sistema: workflow `salud.yml` (cada 6 h) que verifica la web y Supabase, falla visible si algo cae; alerta si un workflow programado no corrió o falló; registro de auditoría de acciones automáticas | M | C-03 | Simulación de caída en CI produce alerta; runbook en `docs/operacion.md` |
-| V-05 | P0 | Despliegue: `deploy.yml` publica `dist/` en GitHub Pages y aplica migraciones a Supabase real en cada merge a `main` | M | V-01, V-02, **P-02, P-03** | Primera publicación accesible en la URL de Pages; migraciones aplicadas |
+| V-05 | P0 | Despliegue: `deploy.yml` publica `dist/` en GitHub Pages y aplica migraciones a Supabase real en cada merge a `main` | M | V-01, V-02, S-05, **P-02, P-03** | Primera publicación accesible en la URL de Pages; migraciones aplicadas |
 | V-06 | P1 | Manual por rol (gestora, custodio, comité, líder) y guía de configuración de indicadores | S | V-01..V-03 | Revisado por el documentador y el arquitecto |
 | V-07 | P2 | Fuentes automáticas de mediciones (Q-02) | L | Q-02 | Bloqueado hasta respuesta Q-02 |
 
@@ -81,29 +93,34 @@ El orquestador toma el **primer ítem `Pendiente`** cuyas dependencias estén `H
 
 | # | ID | Estado | Intentos | PR | Nota |
 |---|---|---|---|---|---|
-| 1 | F-01 | Pendiente | 0 | | |
-| 2 | F-02 | Pendiente | 0 | | |
-| 3 | F-03 | Pendiente | 0 | | |
-| 4 | M-01 | Pendiente | 0 | | Puede ir en paralelo a F-03 (solo depende de F-01) |
-| 5 | F-04 | Pendiente | 0 | | |
-| 6 | F-06 | Pendiente | 0 | | |
-| 7 | F-05 | Pendiente | 0 | | |
-| 8 | M-02 | Pendiente | 0 | | |
-| 9 | M-03 | Pendiente | 0 | | |
-| 10 | M-04 | Pendiente | 0 | | |
-| 11 | M-05 | Pendiente | 0 | | |
-| 12 | C-01 | Pendiente | 0 | | |
-| 13 | C-02 | Pendiente | 0 | | |
-| 14 | C-03 | Pendiente | 0 | | |
-| 15 | C-04 | Pendiente | 0 | | |
-| 16 | V-03 | Pendiente | 0 | | |
-| 17 | V-01 | Pendiente | 0 | | |
-| 18 | V-02 | Pendiente | 0 | | |
-| 19 | V-04 | Pendiente | 0 | | |
-| 20 | V-06 | Pendiente | 0 | | |
-| 21 | V-05 | Bloqueado | 0 | | Espera P-02 y P-03 |
-| 22 | C-05 | Bloqueado | 0 | | Espera Q-04 |
-| 23 | V-07 | Bloqueado | 0 | | Espera Q-02 |
+| 1 | F-01 | Pendiente | 0 | |  |
+| 2 | F-02 | Pendiente | 0 | |  |
+| 3 | S-01 | Pendiente | 0 | | Constructor: seguridad |
+| 4 | F-03 | Pendiente | 0 | |  |
+| 5 | S-02 | Pendiente | 0 | | Constructor: seguridad |
+| 6 | M-01 | Pendiente | 0 | | Puede ir en paralelo a F-03 (solo depende de F-01) |
+| 7 | F-04 | Pendiente | 0 | |  |
+| 8 | F-06 | Pendiente | 0 | |  |
+| 9 | S-03 | Pendiente | 0 | | Constructor: seguridad |
+| 10 | F-05 | Pendiente | 0 | |  |
+| 11 | M-02 | Pendiente | 0 | |  |
+| 12 | M-03 | Pendiente | 0 | |  |
+| 13 | M-04 | Pendiente | 0 | |  |
+| 14 | S-04 | Pendiente | 0 | | Constructor: seguridad |
+| 15 | M-05 | Pendiente | 0 | |  |
+| 16 | C-01 | Pendiente | 0 | |  |
+| 17 | C-02 | Pendiente | 0 | |  |
+| 18 | C-03 | Pendiente | 0 | |  |
+| 19 | C-04 | Pendiente | 0 | |  |
+| 20 | V-03 | Pendiente | 0 | |  |
+| 21 | V-01 | Pendiente | 0 | |  |
+| 22 | V-02 | Pendiente | 0 | |  |
+| 23 | V-04 | Pendiente | 0 | |  |
+| 24 | V-06 | Pendiente | 0 | |  |
+| 25 | S-05 | Bloqueado | 0 | | Espera P-02 y P-03; constructor: seguridad |
+| 26 | V-05 | Bloqueado | 0 | | Espera S-05, P-02 y P-03 |
+| 27 | C-05 | Bloqueado | 0 | | Espera Q-04 |
+| 28 | V-07 | Bloqueado | 0 | | Espera Q-02 |
 
 Estados válidos: `Pendiente`, `En curso`, `En revisión`, `Hecho`, `Bloqueado`.
 
@@ -138,5 +155,5 @@ Estados válidos: `Pendiente`, `En curso`, `En revisión`, `Hecho`, `Bloqueado`.
 | Fin Sprint 1: esquema + RLS + login | 11 | Día 2 |
 | Fin Sprint 2: motor de indicadores | 23 | Día 4 |
 | Fin Sprint 3: candados y alertas | 34 | Día 6 |
-| Fin Sprint 4: vistas y salud | 46 | Día 8 |
-| Publicación en Pages | — | Cuando estén P-02 y P-03 |
+| Fin Sprint 4: vistas y salud (incluye seguridad S-01 a S-04) | 55 | Día 9–10 |
+| Pentest previo a producción (S-05) y publicación en Pages | — | Cuando estén P-02 y P-03 |
