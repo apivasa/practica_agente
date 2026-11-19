@@ -102,23 +102,28 @@ Mientras falte algo, el job termina en verde con `::warning::... se omite la eva
 
 ### Qué hacer si fallan
 1. Identificar el paso fallido (consulta de jobs arriba) y leer el log. El script nunca imprime la clave. La última línea JSON resume `evaluations`, `written`, `alerts` y `errors`, y cada error sale como `Error: <unidad>: <motivo>`.
-2. **Exit 2 `Error de configuración`**: falta un secreto, la URL no es https o la clave no tiene prefijo `sb_secret_`. Corregir los secretos (compuerta del usuario si hay que crearlos o rotarlos).
+2. **Exit 2 `Error de configuración`**: falta un secreto, la URL no es https, la clave no tiene prefijo `sb_secret_`, `as_of` es futuro o se definió `EVALUATE_ALLOW_FUTURE` contra un host no local. Corregir los secretos o la fecha (crear o rotar secretos es compuerta del usuario).
+   **Exit 3** (solo mensual): el mes ya estaba cerrado y no se pidió `reprocess` (ver "Reprocesar un mes").
 3. **Errores por unidad** (exit 1, hay otras unidades bien): el script escribió las unidades sanas y reporta las otras. Causas típicas:
    - `El historial termina en ... (H-C01-02)`: `as_of` no corresponde al mes que se cierra (ver "Reprocesar un mes").
    - Un indicador con configuración inválida: lo corrige la gestora o el custodio en la app.
-   Después relanzar con el mismo `as_of`: es idempotente.
+   Después relanzar con `workflow_dispatch`, el mismo `as_of` y `reprocess=true` (mensual) o solo el `as_of` (diario).
 4. **`evaluations upsert` / `alerts insert` / `audit_log insert`**: error de BD (migración no aplicada en producción, constraint, Supabase pausado o caído). Comprobar que Supabase responde y que las migraciones de `supabase/migrations/` están aplicadas, y relanzar.
 5. **`npm ci` falla**: lockfile desincronizado con `main`. Mismo tratamiento que en `seguridad.yml`.
 6. **`Sin paquete por criticidad (package_by_category)`** en el log del diario no es fallo: falta el paquete en el compromiso trimestral. Avisar al custodio.
 7. Si el fallo se repite dos días o afecta el cierre mensual: el orquestador abre `fix/evaluacion-<fecha>` (paso 3 del ciclo, "salud primero").
 
 ### Reprocesar un mes
-- La mensual cierra **el mes anterior a `as_of`**. Para reprocesar el mes M, se lanza *Actions → Evaluación mensual → Run workflow* con `as_of` = primer día de M+1. Por REST: `gh api -X POST repos/apivasa/practica_agente/actions/workflows/evaluacion-mensual.yml/dispatches -f ref=main -f 'inputs[as_of]=2027-02-01'` (cierra enero de 2027).
+- La mensual cierra **el mes anterior a `as_of`**. Para reprocesar el mes M se lanza *Actions → Evaluación mensual → Run workflow* con `as_of` = primer día de M+1 y la casilla **`reprocess` marcada**. Por REST: `gh api -X POST repos/apivasa/practica_agente/actions/workflows/evaluacion-mensual.yml/dispatches -f ref=main -f 'inputs[as_of]=2027-02-01' -f 'inputs[reprocess]=true'` (cierra de nuevo enero de 2027).
+- Sin `reprocess`, un mes ya cerrado se rechaza: el job falla con `Error: El mes YYYY-MM ya está cerrado; ... --reprocess`, sale con código 3 y no escribe nada. Es una protección, no una incidencia. Si fue un cron duplicado o un relanzamiento accidental, no hay que hacer nada.
+- **Relanzar un cron que falló a medias:** las unidades sanas ya quedaron escritas, así que el mes cuenta como cerrado y *Re-run* del run `schedule` (que no lleva inputs) saldrá con código 3. Hay que usar `workflow_dispatch` con el mismo `as_of` y `reprocess=true`.
+- `as_of` no puede ser futuro respecto de hoy en Guayaquil; si lo es, sale con código 2. `EVALUATE_ALLOW_FUTURE` existe solo para la integración de CI contra Supabase local: nunca se define en secretos ni variables del repo, y contra producción provoca un error de configuración.
 - Casos típicos: el custodio cargó mediciones tarde (después del cron del día 1) o se corrigió una medición o un umbral.
-- Es idempotente: solo reescribe las evaluaciones que cambian y audita esas. Si el color o el nivel cambian, sale una alerta `color_change` nueva (la anterior queda en el historial). Si nada cambia, no hay alertas.
-- La racha de escalada usa los meses ya guardados del trimestre. Al reprocesar un mes que no es el último, hay que reprocesar también los meses siguientes del mismo trimestre, en orden: M, M+1...
-- `assertHistoryFresh` impide cerrar un mes que no sea el mes de `as_of` o el anterior. No se puede "reprocesar enero" con `as_of` de abril: siempre se usa el día 1 del mes siguiente al reprocesado.
-- Ritmo diario de una fecha pasada: lanzar `ritmo-diario` con `as_of` = esa fecha. Compara contra el último snapshot anterior a esa fecha.
+- Es idempotente: solo reescribe las evaluaciones que cambian y audita esas. Además deja una fila `evaluation_reprocess` en `audit_log` (con `written`, `alerts` y `errors`). Si el color o el nivel cambian, sale una alerta `color_change` nueva (la anterior queda en el historial). Si nada cambia, no hay alertas.
+- La racha de escalada usa los meses ya guardados del trimestre. Al reprocesar un mes que no es el último, hay que reprocesar también los siguientes del mismo trimestre, en orden: M, M+1...
+- `assertHistoryFresh` impide cerrar un mes que no sea el mes de `as_of` o el anterior. Siempre se usa el día 1 del mes siguiente al reprocesado.
+- Ritmo diario de una fecha pasada: lanzar `ritmo-diario` con `as_of` = esa fecha (no necesita `reprocess`). Compara contra el último snapshot anterior a esa fecha.
+- Auditoría de reprocesos: `select created_at, entity_id, details from audit_log where action = 'evaluation_reprocess' order by created_at desc;`
 
 ### Restaurar
 - Las evaluaciones son derivables: se recalculan desde `measurements`, `commitments`, `targets` y `exceptions` reprocesando los meses del trimestre en orden.
