@@ -2,15 +2,16 @@ name: Lockfile
 
 # Las sesiones de Claude no pueden instalar paquetes: este workflow genera
 # package-lock.json cuando cambia package.json y lo sube a la misma rama.
+# Solo en ramas de trabajo (H-003): nunca escribe en main.
 on:
   push:
+    branches: ['item/**', 'fix/**']
     paths:
       - package.json
   workflow_dispatch:
 
-permissions:
-  contents: write
-  actions: write
+# Sin permisos a nivel de workflow; la escritura se concede solo al job (H-003).
+permissions: {}
 
 concurrency:
   group: lockfile-${{ github.ref }}
@@ -19,9 +20,16 @@ concurrency:
 jobs:
   lockfile:
     runs-on: ubuntu-latest
+    # Defensa adicional: workflow_dispatch sobre main no escribe nada.
+    if: github.ref_name != 'main'
+    permissions:
+      contents: write
+      actions: write
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      # persist-credentials por defecto (true): este job necesita el token para
+      # el git push; no ejecuta scripts de paquetes (--ignore-scripts).
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 22
       - name: Generar package-lock.json
@@ -37,11 +45,12 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git commit -m "chore: actualizar package-lock.json"
           git push origin "HEAD:${GITHUB_REF_NAME}"
-      - name: Lanzar CI sobre el commit del lockfile
+      - name: Lanzar CI y Seguridad sobre el commit del lockfile
         if: success()
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           if git log -1 --format=%s | grep -q "chore: actualizar package-lock.json"; then
             gh workflow run ci.yml --ref "${GITHUB_REF_NAME}"
+            gh workflow run seguridad.yml --ref "${GITHUB_REF_NAME}"
           fi
