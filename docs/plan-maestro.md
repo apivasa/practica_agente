@@ -103,9 +103,9 @@ El orquestador toma el **primer ítem `Pendiente`** cuyas dependencias estén `H
 | 8 | F-06 | Hecho | 0 | #5 |  |
 | 9 | S-03 | Hecho | 0 | #13 | Constructor: seguridad |
 | 10 | F-05 | Hecho | 0 | #14 |  |
-| 11 | M-02 | En curso | 1 | |  |
-| 12 | M-03 | En curso | 1 | |  |
-| 13 | M-04 | En curso | 1 | |  |
+| 11 | M-02 | Hecho | 1 | #18 |  |
+| 12 | M-03 | Hecho | 1 | #18 |  |
+| 13 | M-04 | Hecho | 1 | #18 |  |
 | 14 | S-04 | Hecho | 0 | #17 | Constructor: seguridad |
 | 15 | M-05 | Hecho | 1 | #7 | Parte de motor adelantada; integración con BD tras F-03 y M-04  |
 | 16 | C-01 | Hecho | 0 | #3 |  |
