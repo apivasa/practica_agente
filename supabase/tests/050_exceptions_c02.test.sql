@@ -3,7 +3,7 @@
 -- solo quien aprobó edita su excepción (H-S03-04 / H-F03-05), revocación,
 -- y el líder ni crea ni edita excepciones.
 begin;
-select plan(35);
+select plan(36);
 
 insert into auth.users (id, email, aud, role) values
   ('c0200000-0000-4000-8000-000000000001', 'c02-comite1@example.test',  'authenticated', 'authenticated'),
@@ -18,6 +18,11 @@ insert into public.user_roles (user_id, role, unit_id, indicator_id) values
   ('c0200000-0000-4000-8000-000000000002', 'committee',   null, null),
   ('c0200000-0000-4000-8000-000000000003', 'unit_leader', 'c0210000-0000-4000-8000-000000000001', null),
   ('c0200000-0000-4000-8000-000000000004', 'kpi_manager', null, null);
+
+-- Fila anterior a C-02: change_start sin change_ref y vigencia mayor al tope.
+insert into public.exceptions (id, unit_id, scope, reason, expires_on, approved_by) values
+  ('c0270000-0000-4000-8000-0000000000f1', 'c0210000-0000-4000-8000-000000000002', 'change_start', 'Previa a C-02',
+   current_date + 150, 'c0200000-0000-4000-8000-000000000001');
 
 -- Esquema
 select has_column('public', 'exceptions', 'change_ref', 'exceptions.change_ref existe');
@@ -90,11 +95,15 @@ select throws_ok(
   $$ update public.exceptions set change_ref = null where id = 'c0270000-0000-4000-8000-000000000001' $$,
   '23514', null, 'comité: no quita el change_ref de una change_start');
 
+select lives_ok(
+  $$ update public.exceptions set expires_on = current_date + 120 where id = 'c0270000-0000-4000-8000-0000000000f1' $$,
+  'comité: una fila previa a C-02 se puede acortar aunque no tenga change_ref');
+
 -- ---------------------------------------------------------------------------
 -- Comité 2 contra la excepción de comité 1 (H-S03-04)
 -- ---------------------------------------------------------------------------
 set local request.jwt.claims = '{"sub":"c0200000-0000-4000-8000-000000000002","role":"authenticated"}';
-select is((select count(*)::int from public.exceptions where id::text like 'c027%'), 3, 'comité 2: ve todas las excepciones');
+select is((select count(*)::int from public.exceptions where id::text like 'c027%'), 4, 'comité 2: ve todas las excepciones');
 select throws_ok(
   $$ update public.exceptions set expires_on = current_date + 80 where id = 'c0270000-0000-4000-8000-000000000001' $$,
   '42501', null, 'comité 2: no extiende la excepción de otro');

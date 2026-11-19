@@ -34,3 +34,13 @@ export {
   CSV_MAX_ROWS,
 } from './measurements-input.js';
 export { businessDate, BUSINESS_TZ } from './dates.js';
+export {
+  EXCEPTION_MAX_DAYS,
+  EXCEPTION_SCOPES,
+  CHANGE_REF_MAX_LEN,
+  REASON_MAX_LEN,
+  addDays,
+  maxExpiry,
+  exceptionStatus,
+  validateExceptionDraft,
+} from './exceptions.js';

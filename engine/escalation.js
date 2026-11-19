@@ -9,7 +9,16 @@
  *   | 'freeze_all_change' | 'all_capacity_to_run'} Restriction
  */
 /** @typedef {{ month: string, color: Color }} MonthColor */
-/** @typedef {{ id: string, scope: 'change_start' | 'all', expiresOn: string }} Exception */
+/**
+ * @typedef {Object} Exception
+ * @property {string} id
+ * @property {'change_start' | 'all'} scope
+ * @property {string} expiresOn 'YYYY-MM-DD' (vigente hasta ese día inclusive).
+ * @property {string | null} [changeRef] Change concreto autorizado (C-02, scope change_start).
+ * @property {string | null} [revokedOn] Fecha 'YYYY-MM-DD' (America/Guayaquil) de la revocación;
+ *   desde ese día la excepción no aplica.
+ */
+/** @typedef {{ id: string, change_ref: string | null }} AuthorizedStart */
 /**
  * @typedef {Object} EscalationOptions
  * @property {boolean} [yellowMonth2EscalatesLikeRed=false] Q-03: amarillo en mes 2+ congela como rojo.
@@ -25,6 +34,9 @@
  * @property {Restriction[]} suppressedRestrictions Restricciones suspendidas por excepciones vigentes.
  * @property {string[]} appliedExceptions Ids de excepciones vigentes que se aplicaron.
  * @property {string[]} expiredExceptions Ids de excepciones vencidas (ignoradas).
+ * @property {string[]} revokedExceptions Ids de excepciones revocadas (ignoradas).
+ * @property {AuthorizedStart[]} authorizedStarts Inicios puntuales autorizados por excepciones
+ *   change_start vigentes con la unidad congelada (ADR 0003): no levantan el congelamiento.
  */
 
 export const COLORS = Object.freeze(['green', 'yellow', 'red', 'not_evaluated']);
@@ -148,6 +160,8 @@ export function evaluateEscalation(history, options) {
   const valid = [];
   /** @type {string[]} */
   const expiredExceptions = [];
+  /** @type {string[]} */
+  const revokedExceptions = [];
   for (const ex of exceptions) {
     if (!ex || typeof ex !== 'object') throw new TypeError('Excepción inválida');
     if (typeof ex.id !== 'string' || ex.id.trim() === '') {
@@ -159,7 +173,16 @@ export function evaluateEscalation(history, options) {
     if (ex.scope !== 'change_start' && ex.scope !== 'all') {
       throw new TypeError(`Excepción inválida: scope desconocido ${String(ex.scope)}`);
     }
-    if (ex.expiresOn >= asOf) valid.push(ex);
+    const revokedOn = ex.revokedOn ?? null;
+    if (revokedOn !== null && !isRealDate(revokedOn)) {
+      throw new TypeError('Excepción inválida: revokedOn debe ser null o una fecha real YYYY-MM-DD');
+    }
+    const changeRef = ex.changeRef ?? null;
+    if (changeRef !== null && (typeof changeRef !== 'string' || changeRef.trim() === '')) {
+      throw new TypeError('Excepción inválida: changeRef debe ser null o un texto no vacío');
+    }
+    if (revokedOn !== null && revokedOn <= asOf) revokedExceptions.push(ex.id);
+    else if (ex.expiresOn >= asOf) valid.push(ex);
     else expiredExceptions.push(ex.id);
   }
 
@@ -177,6 +200,8 @@ export function evaluateEscalation(history, options) {
     suppressedRestrictions: /** @type {Restriction[]} */ ([]),
     appliedExceptions: /** @type {string[]} */ ([]),
     expiredExceptions,
+    revokedExceptions,
+    authorizedStarts: /** @type {AuthorizedStart[]} */ ([]),
   };
 
   if (monthsInBreach === 0) {
@@ -234,6 +259,28 @@ export function evaluateEscalation(history, options) {
       ...base,
       suppressedRestrictions: ['no_new_change'],
       appliedExceptions: changeStart.map((ex) => ex.id),
+    };
+  }
+
+  // ADR 0003: en frozen, change_start es un inicio puntual autorizado; el
+  // congelamiento sigue (restricciones y appliedExceptions no cambian).
+  if (changeStart.length > 0 && level === 'frozen') {
+    /** @type {AuthorizedStart[]} */
+    const authorizedStarts = [];
+    const seen = new Set();
+    for (const ex of changeStart) {
+      if (seen.has(ex.id)) continue;
+      seen.add(ex.id);
+      authorizedStarts.push({ id: ex.id, change_ref: ex.changeRef ?? null });
+    }
+    return {
+      level,
+      restrictions,
+      reason: `${reason}. Inicio puntual autorizado por el comité: ${authorizedStarts
+        .map((a) => a.change_ref ?? a.id)
+        .join(', ')}`,
+      ...base,
+      authorizedStarts,
     };
   }
 
