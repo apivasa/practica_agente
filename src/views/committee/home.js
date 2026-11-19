@@ -84,7 +84,7 @@ export function renderCommitteeHome({ session }) {
       Object.assign(state, { units, indicators, evaluations });
       showMatrix();
       const link = findRoute(EXCEPTIONS_PATH)
-        ? el('a', { href: `#${EXCEPTIONS_PATH}`, text: 'Gestionar excepciones' })
+        ? el('a', { href: `#${EXCEPTIONS_PATH}`, text: 'Aprobar o revocar una excepción' })
         : null;
       exceptionsBox.replaceChildren(
         el('h3', { text: 'Excepciones vigentes' }),
