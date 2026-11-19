@@ -3,7 +3,11 @@ name: CI
 on:
   pull_request:
   push:
-    branches: [main]
+    # main + ramas de trabajo del modo autónomo (validación antes del PR).
+    branches: [main, 'item/**', 'fix/**']
+  # Permite lanzarlo a mano o desde lockfile.yml: los commits hechos con
+  # GITHUB_TOKEN no disparan otros workflows por push/pull_request.
+  workflow_dispatch:
 
 permissions:
   contents: read
