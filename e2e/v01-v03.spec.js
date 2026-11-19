@@ -64,8 +64,11 @@ test.describe('V-01 · vista del líder', () => {
     await expect(page.locator('.unit-color')).toContainText('Verde');
     await expect(page.locator('.unit-escalation')).toContainText('Operación normal');
 
-    // Alfa no tiene excepciones; nada de otras unidades en la pantalla.
-    await expect(page.locator('.exceptions-box')).toContainText('No hay excepciones vigentes.');
+    // Las excepciones de la semilla son de Beta y Gamma: no aparecen (C-02 puede crear
+    // y revocar una de Alfa en paralelo). Nada de otras unidades en la pantalla.
+    await expect(page.getByRole('heading', { name: 'Excepciones vigentes de mi unidad' })).toBeVisible();
+    await expect(page.locator('.exceptions-box')).not.toContainText('Arranque urgente ficticio');
+    await expect(page.locator('.exceptions-box')).not.toContainText('Contingencia ficticia');
     await expect(page.getByText('Unidad Beta')).toHaveCount(0);
     await expect(page.getByText('Unidad Gamma')).toHaveCount(0);
 
@@ -88,7 +91,7 @@ test.describe('V-01 · vista del líder', () => {
     const units = await apiGet(request, token, 'units?select=id');
     expect(units.map((u) => u.id)).toEqual([ALFA]);
     const exceptions = await apiGet(request, token, 'exceptions?select=unit_id');
-    expect(exceptions).toEqual([]);
+    expect(exceptions.every((e) => e.unit_id === ALFA)).toBeTruthy();
     const alerts = await apiGet(request, token, 'alerts?select=unit_id');
     expect(alerts.length).toBeGreaterThan(0);
     expect(new Set(alerts.map((a) => a.unit_id))).toEqual(new Set([ALFA]));
