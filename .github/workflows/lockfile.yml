@@ -1,0 +1,47 @@
+name: Lockfile
+
+# Las sesiones de Claude no pueden instalar paquetes: este workflow genera
+# package-lock.json cuando cambia package.json y lo sube a la misma rama.
+on:
+  push:
+    paths:
+      - package.json
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  actions: write
+
+concurrency:
+  group: lockfile-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  lockfile:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Generar package-lock.json
+        run: npm install --package-lock-only --ignore-scripts
+      - name: Subir lockfile si cambió
+        run: |
+          git add package-lock.json
+          if git diff --cached --quiet; then
+            echo "package-lock.json sin cambios"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "chore: actualizar package-lock.json"
+          git push origin "HEAD:${GITHUB_REF_NAME}"
+      - name: Lanzar CI sobre el commit del lockfile
+        if: success()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if git log -1 --format=%s | grep -q "chore: actualizar package-lock.json"; then
+            gh workflow run ci.yml --ref "${GITHUB_REF_NAME}"
+          fi

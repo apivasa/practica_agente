@@ -1,0 +1,2 @@
+# Configuración mínima de Supabase CLI. La CLI aplica valores por defecto al resto.
+project_id = "practica-agente"
