@@ -264,3 +264,37 @@ form .btn-primary,
 .commitment-form {
   margin: 1.5rem 0;
 }
+
+/* C-02: excepciones del comité */
+.exc-form select,
+.exc-form textarea,
+.exc-form input {
+  width: 100%;
+  max-width: 32rem;
+}
+
+.muted {
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.table-wrap {
+  overflow-x: auto;
+}
+
+.exc-list table {
+  border-collapse: collapse;
+  width: 100%;
+}
+
+.exc-list th,
+.exc-list td {
+  border-bottom: 1px solid var(--border);
+  padding: 0.4rem 0.5rem;
+  text-align: left;
+  vertical-align: top;
+}
+
+[hidden] {
+  display: none !important;
+}

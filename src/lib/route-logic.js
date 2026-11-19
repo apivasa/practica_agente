@@ -35,6 +35,7 @@ export const ROUTES = Object.freeze([
   { path: '/custodio/compromisos', role: 'custodian', view: 'custodian-commitments', label: 'Compromisos' },
   { path: '/custodio/mediciones', role: 'custodian', view: 'custodian-measurements', label: 'Mediciones' },
   { path: '/comite', role: 'committee', view: 'committee', label: 'Inicio' },
+  { path: '/comite/excepciones', role: 'committee', view: 'committee-exceptions', label: 'Excepciones' },
   { path: '/lider', role: 'unit_leader', view: 'unit_leader', label: 'Inicio' },
 ].map((r) => Object.freeze(r)));
 
