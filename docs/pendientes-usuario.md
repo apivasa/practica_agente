@@ -19,6 +19,11 @@ Ninguna abierta.
 - **Q-04 · Canal externo de alertas.** Por defecto: bandeja dentro de la app + issue de GitHub. Opciones: correo (requiere un proveedor como Resend con su API key), Microsoft Teams (webhook) u otro.
   Respuesta:
 
+- **Q-05 · Confirmar interpretaciones de escalada (ADR 0003).** El diseño no las cubre; el sistema ya las aplica por defecto: (a) la racha de meses fuera de verde se reinicia en cada trimestre; (b) un mes sin evaluar corta la racha; (c) un mes 3 en amarillo tras dos en rojo baja de congelado a restringido; (d) una excepción "arrancar algo urgente" con la unidad congelada no levanta el congelamiento, solo autoriza ese inicio. Responde "ok" o indica cuál cambiar.
+  Respuesta:
+- **Q-06 · Ritmo esperado de vulnerabilidades (M-05).** Por defecto: la meta del mes en curso se prorratea por días (al día 10 de un mes de 30 se esperan 10/30 de la meta mensual), el ritmo se calcula contra el 100 % del pendiente, y las P0/P1 del mes 3 resueltas cuentan para el cumplimiento del trimestre actual. Responde "ok" o indica cuál cambiar.
+  Respuesta:
+
 ## Resueltos
 
 - **P-03 · GitHub Pages** — resuelto el 2026-11-19. Repo público y Pages activado (verificado por API: `visibility: public`, `has_pages: true`). Fuente elegida por el usuario: GitHub Actions; si el primer `deploy.yml` falla por la fuente, revisar Settings → Pages. URL esperada: `https://apivasa.github.io/practica_agente/`.
