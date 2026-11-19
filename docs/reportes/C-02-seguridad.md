@@ -34,3 +34,6 @@ La matriz `api/rls-matrix.test.js` no necesita cambios: el PATCH del comité sob
 - **Líder, gestora, custodio y anónimo:** ni crean, ni editan, ni revocan. El líder solo lee las excepciones de su unidad (incluidas las columnas nuevas).
 - **Categoría 3:** `reason` tiene un CHECK de 2000 caracteres y `change_ref` uno de 200. Si falta el change o viene en blanco, la BD responde 400. El motivo y el change con HTML se guardan tal cual y la vista los pinta por `textContent` (`el({text})`), sin sinks HTML. La CSP de S-04 sigue vigente. El botón Revocar solo aparece a quien aprobó, en excepciones vigentes y nunca con `null === null`. La capa de datos no envía campos que fija el servidor.
 - Categorías 2, 4, 6 y 7: sin cambios en el ítem. El run de Seguridad está en verde.
+
+## Re-verificación del orquestador (intento 2)
+Los 4 hallazgos corregidos (revocadas en Actions vía exceptionFromRow, alertas sin revocadas, fecha de Guayaquil en trigger y política, exceptionStatus único). Pruebas de revisores sin cambios pasan. CI 44631994858 y Seguridad 44631987418 en verde. **Veredicto final: VERDE.**
