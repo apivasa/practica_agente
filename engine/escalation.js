@@ -37,7 +37,31 @@ export const RESTRICTIONS = Object.freeze({
 
 const SEVERITY = { green: 0, yellow: 1, red: 2 };
 const MONTH_RE = /^(\d{4})-(0[1-9]|1[0-2])$/;
-const DATE_RE = /^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$/;
+const DATE_RE = /^(\d{4})-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$/;
+
+/**
+ * Fecha real del calendario 'YYYY-MM-DD' (rechaza 2026-02-31, 2025-02-29, etc.).
+ * @param {unknown} s
+ * @returns {s is string}
+ */
+function isRealDate(s) {
+  const m = typeof s === 'string' ? DATE_RE.exec(s) : null;
+  if (!m) return false;
+  const year = Number(m[1]);
+  const month = Number(m[2]);
+  const daysInMonth = new Date(Date.UTC(year, month, 0)).getUTCDate();
+  return Number(m[3]) <= daysInMonth;
+}
+
+/**
+ * Mes siguiente a 'YYYY-MM' dentro del mismo año. Solo se usa tras comprobar
+ * que ambos meses son del mismo trimestre, así que nunca recibe diciembre.
+ * @param {string} month
+ * @returns {string}
+ */
+function nextMonth(month) {
+  return `${month.slice(0, 4)}-${String(Number(month.slice(5, 7)) + 1).padStart(2, '0')}`;
+}
 
 /** @param {unknown} c */
 function assertColor(c) {
@@ -76,10 +100,12 @@ export function quarterOf(month) {
 }
 
 /**
- * Valida el historial del trimestre: máximo 3 meses, mismo trimestre, orden ascendente.
+ * Valida el historial del trimestre: máximo 3 meses, mismo trimestre, meses
+ * consecutivos ascendentes sin huecos, y ningún mes posterior al mes de asOf.
  * @param {MonthColor[]} history
+ * @param {string} asOf 'YYYY-MM-DD' ya validado
  */
-function validateHistory(history) {
+function validateHistory(history, asOf) {
   if (!Array.isArray(history)) throw new TypeError('history debe ser un arreglo');
   if (history.length > 3) throw new RangeError('history admite como máximo 3 meses (un trimestre)');
   let prev = '';
@@ -90,8 +116,14 @@ function validateHistory(history) {
     assertColor(entry.color);
     if (quarter && q !== quarter) throw new RangeError('history debe pertenecer a un solo trimestre');
     if (prev && entry.month <= prev) throw new RangeError('history debe estar en orden ascendente sin repetidos');
+    if (prev && entry.month !== nextMonth(prev)) {
+      throw new RangeError(`history tiene un hueco: falta el mes ${nextMonth(prev)} antes de ${entry.month}`);
+    }
     quarter = q;
     prev = entry.month;
+  }
+  if (prev && prev > asOf.slice(0, 7)) {
+    throw new RangeError(`history incluye el mes ${prev}, posterior a la fecha de evaluación ${asOf}`);
   }
 }
 
@@ -102,12 +134,12 @@ function validateHistory(history) {
  * @returns {EscalationResult}
  */
 export function evaluateEscalation(history, options) {
-  validateHistory(history);
   const opts = options ?? /** @type {EscalationOptions} */ ({});
   const asOf = opts.asOf;
-  if (typeof asOf !== 'string' || !DATE_RE.test(asOf)) {
-    throw new TypeError('options.asOf es obligatorio (YYYY-MM-DD)');
+  if (!isRealDate(asOf)) {
+    throw new TypeError('options.asOf es obligatorio y debe ser una fecha real YYYY-MM-DD');
   }
+  validateHistory(history, asOf);
   const yellowLikeRed = opts.yellowMonth2EscalatesLikeRed === true;
   const exceptions = opts.activeExceptions ?? [];
   if (!Array.isArray(exceptions)) throw new TypeError('options.activeExceptions debe ser un arreglo');
@@ -117,8 +149,12 @@ export function evaluateEscalation(history, options) {
   /** @type {string[]} */
   const expiredExceptions = [];
   for (const ex of exceptions) {
-    if (!ex || typeof ex.expiresOn !== 'string' || !DATE_RE.test(ex.expiresOn)) {
-      throw new TypeError('Excepción inválida: expiresOn debe ser YYYY-MM-DD');
+    if (!ex || typeof ex !== 'object') throw new TypeError('Excepción inválida');
+    if (typeof ex.id !== 'string' || ex.id.trim() === '') {
+      throw new TypeError('Excepción inválida: id debe ser un texto no vacío');
+    }
+    if (!isRealDate(ex.expiresOn)) {
+      throw new TypeError('Excepción inválida: expiresOn debe ser una fecha real YYYY-MM-DD');
     }
     if (ex.scope !== 'change_start' && ex.scope !== 'all') {
       throw new TypeError(`Excepción inválida: scope desconocido ${String(ex.scope)}`);

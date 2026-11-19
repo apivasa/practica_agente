@@ -267,6 +267,36 @@ describe('evaluateEscalation: validación de entrada', () => {
       RangeError,
     );
   });
+  test('H-C01-01: fechas inexistentes se rechazan en asOf y expiresOn', () => {
+    for (const bad of ['2026-02-29', '2026-02-31', '2026-04-31', '2025-02-29']) {
+      assert.throws(() => evaluateEscalation(hist(['red']), { asOf: bad }), TypeError);
+      assert.throws(
+        () => evaluateEscalation(hist(['red']), { asOf: ASOF, activeExceptions: [{ id: 'e', scope: 'all', expiresOn: bad }] }),
+        TypeError,
+      );
+    }
+    // Bisiesto válido y fin de mes válidos.
+    assert.equal(evaluateEscalation([{ month: '2028-02', color: 'red' }], { asOf: '2028-02-29' }).level, 'restricted');
+    assert.equal(evaluateEscalation(hist(['red']), { asOf: '2026-01-31' }).level, 'restricted');
+  });
+  test('H-C01-02: meses con hueco se rechazan', () => {
+    assert.throws(
+      () => evaluateEscalation([{ month: '2026-01', color: 'red' }, { month: '2026-03', color: 'red' }], { asOf: ASOF }),
+      /hueco: falta el mes 2026-02/,
+    );
+  });
+  test('H-C01-02: meses posteriores al mes de asOf se rechazan', () => {
+    assert.throws(() => evaluateEscalation(hist(['red', 'red']), { asOf: '2026-01-31' }), /posterior a la fecha/);
+    assert.equal(evaluateEscalation(hist(['red', 'red']), { asOf: '2026-02-01' }).level, 'frozen');
+  });
+  test('excepción sin id válido se rechaza', () => {
+    for (const id of [undefined, null, '', '   ', 7, {}]) {
+      assert.throws(
+        () => evaluateEscalation(hist(['red']), { asOf: ASOF, activeExceptions: [{ id, scope: 'all', expiresOn: '2026-12-31' }] }),
+        TypeError,
+      );
+    }
+  });
   test('función pura: no muta la entrada', () => {
     const h = hist(['red', 'red']);
     const ex = [{ id: 'e', scope: 'all', expiresOn: '2026-03-31' }];
