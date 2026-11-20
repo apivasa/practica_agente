@@ -28,12 +28,24 @@ Si tienes más de un rol, eliges en `#/inicio`. En la barra superior tienes **Ca
 
 **Matriz unidad × indicador.** Una fila por unidad:
 - **Color de la unidad:** el peor de sus indicadores evaluados.
-- **Escalada:** el candado y sus restricciones (ver abajo).
+- **Escalada:** el candado que guardó la evaluación mensual del mes elegido, con sus restricciones (ver abajo).
+- **Candado hoy:** el candado vigente hoy (ver "Candado hoy" más abajo).
 - Una columna por indicador (código en la cabecera; el nombre aparece al pasar el cursor). Cada celda trae el color y el valor. Al pasar el cursor ves el motivo del color.
 
 Salen los indicadores activos más los que tuvieron evaluación ese mes.
 
-**Excepciones vigentes.** Tabla con Unidad, Alcance, Motivo, Ref. de change y Vence. Aquí el alcance se lee **Permite iniciar change** o **Suspende todos los candados**; en la pantalla Excepciones el mismo alcance se llama **Inicio puntual de change** o **Suspende todas las restricciones**. Son lo mismo. Debajo, el enlace **Aprobar o revocar una excepción** lleva a `#/comite/excepciones`.
+**Candado hoy.** Usa el último cierre mensual guardado y las excepciones tal como están hoy (America/Guayaquil). No depende del mes elegido en el selector. Muestra:
+- El nivel (**Operación normal**, **Restringida**, **Congelada** o **En excepción**) y sus restricciones.
+- "Inicio autorizado: REF" por cada inicio puntual vigente con la unidad congelada. La unidad sigue "Congelada". Si la excepción no tiene referencia, dice "Inicio autorizado: sin referencia".
+- Debajo, la base del cálculo: "Según el cierre de AAAA-MM y las excepciones vigentes al AAAA-MM-DD".
+
+Una excepción que apruebas o revocas hoy se ve hoy en esta columna, tras recargar la página. Esta columna no guarda nada ni envía alertas: el candado oficial sigue siendo el del cierre (columna **Escalada**).
+
+Avisos posibles en lugar del nivel:
+- "Sin cierre vigente: no hay evaluación mensual de AAAA-MM ni de AAAA-MM": no hay cierre del mes en curso ni del anterior. Pasa cada día 1 desde las 00:00 hasta que corre la evaluación mensual (06:07 Guayaquil), o más si esa evaluación falla o se retrasa.
+- "No se pudo calcular el candado de hoy con los datos guardados": algún dato guardado de la unidad no es válido.
+
+**Excepciones vigentes.** Tabla con Unidad, Alcance, Motivo, Ref. de change y Vence. El alcance se lee **Inicio puntual de change** o **Suspende todas las restricciones**, igual que en la pantalla Excepciones. Debajo, el enlace **Aprobar o revocar una excepción** lleva a `#/comite/excepciones`.
 
 **Alertas recientes.** Tus últimas 30 alertas, la más reciente arriba, con el contador "Sin leer: N".
 - Cada alerta muestra el tipo, la fecha y hora de envío y el mensaje.
@@ -85,8 +97,8 @@ Candados de la unidad:
 | Sin evaluación | La unidad no tiene evaluación ese mes | — |
 
 - La racha se cuenta dentro del trimestre calendario. Un mes verde o sin evaluar la corta.
-- Una excepción de inicio puntual con la unidad restringida quita "No se inicia change nuevo". Con la unidad congelada no la descongela: la matriz sigue mostrando "Congelada" y la excepción solo se ve en la lista de vigentes.
-- El candado que muestra la matriz es el que guardó la evaluación mensual de ese mes. Una excepción que apruebas o revocas hoy no cambia la matriz hasta el siguiente cierre mensual o un reproceso del mes. Mientras tanto, la lista de excepciones vigentes sí la muestra.
+- Una excepción de inicio puntual con la unidad restringida quita "No se inicia change nuevo". Con la unidad congelada no la descongela: sigue "Congelada" y la columna **Candado hoy** agrega "Inicio autorizado: REF".
+- La columna **Escalada** es el candado que guardó la evaluación mensual de ese mes. Una excepción que apruebas o revocas hoy no la cambia hasta el siguiente cierre mensual o un reproceso del mes. La columna **Candado hoy** sí la refleja el mismo día.
 
 Reglas completas: [docs/indicadores.md, sección 7](indicadores.md#7-candados-escalada).
 

@@ -4,6 +4,7 @@ Una línea por ítem, la más reciente arriba.
 
 ## Sin publicar
 
+- 2026-11-20 · V-08-V-09 · El comité (columna "Candado hoy") y el líder ("Candado vigente hoy") ven el candado de hoy con las excepciones tal como están hoy, sin esperar al cierre; un inicio puntual con la unidad congelada se ve como "Inicio autorizado: REF". El resumen del líder ahora dice "Restricciones del cierre de AAAA-MM". Las etiquetas de alcance son las mismas en todas las pantallas: "Inicio puntual de change" y "Suspende todas las restricciones".
 - 2026-11-20 · M-08 · La BD rechaza mediciones de vulnerabilidades sin categoría `P0P1`/`P2P3` o con valor no entero ≥ 0, y rechaza una meta acumulada con "menos es mejor". Las filas malformadas anteriores se descartan con el mismo filtro en la evaluación mensual, el ritmo diario y la pantalla del líder, y el motivo lo dice; el ritmo diario ya no falla por ellas.
 - 2026-11-20 · M-07 · La gestora carga y edita las metas mensuales acumuladas de los indicadores de meta acumulada sin categorías en `#/gestora/metas`, con "Proponer un tercio" (ceil(P/3), ceil(2P/3), P) y vista previa del color por unidad; el color oficial lo sigue guardando la evaluación programada.
 - 2026-11-20 · F-07 · CI y Seguridad reintentan solos el arranque de Supabase local cuando falla por un puerto ocupado (hasta 3 intentos, con diagnóstico de puertos en el log); si se agotan, el job falla igual.

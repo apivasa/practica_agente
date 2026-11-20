@@ -2,7 +2,7 @@
 // La lógica de color, escalada y ritmo vive en engine/; aquí solo se traducen
 // filas a los contratos del motor y se filtran fechas (ADR 0006, punto 5).
 import { unitColor, evaluateEscalation, exceptionFromRow } from '../../engine/index.js';
-import { addDays, addMonths, quarterBounds } from './dates.js';
+import { addDays, addMonths } from './dates.js';
 import {
   pickCommitment,
   indicatorConfig,
@@ -10,43 +10,14 @@ import {
   toEngineMeasurements,
   evaluateIndicatorMonth,
 } from '../../engine/rows.js';
+import { YELLOW_MONTH2_ESCALATES_LIKE_RED, buildHistory, assertHistoryFresh } from '../../engine/lock.js';
 
 // Movidas a engine/rows.js (V-01 y M-07: las usa también el front); se reexportan por compatibilidad.
 export { pickCommitment, indicatorConfig, buildPackageInput, toEngineMeasurements, evaluateIndicatorMonth };
 
-/** Q-03 (ADR 0003, punto 4): por defecto amarillo en mes 2 no congela. */
-export const YELLOW_MONTH2_ESCALATES_LIKE_RED = false;
-
-/**
- * Historial del trimestre para M-05/C-01: meses desde el inicio del trimestre de `evalMonth`
- * hasta `evalMonth`, consecutivos; un mes sin evaluación guardada cuenta como 'not_evaluated'.
- * Solo meses del mismo trimestre (filtra lo de trimestres anteriores).
- * @param {string} evalMonth
- * @param {Record<string, string>} storedColors color global guardado por mes
- * @param {string} currentColor color recién calculado para evalMonth
- */
-export function buildHistory(evalMonth, storedColors, currentColor) {
-  const { months } = quarterBounds(evalMonth);
-  return months
-    .filter((m) => m <= evalMonth)
-    .map((m) => ({ month: m, color: m === evalMonth ? currentColor : (storedColors[m] ?? 'not_evaluated') }));
-}
-
-/**
- * H-C01-02: el último mes del historial debe ser el mes de asOf o el anterior. Evita aplicar
- * candados con un trimestre viejo (p. ej. Q1 evaluado el 2026-09-01).
- * @param {{ month: string }[]} history
- * @param {string} asOf
- */
-export function assertHistoryFresh(history, asOf) {
-  const last = history.at(-1)?.month;
-  const current = asOf.slice(0, 7);
-  if (!last || (last !== current && last !== addMonths(current, -1))) {
-    throw new RangeError(
-      `El historial termina en ${String(last)}: debe ser el mes de ${asOf} o el anterior (H-C01-02)`,
-    );
-  }
-}
+// Movidas a engine/lock.js (V-08: el front calcula el candado de hoy con el mismo historial);
+// se reexportan por compatibilidad.
+export { YELLOW_MONTH2_ESCALATES_LIKE_RED, buildHistory, assertHistoryFresh };
 
 /**
  * Evaluación global de la unidad en el mes: peor color y candado.
