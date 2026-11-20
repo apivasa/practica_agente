@@ -34,6 +34,9 @@ El orquestador solo escribe aquí cuando algo **de verdad** te necesita (ver reg
 - **Q-07 · Color mensual de vulnerabilidades por criticidad (M-06, ADR 0016).** Por defecto: (a) el indicador toma el peor color entre P0/P1 y P2/P3; (b) el valor mostrado es el de la categoría con peor color; (c) los umbrales negociados por unidad (overrides del compromiso) no se aplican a las categorías, que usan 96 % y 85 %; (d) si una categoría no se puede evaluar, el indicador no sale verde. Responde "ok" o indica cuál cambiar.
   Respuesta:
 
+- **Q-08 · Categorías libres frente a mediciones por categoría (H-QA-M12-03, no bloquea).** La gestora puede nombrar libremente las categorías de un indicador de meta acumulada, pero la base solo admite mediciones por categoría con `P0P1` y `P2P3`: un indicador con categoría "Alta" se puede crear y comprometer, pero no recibe mediciones. Por defecto: se mantiene así (solo vulnerabilidades usa categorías). Opciones: (a) limitar el formulario a P0P1/P2P3; (b) admitir en mediciones cualquier categoría definida en el indicador. Responde "ok", "a" o "b".
+  Respuesta:
+
 ## Resueltos
 
 - **P-03 · GitHub Pages** — resuelto el 2026-11-19. Repo público y Pages activado (verificado por API: `visibility: public`, `has_pages: true`). Fuente elegida por el usuario: GitHub Actions; si el primer `deploy.yml` falla por la fuente, revisar Settings → Pages. URL esperada: `https://apivasa.github.io/practica_agente/`.
