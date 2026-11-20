@@ -1,6 +1,6 @@
 # Manual de la gestora de KPIs
 
-Qué ve y qué puede hacer la gestora de KPIs en la app. Solo describe lo que está construido (2026-11-19).
+Qué ve y qué puede hacer la gestora de KPIs en la app. Solo describe lo que está construido (2026-11-20).
 
 > La app todavía no está publicada en GitHub Pages (V-05). Hoy se usa en local; ver [README](../README.md#correr-en-local). En local entra con `gestora@example.test`.
 
@@ -27,10 +27,11 @@ Defines las reglas de juego: das de alta los indicadores, les asignas custodio y
 | Inicio | `#/gestora` |
 | Indicadores | `#/gestora/indicadores` |
 | Completitud | `#/gestora/completitud` |
+| Metas | `#/gestora/metas` |
 
 ### Inicio (`#/gestora`)
 
-Muestra el nombre del rol y un texto con lo que haces en la app. No tiene datos: usa el menú para ir a Indicadores o Completitud.
+Muestra el nombre del rol y un texto con lo que haces en la app. No tiene datos: usa el menú para ir a Indicadores, Completitud o Metas.
 
 ### Indicadores (`#/gestora/indicadores`)
 
@@ -70,10 +71,64 @@ Te dice qué datos faltan para el comité del mes.
 
 Una unidad cuenta como cargada para un KPI si tiene al menos una medición con fecha dentro del mes. Solo cuentan los indicadores activos.
 
+### Metas (`#/gestora/metas`)
+
+Cargas la meta mensual de los indicadores de **meta acumulada sin categorías**. Sin meta del mes, ese indicador queda **Sin evaluar**.
+
+- Solo aparecen los indicadores activos de meta acumulada sin umbrales por categoría.
+- VULN no aparece: tiene categorías y su meta sale del paquete trimestral (ver [docs/indicadores.md](indicadores.md#color-mensual)).
+- Si no hay ninguno, ves "No hay indicadores activos de meta acumulada sin categorías…".
+
+**Elegir qué ver.**
+1. Elige el **Indicador**.
+2. Escribe el **Mes** con formato `AAAA-MM`. Por defecto es el mes en curso. Un formato inválido muestra "Mes: usa el formato AAAA-MM (ej. 2026-10)".
+
+**Tabla del mes.** Una fila por unidad:
+
+| Columna | Qué muestra |
+|---|---|
+| Unidad | Nombre de la unidad. |
+| Paquete del trimestre | `Paquete total` del compromiso trimestral (`AAAA-Qn`) de la unidad, o "—" si no hay. |
+| Meta acumulada del mes | La meta guardada, o "Sin meta". |
+| Color con la meta | Verde, Amarillo, Rojo o Sin evaluar. |
+| Motivo | Por qué salió ese color. |
+| Acciones | **Editar** carga la unidad y su meta en el formulario. |
+
+El color es una **vista previa**: usa la misma regla que la evaluación mensual. El color oficial lo guarda la evaluación programada al cerrar el mes.
+
+**Registrar o editar una meta.**
+1. Elige la **Unidad** (o pulsa **Editar** en su fila).
+2. Escribe la **Meta acumulada del mes**: lo que debe estar resuelto desde el día 1 del trimestre hasta el cierre del mes. Número ≥ 0; acepta decimales.
+3. Opcional: pulsa **Proponer un tercio** (ver abajo).
+4. Pulsa **Guardar meta**. Ves "Meta de <unidad> para <mes> guardada: <valor>." y la tabla se recalcula.
+
+Si ya hay meta para esa unidad y mes, se actualiza su valor. No se crea una segunda.
+
+**Proponer un tercio.** Calcula la meta desde el paquete del compromiso trimestral de la unidad (P):
+
+| Mes del trimestre | Propuesta (acumulada) |
+|---|---|
+| 1 | ceil(P/3) |
+| 2 | ceil(2P/3) |
+| 3 | P |
+
+Ejemplo: P = 100 → 34, 67 y 100. Es la misma regla que usa el motor para vulnerabilidades. La propuesta solo llena el campo: tienes que pulsar **Guardar meta**.
+
+Si la unidad no tiene compromiso trimestral, ves "<unidad>: Sin compromiso trimestral (AAAA-Qn) para proponer la meta.". Si el compromiso no tiene paquete, el aviso lo dice.
+
+Errores frecuentes:
+- "Meta acumulada del mes: es obligatoria".
+- "Meta acumulada del mes: debe ser un número mayor o igual que 0".
+- "Meta acumulada del mes: el valor es demasiado grande".
+
+**Meta de un mes ya cerrado.** Puedes guardar la meta de cualquier mes. Si el mes ya se evaluó, la evaluación guardada no cambia sola: hay que reprocesar ese mes (ver [docs/operacion.md](operacion.md)). Si cargas la meta antes del día 1 del mes siguiente, no hace falta.
+
+Todo alta o cambio de meta queda en `audit_log`. Solo la gestora puede crear o editar metas: la BD lo impide a los otros roles.
+
 ## Qué no puedes hacer desde la app (hoy)
 
 - Cargar mediciones o compromisos. Eso es del custodio. Si necesitas corregir datos, pide el rol de custodio del indicador.
-- Cargar las metas mensuales (`targets`). No hay pantalla. Vulnerabilidades no las necesita: su meta sale del paquete trimestral (M-06). Solo las usaría un indicador de meta acumulada sin categorías.
+- Borrar una meta mensual. Solo se crea o se edita su valor.
 - Crear usuarios ni asignar roles de líder o comité.
 - Ver la bandeja de alertas ni aprobar excepciones: son del comité y del líder.
 

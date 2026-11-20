@@ -2,6 +2,12 @@
 
 Una línea por ítem, la más reciente arriba.
 
+## Sin publicar
+
+- 2026-11-20 · M-07 · La gestora carga y edita las metas mensuales acumuladas de los indicadores de meta acumulada sin categorías en `#/gestora/metas`, con "Proponer un tercio" (ceil(P/3), ceil(2P/3), P) y vista previa del color por unidad; el color oficial lo sigue guardando la evaluación programada.
+
+## Integrados
+
 - 2026-11-20 · M-06 · El color mensual de vulnerabilidades se calcula por criticidad (P0/P1 y P2/P3 con sus umbrales, gana el peor) sobre metas de 1/3, 2/3 y 3/3 del paquete efectivo, sin usar `targets`; las mediciones malformadas se descartan y el motivo lo dice. El líder ve la meta del mes por criticidad.
 - 2026-11-20 · V-05 (#27) · Workflow de despliegue manual (`deploy.yml`): verifica secretos, Auth y `dist/`, aplica migraciones a Supabase y publica en GitHub Pages solo cuando el usuario lo dispara. La app todavía no está publicada.
 - 2026-11-20 · S-05 fase A (#26) · Pentest previo a producción contra el build de producción y Supabase local. La fase B (contra Pages y la API real) queda lista para correr tras el primer despliegue.

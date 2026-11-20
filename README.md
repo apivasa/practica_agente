@@ -13,7 +13,7 @@ Lo que existe hoy en `main` y pasó CI:
 - **Base de datos** (F-03, F-04, F-06): 9 tablas del diseño más `audit_log`, con RLS por rol, auditoría por trigger y datos semilla ficticios. Ver [`docs/modelo-datos.md`](docs/modelo-datos.md).
 - **Login y rutas por rol** (F-05): correo y contraseña con Supabase Auth. Sin registro abierto. Cada rol llega a su pantalla.
 - **Pantallas por rol:**
-  - Gestora: alta y edición de indicadores (M-02) y tablero de completitud por custodio (V-03).
+  - Gestora: alta y edición de indicadores (M-02), tablero de completitud por custodio (V-03) y metas mensuales de los indicadores de meta acumulada sin categorías, con "Proponer un tercio" (M-07).
   - Custodio: compromisos con umbral negociado (M-03) y captura manual o CSV de mediciones (M-04).
   - Comité: matriz unidad × indicador con alertas (V-02) y aprobación y revocación de excepciones (C-02).
   - Líder: sus indicadores, color, meta, ritmo, restricciones y alertas (V-01).
@@ -23,7 +23,7 @@ Lo que existe hoy en `main` y pasó CI:
 - **Salud del sistema** (V-04): `salud.yml` corre cada 6 h, revisa la web, Supabase y los workflows programados, y abre o actualiza un issue si algo falla. Ver [`docs/operacion.md`](docs/operacion.md).
 - **Despliegue manual** (V-05): `deploy.yml` aplica migraciones y publica en GitHub Pages solo cuando el usuario lo dispara a mano. La app **todavía no está publicada**. Ver [`docs/despliegue.md`](docs/despliegue.md).
 
-Todavía **no** existen: la primera publicación en GitHub Pages y las migraciones en Supabase real (el usuario dispara `deploy.yml`), la fase B del pentest previo a producción (S-05, tras el primer despliegue), correo u otro canal externo de alertas (C-05, espera Q-04), fuentes automáticas de mediciones (V-07, espera Q-02) y pantalla para cargar metas mensuales (`targets`, M-07; VULN ya no las usa). Ver [`docs/plan-maestro.md`](docs/plan-maestro.md).
+Todavía **no** existen: la primera publicación en GitHub Pages y las migraciones en Supabase real (el usuario dispara `deploy.yml`), la fase B del pentest previo a producción (S-05, tras el primer despliegue), correo u otro canal externo de alertas (C-05, espera Q-04) y fuentes automáticas de mediciones (V-07, espera Q-02). Ver [`docs/plan-maestro.md`](docs/plan-maestro.md).
 
 ## Manuales por rol
 
