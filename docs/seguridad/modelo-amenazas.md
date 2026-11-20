@@ -237,18 +237,6 @@ Con el primer despliegue cambian tres cosas: (1) el front deja de ser un build l
 | T-M06-03 | Tampering / DoS | Una medición malformada cargada por API (decimal, categoría nula o desconocida) deja el mes `not_evaluated` y corta la racha de rojos (evita el congelamiento) | Medio | Validación en el front (`measurements-input.js`); auditoría de `measurements`. Falta validar en BD o filtrar en el motor | H-M06-01 (abierto); `engine-m06.test.js` fija que nunca da verde |
 | T-M06-04 | Information disclosure / XSS | Etiqueta de categoría con marcado llega al DOM | Medio | Todo por `textContent` (`el()`) | `engine-m06.test.js` › cat 4/6 |
 
-## Superficie nueva (M-07)
-
-- **Pantalla `#/gestora/metas`** (`src/views/kpi_manager/targets.js`): la gestora crea o edita `targets.target_value` por (unidad, indicador cumulativo sin categorías, mes). Escritura en `src/data/target-admin.js` (select + insert o update por id); la lectura (`targets.js`) sigue siendo de solo lectura para los tableros del líder. La meta alimenta el color mensual de esos indicadores y, por tanto, la escalada.
-
-| ID | STRIDE | Amenaza | Riesgo | Control | Prueba |
-|---|---|---|---|---|---|
-| T-M07-01 | Elevation / Tampering | Custodio, comité o líder escriben metas (bajar la meta propia para forzar verde) | Alto | RLS `targets_insert/update/delete` solo `kpi_manager`; sin TRUNCATE | `supabase/tests/security/045_security_targets_m07.test.sql`; `api/rls-matrix.test.js` › targets |
-| T-M07-02 | Information disclosure | Líder lee metas de otra unidad por id, filtro u `or=` | Medio | `targets_select` con `is_leader_of(unit_id)` | 045 (IDOR id, `or`); `dashboards-v01-v03.spec.js` |
-| T-M07-03 | Elevation | Un tablero de otro rol arrastra el módulo de escritura | Bajo | Escritura aislada en `target-admin.js`, solo importado por la vista de la gestora; ruta `kpi_manager` | `front-v01-v03.test.js` › M-07 |
-| T-M07-04 | XSS almacenado | Nombre de unidad o indicador con marcado en la tabla o el selector de metas | Medio | `el()`/`textContent` | `e2e/security/xss.spec.js` (`#/gestora/metas`); `front-v01-v03.test.js` › sumideros M-07 |
-| T-M07-05 | Tampering / Repudiation | La gestora reasigna una meta existente a otra unidad, indicador o mes con un UPDATE de `unit_id`/`indicator_id`/`month` (el front no lo hace) | Bajo | Solo la gestora; `audit_targets` guarda old/new | H-M07-01 (abierto: grant de columna `update (target_value)`) |
-
 ## Trazabilidad: amenazas de riesgo Alto → prueba automática
 
 | Amenaza | Prueba (archivo › caso) | Estado |

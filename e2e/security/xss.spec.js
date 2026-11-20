@@ -17,7 +17,7 @@ const PAYLOADS = [
 ];
 
 const ROLES = [
-  { email: 'gestora@example.test', routes: ['#/gestora', '#/gestora/indicadores', '#/gestora/completitud', '#/gestora/metas'] },
+  { email: 'gestora@example.test', routes: ['#/gestora', '#/gestora/indicadores', '#/gestora/completitud'] },
   { email: 'comite@example.test', routes: ['#/comite', '#/comite/excepciones'] },
   { email: 'custodio2@example.test', routes: ['#/custodio', '#/custodio/compromisos', '#/custodio/mediciones'] },
   { email: 'lider1@example.test', routes: ['#/lider'] },
