@@ -473,19 +473,49 @@ test('deploy.yml: ningún job aplica la semilla, resetea, usa psql ni config pus
   assert.doesNotMatch(CODE, /--include-seed|db reset|psql\b|config push/);
 });
 
-test('migrate-plan: solo dry-run, nunca db push real', () => {
-  const lines = job('migrate-plan').split('\n');
-  assert.ok(lines.some((l) => /supabase db push --remote --dry-run\s*$/.test(l)), 'falta el dry-run');
-  assert.ok(!lines.some((l) => /supabase db push --remote\s*$/.test(l)), 'migrate-plan no debe aplicar migraciones');
+// Líneas que invocan `supabase db push` (cualquier variante de flags).
+const DB_PUSH = /supabase\s+db\s+push\b/;
+const DRY_RUN_LINE = /^\s*(run:\s*)?supabase db push --remote --dry-run\s*$/;
+// Fix run 44837918615: la CLI pide confirmación en CI; el push real lleva --yes.
+const REAL_PUSH_LINE = /^\s*(run:\s*)?supabase db push --remote --yes\s*$/;
+
+test('migrate-plan: solo dry-run sin --yes, nunca db push real', () => {
+  const pushes = job('migrate-plan').split('\n').filter((l) => DB_PUSH.test(l));
+  assert.ok(pushes.length >= 1, 'falta el dry-run');
+  for (const l of pushes) {
+    assert.match(l, DRY_RUN_LINE, `migrate-plan solo admite el dry-run exacto: ${l.trim()}`);
+    assert.doesNotMatch(l, /--yes\b/, `--yes nunca en el dry-run: ${l.trim()}`);
+  }
 });
 
-test('migrate: dry-run en un paso previo a db push y migration list después', () => {
+test('migrate: dry-run (sin --yes) en un paso previo al push real `--remote --yes` y migration list después', () => {
   const lines = job('migrate').split('\n');
-  const dry = lines.findIndex((l) => /supabase db push --remote --dry-run\s*$/.test(l));
-  const push = lines.findIndex((l) => /supabase db push --remote\s*$/.test(l));
+  const pushes = lines.map((l, i) => [l, i]).filter(([l]) => DB_PUSH.test(l));
+  const dryIdx = pushes.filter(([l]) => DRY_RUN_LINE.test(l)).map(([, i]) => i);
+  const realIdx = pushes.filter(([l]) => REAL_PUSH_LINE.test(l)).map(([, i]) => i);
+  assert.equal(dryIdx.length, 1, 'migrate: exactamente un dry-run');
+  assert.equal(realIdx.length, 1, 'migrate: exactamente un push real `supabase db push --remote --yes`');
+  assert.equal(pushes.length, 2, `migrate: solo dry-run y push real: ${pushes.map(([l]) => l.trim()).join(' | ')}`);
+  const [dry] = dryIdx;
+  const [push] = realIdx;
   const list = lines.findIndex((l) => /supabase migration list --remote\s*$/.test(l));
   assert.ok(dry >= 0 && push > dry && list > push, `orden dry-run(${dry}) → push(${push}) → list(${list})`);
   assert.ok(lines.slice(dry, push).some((l) => /^\s+- name:/.test(l)), 'dry-run y push en pasos distintos');
+});
+
+test('deploy.yml: --yes aparece solo en el push real, nunca junto a --dry-run', () => {
+  const withYes = CODE.split('\n').filter((l) => /--yes\b/.test(l));
+  assert.ok(withYes.length >= 1, 'falta --yes en el push real');
+  for (const l of withYes) {
+    assert.match(l, REAL_PUSH_LINE, `--yes fuera del push real: ${l.trim()}`);
+    assert.doesNotMatch(l, /--dry-run/, `--yes junto a --dry-run: ${l.trim()}`);
+  }
+  for (const l of CODE.split('\n').filter((x) => /--dry-run/.test(x))) {
+    assert.doesNotMatch(l, /--yes\b/, `dry-run con --yes: ${l.trim()}`);
+  }
+  // El push real solo vive en migrate (tras la aprobación del environment).
+  const real = JOBS.filter((j) => j.text.split('\n').some((l) => REAL_PUSH_LINE.test(l))).map((j) => j.id);
+  assert.deepEqual(real, ['migrate']);
 });
 
 // ---------------------------------------------------------------- workflows programados
