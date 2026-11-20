@@ -106,7 +106,8 @@ test('cat 3/5: paquete negativo, decimal, NaN, Infinity, texto o enorme nunca da
 test('cat 3/5: umbrales por categoría NaN, Infinity, negativos o > 100 nunca dan verde con un rojo real', () => {
   const bad = [
     { green: 'NaN', yellow: 90 },
-    { green: 1e400, yellow: 90 },
+    { green: Infinity, yellow: 90 },
+    { green: 96, yellow: -Infinity },
     { green: -1, yellow: -2 },
     { green: 101, yellow: 200 },
     { green: null, yellow: null },

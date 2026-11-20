@@ -35,4 +35,13 @@ Los tres quedan en `docs/seguridad/hallazgos.md` (sección M-06) y se proponen c
 
 ## Runs
 
-Pendiente de revisar tras el push (ver la respuesta al orquestador).
+Seguridad sobre `0073b84`: https://github.com/apivasa/practica_agente/actions/runs/44674038234
+- gitleaks (historial completo): verde
+- semgrep (JS, secretos, Actions, SQL): verde
+- npm audit (producción): verde
+- CodeQL (javascript-typescript y actions): verde
+- pentest API (PostgREST/Auth, Supabase local): verde
+- pruebas de seguridad (`tests/security`): verde
+- DAST (e2e de seguridad + ZAP baseline): en curso cuando se escribió el informe
+
+CI sobre `0073b84` (https://github.com/apivasa/practica_agente/actions/runs/44674038192): pgTAP verde, integración verde. El build falló por un error de lint en esta misma prueba: el literal `1e400` dispara `no-loss-of-precision`. Lo corrige el commit siguiente, que lo cambia por `Infinity`, y eso no altera lo que se prueba.
