@@ -124,10 +124,10 @@ El orquestador toma el **primer ítem `Pendiente`** cuyas dependencias estén `H
 | 22 | V-02 | Hecho | 1 | #21 |  |
 | 23 | V-04 | Hecho | 0 | #22 | Constructor: arquitecto-SRE |
 | 24 | V-06 | Hecho | 0 | #23 | Constructor: documentador |
-| 25 | S-05 | En revisión | 1 | #26 | Fase A (pre-despliegue). Constructor: seguridad |
+| 25 | S-05 | Hecho | 1 | #26 | Fase A (pre-despliegue). Constructor: seguridad |
 | 26 | V-05 | En revisión | 1 | #27 | Despliegue manual primero (ADR 0015); P-06 aprobado |
 | 26b | S-05b | Pendiente | 0 | | Fase B del pentest contra Pages y Supabase real; depende del primer run de V-05; compuerta de P-05 |
-| 26c | M-06 | Pendiente | 0 | | Color mensual de VULN por criticidad (96 % P0/P1, 85 % P2/P3); antes de P-05 |
+| 26c | M-06 | En curso | 1 | | Color mensual de VULN por criticidad (96 % P0/P1, 85 % P2/P3); antes de P-05 |
 | 26d | M-07 | Pendiente | 0 | | Pantalla de metas mensuales (`targets`) para la gestora |
 | 26e | V-08 | Pendiente | 0 | | Candado vigente hoy e inicio autorizado; agrupar con V-09 |
 | 26f | V-09 | Pendiente | 0 | | Un solo mapa de etiquetas de alcance de excepciones |

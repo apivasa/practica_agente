@@ -29,6 +29,9 @@ jobs:
     name: evaluar (mensual)
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    # H-C03-02: la clave secreta se lee del environment `produccion` (regla de
+    # ramas de despliegue = main), no de los secretos del repositorio.
+    environment: produccion
     steps:
       # Producción solo si existen los secretos y la variable EVALUATION_ENABLED = 'true'
       # (se activa tras el primer despliegue, V-05: compuerta del usuario).

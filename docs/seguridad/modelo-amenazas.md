@@ -211,6 +211,20 @@ Ver "Superficie de CI/CD (S-01)" y T-CI-01..10 arriba. El job `pentest-api` (S-0
 | I/T | XSS almacenado en nombre de indicador, categoría, notas, unidad o en el mensaje de error que repite la celda | Todo por `textContent`; `el()` rechaza `on*` de texto y URL `javascript:` | `front-m02-m04.test.js` › XSS, `front-f05.test.js` |
 | E | Ser gestora da escritura en mediciones de KPIs que no custodia | `measurements_insert` exige `is_custodian_of` | `api/m02-m04.test.js` › multirol |
 
+## Superficie de producción (S-05, antes de V-05)
+
+Con el primer despliegue cambian tres cosas: (1) el front deja de ser un build local y queda en `https://apivasa.github.io/practica_agente/`, con la URL del proyecto y la clave publicable dentro del bundle; (2) la BD y Auth pasan al proyecto Supabase real (ref `oehtspdtpwdhfhhhkgao`), cuya configuración de Auth **no** la fija `config.toml`, sino el panel; (3) `deploy.yml` y los workflows programados usan los seis secretos de producción. Detalle y resultados en `docs/seguridad/pentest-preproduccion.md`.
+
+| ID | STRIDE | Amenaza | Riesgo | Control | Prueba |
+|---|---|---|---|---|---|
+| T-PROD-01 | Spoofing | El proyecto real conserva los valores por defecto de Supabase (registro abierto, contraseña de 6 caracteres): cualquiera crea una cuenta | Medio (sin rol no se ve nada: T-AUTH-01) | Panel de Auth configurado por la usuaria antes del primer uso (H-S05-01) | `tests/security/prod/fase-b.test.js` › `/auth/v1/settings` (fase B) |
+| T-PROD-02 | Information disclosure | `pg_graphql` activo en producción (no lo está en local) publica tablas o salta RLS | Bajo (respeta grants y RLS) | `anon` sin grants; desactivar la extensión si no se usa (H-S05-03) | `api/preprod-s05.test.js` › GraphQL (local); `prod/fase-b.test.js` › GraphQL anónimo |
+| T-PROD-03 | Information disclosure | El build publicado lleva la clave secreta, un token o una clave legada | Alto | `deploy.yml` solo pasa URL y clave publicable a `VITE_*`; busca `sb_secret_` en `dist/` | `preprod-s05.test.js` › VITE_ solo publicable; `prod/fase-b.test.js` › sin secretos en assets |
+| T-PROD-04 | Elevation | Un workflow de cualquier rama lee los secretos de producción (environment sin regla de ramas o secretos a nivel de repo) | Medio | Environment `produccion` con regla `main` y secretos solo ahí (H-C03-02, pendiente de la usuaria) | `preprod-s05.test.js` › environment produccion en jobs con credenciales de administración; `s05-fase-b` › paso informativo |
+| T-PROD-05 | Tampering | El despliegue aplica la semilla (cuentas con contraseña pública) o vuelca la cadena de conexión | Alto | `db push` sin `--include-seed` ni `--debug` | `preprod-s05.test.js` › db push/reset |
+| T-PROD-06 | Information disclosure / Elevation | Inyección en filtros, `order`, `select` y esquemas ocultos de PostgREST | Alto | PostgREST parametriza; `Accept-Profile` solo `public` | `api/preprod-s05.test.js` › inyección (10 tablas × 5 actores × 21 sondas), esquemas no expuestos; ZAP API scan (`s05-fase-a`) |
+| T-PROD-07 | DoS (nuestro) | El propio pentest degrada producción | — | Fase B manual, 1 hilo, retardo, duración acotada, sin escaneo activo de la API ni AJAX spider; tope de 900 peticiones | `preprod-s05.test.js` › s05-fase-b acotado |
+
 ## Superficie nueva (M-06)
 
 - **Color mensual por criticidad:** la evaluación mensual (`scripts/lib/build.js` → `engine/rows.js` `evaluateCategoryMonth` → `categoryMonthColor`) colorea los indicadores `cumulative_target` con `thresholds_by_category` a partir de `commitments.package_by_category` (lo escribe el custodio) y de las mediciones `resolved`/`detected` (custodio), ya no de `targets`. Ese color alimenta la escalada (racha de rojos → congelamiento).
@@ -256,3 +270,5 @@ Ver "Superficie de CI/CD (S-01)" y T-CI-01..10 arriba. El job `pentest-api` (S-0
 | T-EXC-04 (I/T: XSS almacenado en motivo y `change_ref`) | `tests/security/exceptions-c02.test.js` › XSS; `api/exceptions-c02.test.js` › XSS | Activa (C-02) |
 | T-CI-01..09 | `tests/security/workflows.test.js`; jobs gitleaks, semgrep, npm-audit, CodeQL | Activa |
 | T-CI-10 | `workflows.test.js` (caso deploy) | **Asignada a V-05** |
+| T-PROD-03, T-PROD-05 | `tests/security/preprod-s05.test.js` › VITE_ solo publicable, › db push/reset, › deploy.yml (si existe); `prod/fase-b.test.js` › sin secretos | Activa (S-05; la parte de producción, en fase B) |
+| T-PROD-06 | `tests/security/api/preprod-s05.test.js` › inyección, › esquemas no expuestos, › embebidos; `seguridad.yml` › `s05-fase-a` (ZAP API scan) | Activa (S-05) |

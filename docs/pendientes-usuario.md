@@ -23,12 +23,15 @@ El orquestador solo escribe aquí cuando algo **de verdad** te necesita (ver reg
   Respuesta:
 - **Q-03 · ¿Amarillo en el mes 2 escala igual que rojo?** Por defecto: no; amarillo en mes 2 mantiene la restricción del mes 1 (no change nuevo). Es configurable.
   Respuesta:
-- **Q-04 · Canal externo de alertas.** Por defecto: bandeja dentro de la app + issue de GitHub. Opciones: correo (requiere un proveedor como Resend con su API key), Microsoft Teams (webhook) u otro.
+- **Q-04 · Canal externo de alertas.** Por defecto: bandeja dentro de la app (los issues de GitHub se descartaron porque el repo es público, ADR 0008 punto 7). Opciones: correo (requiere un proveedor como Resend con su API key), Microsoft Teams (webhook) u otro.
   Respuesta:
 
 - **Q-05 · Confirmar interpretaciones de escalada (ADR 0003).** El diseño no las cubre; el sistema ya las aplica por defecto: (a) la racha de meses fuera de verde se reinicia en cada trimestre; (b) un mes sin evaluar corta la racha; (c) un mes 3 en amarillo tras dos en rojo baja de congelado a restringido; (d) una excepción "arrancar algo urgente" con la unidad congelada no levanta el congelamiento, solo autoriza ese inicio. Responde "ok" o indica cuál cambiar.
   Respuesta:
 - **Q-06 · Ritmo esperado de vulnerabilidades (M-05).** Por defecto: la meta del mes en curso se prorratea por días (al día 10 de un mes de 30 se esperan 10/30 de la meta mensual), el ritmo se calcula contra el 100 % del pendiente, y las P0/P1 del mes 3 resueltas cuentan para el cumplimiento del trimestre actual. Responde "ok" o indica cuál cambiar.
+  Respuesta:
+
+- **Q-07 · Color mensual de vulnerabilidades por criticidad (M-06, ADR 0016).** Por defecto: (a) el indicador toma el peor color entre P0/P1 y P2/P3; (b) el valor mostrado es el de la categoría con peor color; (c) los umbrales negociados por unidad (overrides del compromiso) no se aplican a las categorías, que usan 96 % y 85 %; (d) si una categoría no se puede evaluar, el indicador no sale verde. Responde "ok" o indica cuál cambiar.
   Respuesta:
 
 ## Resueltos
