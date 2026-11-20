@@ -216,7 +216,7 @@ test('EVALUATE_ALLOW_FUTURE solo en los scripts de CI contra Supabase local', ()
     assert.match(sh, /^set -euo pipefail$/m, `${p}: sin modo estricto`);
     assert.doesNotMatch(sh, /^set -[a-z]*x|set -o xtrace/m, `${p}: xtrace imprimiría la clave`);
     // Guarda local antes de exportar nada.
-    const guard = sh.indexOf('http://127.0.0.1:*|http://localhost:*) ;;');
+    const guard = sh.search(/http:\/\/127\.0\.0\.1:\*\|http:\/\/localhost:\*\) ;;/);
     assert.ok(guard > 0, `${p}: falta la guarda de Supabase local`);
     assert.ok(guard < sh.indexOf('export EVALUATE_ALLOW_FUTURE'), `${p}: exporta antes de la guarda`);
     // La clave secreta local se enmascara y nunca se imprime ni pasa a GITHUB_ENV/OUTPUT.
