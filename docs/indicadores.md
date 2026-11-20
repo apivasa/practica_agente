@@ -27,7 +27,7 @@ Notas:
   - Con "menos es mejor", verde debe ser menor o igual que amarillo.
   - Si no se cumple, la pantalla rechaza el indicador con un mensaje en español. La BD también lo impide.
 - **Meta acumulada solo admite "más es mejor"** (M-08). Con "menos es mejor" la pantalla muestra "Sentido: una meta acumulada (cumulative_target) solo admite higher_is_better (más es mejor)". La BD también lo impide (check `indicators_cumulative_direction`).
-- **Umbrales por categoría** (opcional): nombre de categoría, verde y amarillo. Para vulnerabilidades usa exactamente `P0P1` y `P2P3` (ver sección 6). En un indicador de meta acumulada con categorías, la BD solo acepta mediciones con categoría `P0P1` o `P2P3` y valor entero ≥ 0 (M-08): otras categorías no sirven para ese tipo.
+- **Umbrales por categoría** (opcional): nombre de categoría, verde y amarillo. Para vulnerabilidades usa exactamente `P0P1` y `P2P3` (ver sección 6). En un indicador de meta acumulada con categorías, la BD solo acepta mediciones con categoría `P0P1` o `P2P3` y valor entero ≥ 0 y ≤ 2^53 − 1 (M-08, tope desde M-09): otras categorías no sirven para ese tipo.
 - **Frecuencia y fuente** hoy solo se guardan. La evaluación programada corre igual para todos (mensual). Las fuentes automáticas no existen todavía (V-07, espera Q-02).
 - **Activo.** Solo los indicadores activos entran en la evaluación y en el tablero de completitud. Desactivar no borra nada.
 
@@ -71,7 +71,7 @@ Ventana 90 días, verde 96, amarillo 90, categorías `P0P1` (96 / 90) y `P2P3` (
 Un indicador de meta acumulada **sin** umbrales por categoría se mide contra la meta del mes guardada en `targets`. La gestora la carga en **Metas** (`#/gestora/metas`, ver [manual de la gestora](manual-gestora.md#metas-gestorametas)).
 
 - La meta es **acumulada del trimestre**: lo que debe estar resuelto desde el día 1 del trimestre hasta el cierre del mes.
-- **Proponer un tercio** la calcula desde el paquete total (P) del compromiso trimestral de la unidad: mes 1 = ceil(P/3), mes 2 = ceil(2P/3), mes 3 = P.
+- **Proponer un tercio** la calcula desde el paquete total (P) del compromiso trimestral de la unidad: mes 1 = ceil(P/3), mes 2 = ceil(2P/3), mes 3 = P, sin superar nunca P.
 - La pantalla muestra el color de cada unidad con esa meta como vista previa. El color oficial lo guarda la evaluación programada.
 
 Ejemplo: indicador de meta acumulada, más es mejor, verde 90, amarillo 80, sin categorías. La unidad tiene un compromiso trimestral con paquete 30.
@@ -227,7 +227,7 @@ Ejemplo del diseño: paquete de 2.000. Entran 120 P0/P1 en enero, 80 en febrero 
 
 ### Metas mensuales y ritmo
 
-- **Meta parcial mensual** del motor: un tercio, dos tercios y el total del paquete efectivo, acumulados, con redondeo hacia arriba en los meses 1 y 2.
+- **Meta parcial mensual** del motor: un tercio, dos tercios y el total del paquete efectivo, acumulados, con redondeo hacia arriba en los meses 1 y 2, topado en el total.
 - **Ritmo esperado:** pendiente / semanas restantes del trimestre. Se recalcula cuando entran P0/P1 nuevas.
 - **Atraso:** se compara lo resuelto con la meta acumulada a la fecha. Dentro del mes, la meta se prorratea por días: al día 10 de un mes de 30 se espera la meta del mes anterior más 10/30 de la del mes en curso. P0/P1 y P2/P3 se miden por separado: lo resuelto de una no compensa la otra. Basta que una vaya atrasada para que la unidad esté **Atrasada**.
 - Las P0/P1 del mes 3 que se resuelven en el mismo trimestre cuentan para su cumplimiento.

@@ -102,7 +102,7 @@ El color es una **vista previa**: usa la misma regla que la evaluación mensual.
 3. Opcional: pulsa **Proponer un tercio** (ver abajo).
 4. Pulsa **Guardar meta**. Ves "Meta de <unidad> para <mes> guardada: <valor>." y la tabla se recalcula.
 
-Si ya hay meta para esa unidad y mes, se actualiza su valor. No se crea una segunda.
+Si ya hay meta para esa unidad y mes, se actualiza su valor. No se crea una segunda. Una meta no se puede mover a otra unidad o a otro mes: para eso registra una meta nueva con esa unidad y ese mes.
 
 **Proponer un tercio.** Calcula la meta desde el paquete del compromiso trimestral de la unidad (P):
 
@@ -112,7 +112,7 @@ Si ya hay meta para esa unidad y mes, se actualiza su valor. No se crea una segu
 | 2 | ceil(2P/3) |
 | 3 | P |
 
-Ejemplo: P = 100 → 34, 67 y 100. Es la misma regla que usa el motor para vulnerabilidades. La propuesta solo llena el campo: tienes que pulsar **Guardar meta**.
+Ejemplo: P = 100 → 34, 67 y 100. La propuesta nunca supera P: con un paquete decimal, como P = 0,5, propone 0,5 en los tres meses. Es la misma regla que usa el motor para vulnerabilidades. La propuesta solo llena el campo: tienes que pulsar **Guardar meta**.
 
 Si la unidad no tiene compromiso trimestral, ves "<unidad>: Sin compromiso trimestral (AAAA-Qn) para proponer la meta.". Si el compromiso no tiene paquete, el aviso lo dice.
 
@@ -129,6 +129,7 @@ Todo alta o cambio de meta queda en `audit_log`. Solo la gestora puede crear o e
 
 - Cargar mediciones o compromisos. Eso es del custodio. Si necesitas corregir datos, pide el rol de custodio del indicador.
 - Borrar una meta mensual. Solo se crea o se edita su valor.
+- Cambiar la unidad, el indicador o el mes de una meta ya creada.
 - Crear usuarios ni asignar roles de líder o comité.
 - Ver la bandeja de alertas ni aprobar excepciones: son del comité y del líder.
 

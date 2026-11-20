@@ -54,16 +54,17 @@ Funciones de apoyo (esquema `private`, no expuesto por la API, `security definer
 - El usuario solo inserta con `source = 'manual'`. `automatic` lo pone el backend.
 - Editables: `value`, `measured_on`, `app_id`, `compliant`, `category`, `kind`. No se pueden cambiar `unit_id`, `indicator_id`, `created_by` ni `source`.
 - En meta acumulada `value` es **incremental**: lo resuelto o detectado ese día. El motor suma.
+- Check `measurements_value_finite` (M-09): `value` no puede ser `NaN`, `Infinity` ni `-Infinity`. Aplica a inserciones y ediciones, de todos los roles y del backend.
 - Trigger `measurements_category_guard` (M-08, `AFTER INSERT OR UPDATE`, función `private.check_measurement_category`). Si el indicador es `cumulative_target` y tiene `thresholds_by_category`, cada medición (resuelta, detectada o sin `kind`) debe cumplir:
   - `category` es `P0P1` o `P2P3` (exacto, con mayúsculas);
-  - `value` es un entero ≥ 0 y no nulo.
+  - `value` es un entero ≥ 0, no nulo y como máximo 2^53 − 1 (9.007.199.254.740.991, el mayor entero seguro de JavaScript; M-09).
   
   Si no, la BD rechaza la fila con el código 23514. Aplica a todos, también al backend. Como el trigger corre después de RLS, un rol sin permiso sigue recibiendo 42501 aunque la fila esté mal. Solo valida filas nuevas o editadas: las anteriores a M-08, o las de un indicador que recibe categorías después, no se revalidan; el motor las descarta y lo dice en el motivo (ver [docs/indicadores.md](indicadores.md#color-mensual)).
 
 ### `targets` — metas parciales mensuales
 `id`, `unit_id`, `indicator_id`, `month` (`AAAA-MM`), `target_value` (≥ 0, acumulada a ese mes), `created_at`. Única por (`unit_id`, `indicator_id`, `month`).
 
-La gestora las crea y edita en **Metas** (`#/gestora/metas`, M-07). La pantalla solo cambia `target_value` de una meta existente y no borra metas. A nivel de BD la gestora tiene UPDATE de toda la fila (hallazgo de seguridad H-M07-01, baja, pendiente de endurecer). La semilla trae metas para 2027-Q1 (un tercio, dos tercios y el total del paquete). Solo las usan los indicadores de meta acumulada sin categorías; VULN no.
+La gestora las crea y edita en **Metas** (`#/gestora/metas`, M-07). La pantalla solo cambia `target_value` de una meta existente y no borra metas. Desde M-09 la BD solo permite UPDATE de la columna `target_value` (privilegio por columna); cambiar `unit_id`, `indicator_id`, `month` o `id`, también por upsert, da 42501. Para otra unidad, indicador o mes se crea una meta nueva. La semilla trae metas para 2027-Q1 (un tercio, dos tercios y el total del paquete). Solo las usan los indicadores de meta acumulada sin categorías; VULN no.
 
 ### `evaluations` — color por unidad, indicador y mes
 `id`, `unit_id`, `indicator_id` (nulo = color global de la unidad), `month`, `color` (`green`, `yellow`, `red`, `not_evaluated`), `value`, `sample_size`, `reason`, `escalation_level` (`normal`, `restricted`, `frozen`, `exception`), `restrictions` (lista), `evaluated_at`.
