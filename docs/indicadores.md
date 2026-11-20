@@ -2,7 +2,7 @@
 
 Guía para la gestora de KPIs, los custodios y el comité. Explica cómo se describe un indicador, cómo se negocia un umbral, cómo se cargan las mediciones, cómo se calcula el color y qué candado recibe una unidad.
 
-> **Estado (2026-11-20).** Todo lo descrito aquí está construido y probado: pantallas de indicadores (M-02), compromisos (M-03) y mediciones (M-04), el motor (`engine/`) y la evaluación programada (C-03, C-04). La evaluación programada todavía no corre en producción: espera el despliegue (V-05). No hay pantalla para cargar metas mensuales (`targets`); VULN no las necesita desde M-06. Detalle técnico: [`engine/README.md`](../engine/README.md) y [`engine/ESCALATION.md`](../engine/ESCALATION.md).
+> **Estado (2026-11-20).** Todo lo descrito aquí está construido y probado: pantallas de indicadores (M-02), compromisos (M-03) y mediciones (M-04), el motor (`engine/`) y la evaluación programada (C-03, C-04). La evaluación programada todavía no corre en producción: espera el despliegue (V-05). Las metas mensuales (`targets`) de los indicadores de meta acumulada sin categorías se cargan en **Metas** (`#/gestora/metas`, M-07); VULN no las necesita desde M-06. Detalle técnico: [`engine/README.md`](../engine/README.md) y [`engine/ESCALATION.md`](../engine/ESCALATION.md).
 
 ## 1. Los 7 atributos de un indicador
 
@@ -38,7 +38,7 @@ La ventana incluye el día de evaluación y los `ventana − 1` días anteriores
 - **Cobertura:** % de aplicaciones distintas que cumplen. De cada aplicación cuenta solo su **última** medición en la ventana.
 - **Meta acumulada:** suma de lo resuelto en el trimestre hasta el fin del mes × 100 / meta acumulada del mes.
   - **Con umbrales por categoría** (caso vulnerabilidades): se calcula por categoría, con la meta que sale del paquete del compromiso trimestral. No usa la tabla `targets`. Ver sección 6, «Color mensual».
-  - **Sin categorías:** la meta del mes sale de la tabla `targets`. Sin meta del mes, queda **sin evaluar** ("falta la meta del periodo").
+  - **Sin categorías:** la meta del mes sale de la tabla `targets`, que carga la gestora en **Metas** (ver «Metas mensuales de un indicador sin categorías» en la sección 2). Sin meta del mes, queda **sin evaluar** ("falta la meta del periodo").
   - Meta 0: el resultado es 100 %.
   - Las mediciones de tipo "detectada" no suman a lo resuelto.
 
@@ -64,6 +64,19 @@ Ventana 30 días, verde 90 %, amarillo 75 %. Cuatro aplicaciones: A no cumplía 
 ### Vulnerabilidades (`VULN`): meta acumulada
 
 Ventana 90 días, verde 96, amarillo 90, categorías `P0P1` (96 / 90) y `P2P3` (85 / 75). Ver sección 6.
+
+### Metas mensuales de un indicador sin categorías
+
+Un indicador de meta acumulada **sin** umbrales por categoría se mide contra la meta del mes guardada en `targets`. La gestora la carga en **Metas** (`#/gestora/metas`, ver [manual de la gestora](manual-gestora.md#metas-gestorametas)).
+
+- La meta es **acumulada del trimestre**: lo que debe estar resuelto desde el día 1 del trimestre hasta el cierre del mes.
+- **Proponer un tercio** la calcula desde el paquete total (P) del compromiso trimestral de la unidad: mes 1 = ceil(P/3), mes 2 = ceil(2P/3), mes 3 = P.
+- La pantalla muestra el color de cada unidad con esa meta como vista previa. El color oficial lo guarda la evaluación programada.
+
+Ejemplo: indicador de meta acumulada, más es mejor, verde 90, amarillo 80, sin categorías. La unidad tiene un compromiso trimestral con paquete 30.
+- Sin meta del mes 1: **sin evaluar**.
+- Propuesta para el mes 1: ceil(30/3) = 10. Con 10 resueltas: 100 % → **verde**.
+- Si la meta se cambia a 20, las mismas 10 resueltas dan 50 % → **rojo**.
 
 ## 3. Compromisos con umbral negociado
 
@@ -238,7 +251,7 @@ Ejemplo de la semilla (Unidad Alfa, febrero de 2027). Paquete P0/P1 1500 + 200 d
 
 Estas reglas (peor color, valor de la peor categoría, sin overrides por categoría, sin verde con una categoría sin evaluar) son valores por defecto mientras no se responda Q-07.
 
-Los indicadores de meta acumulada **sin** categorías siguen usando `targets`. Hoy esas metas solo llegan por la semilla o escritas directo en la BD: no hay pantalla para cargarlas.
+Los indicadores de meta acumulada **sin** categorías siguen usando `targets`. La gestora carga esas metas en **Metas** (`#/gestora/metas`); VULN no aparece en esa pantalla.
 
 ## 7. Candados (escalada)
 

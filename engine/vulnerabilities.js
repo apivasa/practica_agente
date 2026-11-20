@@ -197,10 +197,7 @@ export function packageStatus(input) {
 
   /** @param {number} total @returns {MonthlyTarget[]} */
   const targets = (total) =>
-    [1, 2, 3].map((i) => ({
-      month: addMonths(firstMonth, i - 1),
-      cumulativeTarget: i === 3 ? total : ceilTol((total * i) / 3),
-    }));
+    cumulativeThirds(total).map((cumulativeTarget, i) => ({ month: addMonths(firstMonth, i), cumulativeTarget }));
   const monthlyTargets = targets(effectiveTotal.total);
   const monthlyTargetsByCriticality = { p0p1: targets(effP0), p2p3: targets(effP2) };
   const expectedWeeklyPaceByCriticality = {
@@ -236,6 +233,21 @@ export function packageStatus(input) {
       thresholds: th,
     },
   };
+}
+
+/**
+ * Meta parcial mensual del paquete trimestral ("aprox. un tercio por mes", docs/diseno.md):
+ * metas ACUMULADAS de los meses 1, 2 y 3 = un tercio, dos tercios y el total, con redondeo
+ * hacia arriba en los meses 1 y 2. La usan packageStatus y la propuesta de metas (M-07).
+ * @param {number} total paquete del trimestre (número finito >= 0)
+ * @returns {[number, number, number]}
+ */
+export function cumulativeThirds(total) {
+  if (typeof total !== 'number' || !Number.isFinite(total) || total < 0) {
+    throw new TypeError('total debe ser un número finito mayor o igual que 0');
+  }
+  // `|| 0` evita -0 (Math.ceil de un negativo pequeño) con paquete 0.
+  return [ceilTol(total / 3) || 0, ceilTol((total * 2) / 3) || 0, total];
 }
 
 /** @param {unknown} s */

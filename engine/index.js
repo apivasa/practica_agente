@@ -18,6 +18,7 @@ export {
   DEFAULT_COMPLIANCE_THRESHOLDS,
   VULN_CATEGORIES,
   categoryMonthColor,
+  cumulativeThirds,
 } from './vulnerabilities.js';
 export {
   PERIOD_RE,
@@ -55,4 +56,8 @@ export {
   buildPackageInput,
   hasCategoryEvaluation,
   evaluateCategoryMonth,
+  toEngineMeasurements,
+  evaluateIndicatorMonth,
+  usesMonthlyTargets,
+  proposeThirdTarget,
 } from './rows.js';

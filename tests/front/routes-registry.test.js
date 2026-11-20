@@ -23,8 +23,10 @@ test('cada ruta tiene path, role, view y label; paths y views únicos; prefijo d
   for (const [role, path] of Object.entries(ROLE_ROUTES)) assert.equal(findRoute(path).view, role);
 });
 
-test('subrutas de M-02, M-03 y M-04', () => {
-  assert.deepEqual(routesForRole('kpi_manager').map((r) => r.path), ['/gestora', '/gestora/indicadores', '/gestora/completitud']);
+test('subrutas de M-02, M-03, M-04 y M-07', () => {
+  // M-07 añade #/gestora/metas (plan-maestro: "Pantalla #/gestora/metas").
+  assert.deepEqual(routesForRole('kpi_manager').map((r) => r.path), ['/gestora', '/gestora/indicadores', '/gestora/completitud', '/gestora/metas']);
+  assert.equal(roleForView('kpi-targets'), 'kpi_manager');
   assert.deepEqual(routesForRole('custodian').map((r) => r.path), ['/custodio', '/custodio/compromisos', '/custodio/mediciones']);
   assert.equal(roleForView('kpi-indicators'), 'kpi_manager');
   assert.equal(roleForView('nada'), null);
