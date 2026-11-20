@@ -62,3 +62,4 @@ export {
   usesMonthlyTargets,
   proposeThirdTarget,
 } from './rows.js';
+export { lockToday, buildHistory, assertHistoryFresh, YELLOW_MONTH2_ESCALATES_LIKE_RED } from './lock.js';

@@ -45,6 +45,11 @@ Puro, sin zona horaria (fechas de calendario). `scripts/lib/dates.js` lo reexpor
 - `quarterBounds('YYYY-MM')` → `{ quarter, start, end, months }` del trimestre calendario del mes.
 - Meses inválidos lanzan `TypeError`.
 
+### Candado vigente hoy (V-08) — `lock.js`
+
+- `buildHistory(evalMonth, storedColors, currentColor)` y `assertHistoryFresh(history, asOf)`: historial del trimestre y frescura del cierre (movidas desde `scripts/lib/build.js`, que las reexporta). `YELLOW_MONTH2_ESCALATES_LIKE_RED` (Q-03) también vive aquí.
+- `lockToday({ unitId, evaluations, exceptions, today })` → candado de la unidad hoy con `evaluateEscalation`: historial desde las evaluaciones globales guardadas (cierre del mes de `today` o del anterior) y las excepciones tal como están hoy. Devuelve `{ ok: true, closureMonth, level, restrictions, authorizedStarts, … }` o `{ ok: false, status: 'no_closure' | 'invalid', reason }`. Lo usan los tableros del líder y del comité; el candado guardado sigue siendo el oficial del cierre.
+
 ### Fecha de negocio — `dates.js`
 
 - `businessDate(now)` → `'YYYY-MM-DD'` en America/Guayaquil. La usan `src/lib/dates.js` y `scripts/lib/dates.js`.

@@ -4,10 +4,17 @@
 import { exceptionStatus, exceptionFromRow } from '../../engine/exceptions.js';
 import { businessDate } from '../../engine/dates.js';
 
+// V-09: único mapa de etiquetas de alcance. Lo usan la pantalla de excepciones del comité y
+// los tableros (src/lib/dashboard.js lo reexporta); no se define en otro lugar.
 export const SCOPE_LABELS = Object.freeze({
   change_start: 'Inicio puntual de change',
   all: 'Suspende todas las restricciones',
 });
+
+/** Etiqueta del alcance; un valor desconocido (o una clave heredada) sale literal. */
+export function scopeLabel(scope) {
+  return typeof scope === 'string' && Object.hasOwn(SCOPE_LABELS, scope) ? SCOPE_LABELS[scope] : String(scope ?? '—');
+}
 
 export const STATUS_LABELS = Object.freeze({
   active: 'Vigente',
@@ -47,7 +54,7 @@ export function toListItems(rows, { today, userId, units }) {
       id: row.id,
       unitName: names.get(row.unit_id) ?? 'Unidad sin nombre',
       scope: row.scope,
-      scopeLabel: SCOPE_LABELS[row.scope] ?? String(row.scope),
+      scopeLabel: scopeLabel(row.scope),
       reason: row.reason ?? '',
       changeRef: row.change_ref ?? null,
       expiresOn: row.expires_on,

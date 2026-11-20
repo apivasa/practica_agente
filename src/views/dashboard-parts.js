@@ -22,6 +22,24 @@ export function escalationInfo(evaluation) {
   ]);
 }
 
+/**
+ * V-08: candado vigente hoy (resultado de unitLockToday): nivel, restricciones efectivas,
+ * "Inicio autorizado: REF" y en qué cierre se basa. Todo por textContent.
+ */
+export function lockTodayInfo(lock) {
+  if (!lock || !lock.ok) return el('span', { class: 'muted', text: lock?.reason ?? 'Sin cierre vigente' });
+  const restrictions = Array.isArray(lock.restrictions) ? lock.restrictions : [];
+  const authorized = Array.isArray(lock.authorizedLabels) ? lock.authorizedLabels : [];
+  return el('div', { class: 'escalation lock-today' }, [
+    el('strong', { text: levelLabel(lock.level) }),
+    restrictions.length
+      ? el('ul', { class: 'restrictions' }, restrictions.map((r) => el('li', { text: restrictionLabel(r) })))
+      : null,
+    ...authorized.map((t) => el('p', { class: 'authorized-start', text: t })),
+    el('p', { class: 'small muted', text: lock.basis ?? '' }),
+  ]);
+}
+
 /** Selector de mes; llama a onChange(mes) al cambiar. */
 export function monthPicker(id, months, value, onChange) {
   const sel = select(id, months.map((m) => ({ value: m, label: m })), value);

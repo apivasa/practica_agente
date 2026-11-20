@@ -5,7 +5,7 @@
 import {
   packageStatus, paceStatus, exceptionFromRow, exceptionStatus,
   buildPackageInput, indicatorConfig, pickCommitment, addMonths, monthEnd,
-  hasCategoryEvaluation, evaluateCategoryMonth, quarterCommitment, discardedNote,
+  hasCategoryEvaluation, evaluateCategoryMonth, quarterCommitment, discardedNote, lockToday,
 } from '../../engine/index.js';
 
 export const COLOR_LABELS = Object.freeze({
@@ -27,10 +27,8 @@ export const ALERT_KIND_LABELS = Object.freeze({
   critical_intake: 'Ingreso de P0/P1',
   exception_expired: 'Vencimiento de excepción',
 });
-export const SCOPE_LABELS = Object.freeze({
-  change_start: 'Permite iniciar change',
-  all: 'Suspende todos los candados',
-});
+// V-09: las etiquetas de alcance son las de la pantalla de excepciones (una sola fuente).
+export { SCOPE_LABELS, scopeLabel } from './exceptions-logic.js';
 
 const MONTH_RE = /^\d{4}-(0[1-9]|1[0-2])$/;
 const own = (obj, key) => Object.prototype.hasOwnProperty.call(obj, key);
@@ -40,7 +38,6 @@ export const colorLabel = (c) => label(COLOR_LABELS, c ?? 'not_evaluated');
 export const levelLabel = (l) => (l ? label(LEVEL_LABELS, l) : '—');
 export const restrictionLabel = (r) => label(RESTRICTION_LABELS, r);
 export const alertKindLabel = (k) => label(ALERT_KIND_LABELS, k);
-export const scopeLabel = (s) => label(SCOPE_LABELS, s);
 /** Clave de color segura para usar como clase CSS. */
 export const colorKey = (c) => (typeof c === 'string' && own(COLOR_LABELS, c) ? c : 'not_evaluated');
 
@@ -106,6 +103,24 @@ export function activeExceptions(exceptions, today) {
   return (exceptions ?? [])
     .filter(active)
     .sort((a, b) => (a.expires_on === b.expires_on ? 0 : a.expires_on < b.expires_on ? -1 : 1));
+}
+
+/**
+ * V-08: candado vigente hoy de la unidad con el motor (engine/lock.js#lockToday): historial
+ * del trimestre desde las evaluaciones guardadas y excepciones tal como están hoy. Añade el
+ * texto "Inicio autorizado: REF" por cada inicio puntual con la unidad congelada (ADR 0003).
+ * @param {{ unitId: string, evaluations: any[], exceptions: any[], today: string }} input
+ */
+export function unitLockToday({ unitId, evaluations, exceptions, today }) {
+  let lock;
+  try {
+    lock = lockToday({ unitId, evaluations, exceptions, today });
+  } catch {
+    return { ok: false, status: 'invalid', closureMonth: null, reason: 'No se pudo calcular el candado de hoy' };
+  }
+  if (!lock.ok) return lock;
+  const authorizedLabels = lock.authorizedStarts.map((a) => `Inicio autorizado: ${a.change_ref ?? 'sin referencia'}`);
+  return { ...lock, authorizedLabels, basis: `Según el cierre de ${lock.closureMonth} y las excepciones vigentes al ${lock.asOf}` };
 }
 
 /** Evaluación global (indicator_id null) de una unidad en un mes, o null. */

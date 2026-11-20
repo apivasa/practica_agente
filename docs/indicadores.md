@@ -281,7 +281,7 @@ Ejemplos (trimestre enero–marzo):
 - Enero rojo, febrero amarillo → restringida (con Q-03 en su valor por defecto).
 - Enero rojo, febrero verde, marzo rojo → restringida (marzo es mes 1 otra vez).
 
-**Q-03.** Mientras no se responda, amarillo en mes 2 o 3 no congela. Es configurable en un solo punto (`scripts/lib/build.js`).
+**Q-03.** Mientras no se responda, amarillo en mes 2 o 3 no congela. Es configurable en un solo punto (`YELLOW_MONTH2_ESCALATES_LIKE_RED` en `engine/lock.js`, que usan la evaluación mensual y los tableros).
 
 ### Excepciones del comité
 
@@ -290,12 +290,13 @@ El comité las aprueba en **Excepciones** (`#/comite/excepciones`, ver [manual d
 - **Suspende todas las restricciones (`all`):** la unidad queda "En excepción", sin restricciones.
 - **Inicio puntual de change (`change_start`):** autoriza iniciar un change concreto (se indica su referencia).
   - Con la unidad **restringida**, quita "No se inicia change nuevo".
-  - Con la unidad **congelada**, no levanta el congelamiento. El motor la reporta como inicio puntual autorizado, pero hoy ese dato no se guarda en la evaluación ni se muestra en los tableros: la unidad se ve "Congelada" y la excepción aparece en la lista de vigentes.
+  - Con la unidad **congelada**, no levanta el congelamiento. El motor la reporta como inicio puntual autorizado. Ese dato no se guarda en la evaluación; los tableros lo muestran en el candado de hoy como "Inicio autorizado: REF", con la unidad todavía "Congelada".
 
 Vigencia:
 
 - Vigente hasta la fecha de vencimiento **incluida** (America/Guayaquil). Máximo 90 días desde que se crea.
 - Al día siguiente se ignora.
-- El candado guardado (el que ven el comité y el líder) solo lo recalcula la evaluación mensual. Una excepción aprobada, vencida o revocada a mitad de mes se refleja en el siguiente cierre o al reprocesar el mes.
+- El candado guardado (el oficial del cierre) solo lo recalcula la evaluación mensual. Una excepción aprobada, vencida o revocada a mitad de mes se refleja en él en el siguiente cierre o al reprocesar el mes.
+- El **candado vigente hoy** de los tableros (comité: columna "Candado hoy"; líder: "Candado vigente hoy") se calcula al abrir la pantalla con `lockToday` del motor: el último cierre global guardado (del mes en curso o del anterior) y las excepciones tal como están hoy. Así una excepción aprobada o revocada hoy se ve hoy. No guarda nada ni envía alertas. Si no hay cierre del mes en curso ni del anterior, muestra "Sin cierre vigente"; pasa cada día 1 hasta que corre la evaluación mensual (06:07 Guayaquil).
 - Una excepción **revocada** deja de aplicar desde el día de la revocación.
 - El ritmo diario genera una alerta `exception_expired` el día que vence y otra cuando ya venció. El vencimiento queda en `audit_log`. Las revocadas no generan esta alerta.
