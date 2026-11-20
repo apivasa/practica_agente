@@ -22,6 +22,8 @@ const NOW = new Date('2027-03-10T15:00:00Z'); // 10:00 Guayaquil, día 10
 const PUB = 'sb_publishable_ficticia';
 const SUPA = 'https://ficticio.supabase.co';
 const PAGES = 'https://apivasa.github.io/practica_agente/';
+// Compara por origen exacto (esquema + host + puerto), no por subcadena de la URL.
+const isSupabase = (u) => new URL(String(u)).origin === new URL(SUPA).origin;
 const noSleep = async () => {};
 const hoursAgo = (h) => new Date(NOW.getTime() - h * 3_600_000).toISOString();
 
@@ -147,7 +149,7 @@ describe('check.js de punta a punta (fetch simulado)', () => {
     assert.equal(r.supabase.status, 'skip');
     assert.equal(r['ritmo-diario'].status, 'skip');
     assert.equal(r['evaluacion-mensual'].status, 'skip');
-    assert.ok(!calls.some((c) => c.url === PAGES || c.url.startsWith(SUPA)), 'no debe llamar a Pages ni Supabase');
+    assert.ok(!calls.some((c) => c.url === PAGES || isSupabase(c.url)), 'no debe llamar a Pages ni Supabase');
   });
 
   test('ritmo-diario sin correr en 30 h: falla', async () => {
@@ -253,7 +255,7 @@ describe('disponibilidad y URLs', () => {
     const env = { ...PROD_ENV, SUPABASE_PUBLISHABLE_KEY: 'sb_secret_ficticia' };
     const r = byCheck(await checkAvailability({ env, fetchImpl: fakeFetch({ calls }), sleep: noSleep }));
     assert.equal(r.supabase.status, 'fail');
-    assert.ok(!calls.some((c) => c.url.startsWith(SUPA)));
+    assert.ok(!calls.some((c) => isSupabase(c.url)));
   });
   test('checkHttp reintenta y se recupera', async () => {
     let n = 0;
