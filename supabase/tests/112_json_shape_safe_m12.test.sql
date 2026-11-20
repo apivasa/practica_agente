@@ -125,8 +125,8 @@ select throws_ok(
   'mediciones: NaN sigue frenado por el CHECK de finitud de M-09');
 select lives_ok(
   $$ insert into public.measurements (unit_id, indicator_id, measured_on, value)
-     values ('bbbbbbbb-0000-4000-8000-000000001201', 'cccccccc-0000-4000-8000-000000001202', '2031-01-10', 9007199254740991.5) $$,
-  'mediciones: 2^53 - 0,5 en un promedio aceptado (no exige entero)');
+     values ('bbbbbbbb-0000-4000-8000-000000001201', 'cccccccc-0000-4000-8000-000000001202', '2031-01-10', 9007199254740991.4) $$,
+  'mediciones: 9007199254740991.4 en un promedio aceptado (no exige entero; borde de M-14)');
 select lives_ok(
   $$ insert into public.measurements (unit_id, indicator_id, measured_on, value)
      values ('bbbbbbbb-0000-4000-8000-000000001201', 'cccccccc-0000-4000-8000-000000001202', '2031-01-11', null) $$,
@@ -162,10 +162,10 @@ select throws_ok(
   '23514', 'new row for relation "commitments" violates check constraint "commitments_package_by_category_whole"',
   'paquete: magnitud diminuta (1e-16000) rechazada');
 select throws_ok(
-  $$ update public.commitments set package_by_category = '{"P0P1": 9007199254740991.9999}'
+  $$ update public.commitments set package_by_category = '{"P0P1": 9007199254740991.4}'
       where id = 'dddddddd-0000-4000-8000-000000001201' $$,
   '23514', 'new row for relation "commitments" violates check constraint "commitments_package_by_category_whole"',
-  'paquete: 9007199254740991.9999 rechazado');
+  'paquete: 9007199254740991.4 rechazado por no ser entero (9007199254740991.9999 ya lo frena el tope de M-14)');
 select throws_ok(
   $$ update public.commitments set package_by_category = '{"P0P1": 1e400}'
       where id = 'dddddddd-0000-4000-8000-000000001201' $$,
