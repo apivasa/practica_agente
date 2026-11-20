@@ -48,6 +48,8 @@ Muestra el nombre del rol y un texto con lo que haces en la app. No tiene datos:
 
 Si algo no cuadra, ves la lista de errores arriba del formulario. Por ejemplo: "Umbral verde: obligatorio" o umbrales incoherentes con el sentido. Una meta acumulada con "Menos es mejor" se rechaza: "Sentido: una meta acumulada (cumulative_target) solo admite higher_is_better (más es mejor)".
 
+Cada umbral, general o por categoría, debe ser menor que 2^53 (9007199254740992) en valor absoluto (M-13). Si no, ves por ejemplo "Umbral verde: fuera de rango, debe ser menor que 2^53 (9007199254740992) en valor absoluto" o "Umbral de la categoría P0P1.green: fuera de rango, …", y no se guarda. Escribe los números sin notación exponencial: `1e20` da "debe ser un número".
+
 **Editar.** Pulsa **Editar** en la fila. El formulario se abre con los valores actuales.
 
 **Activar o desactivar.** Pulsa **Desactivar** o **Activar** en la fila. Un indicador inactivo no entra en la evaluación mensual ni en el tablero de completitud. No se borra nada.

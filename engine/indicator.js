@@ -1,4 +1,5 @@
 // Modelo genérico de indicador: validación y normalización (funciones puras).
+import { isSafeMagnitude, SAFE_ABS_LIMIT_TEXT } from './numeric.js';
 
 /** @typedef {'cumulative_target'|'window_average'|'coverage'} MeasurementType */
 /** @typedef {'higher_is_better'|'lower_is_better'} Direction */
@@ -52,6 +53,16 @@ function checkThresholds(t, label, direction, errors) {
   }
   if (!isFiniteNumber(yellow)) {
     errors.push(`${label}.yellow: debe ser un número finito`);
+    numeric = false;
+  }
+  if (!numeric) return;
+  // M-13: la BD rechaza |v| >= 2^53; se avisa aquí con un mensaje del formulario.
+  if (!isSafeMagnitude(green)) {
+    errors.push(`${label}.green: fuera de rango, debe ser ${SAFE_ABS_LIMIT_TEXT}`);
+    numeric = false;
+  }
+  if (!isSafeMagnitude(yellow)) {
+    errors.push(`${label}.yellow: fuera de rango, debe ser ${SAFE_ABS_LIMIT_TEXT}`);
     numeric = false;
   }
   if (!numeric) return;
