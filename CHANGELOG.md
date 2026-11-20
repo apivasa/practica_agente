@@ -4,6 +4,7 @@ Una línea por ítem, la más reciente arriba.
 
 ## Sin publicar
 
+- 2026-11-20 · M-12 · La BD revisa la forma de los umbrales por categoría (cada categoría con `green` y `yellow` numéricos, |v| < 2^53), rechaza mediciones con |valor| ≥ 2^53 en cualquier indicador y exige enteros ≥ 0 en el paquete por categoría de los compromisos. Error 23514; en pantalla se ve el mensaje genérico de error al guardar.
 - 2026-11-20 · M-11 · La BD rechaza valores de magnitud 2^53 o mayor (por ejemplo `1e400`) en los umbrales de los indicadores, en el paquete y los umbrales negociados de los compromisos y en el valor de las metas mensuales. En el paquete por categoría, cada valor debe ser un número. Error 23514; en pantalla se ve el mensaje genérico de error al guardar.
 - 2026-11-20 · M-10 · La BD rechaza `NaN`, `Infinity` y `-Infinity` en los umbrales de los indicadores, en el paquete y los umbrales negociados de los compromisos y en el valor de las metas mensuales (error 23514). En pantalla se ve el mensaje genérico de error al guardar.
 - 2026-11-20 · M-09 · La BD solo deja editar el valor de una meta mensual: para otra unidad, indicador o mes se crea una meta nueva. Rechaza mediciones `NaN`/`Infinity` y, en vulnerabilidades, valores mayores que 2^53 − 1. "Proponer un tercio" ya no propone más que el paquete cuando este es decimal.

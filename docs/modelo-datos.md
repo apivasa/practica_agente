@@ -40,7 +40,8 @@ Funciones de apoyo (esquema `private`, no expuesto por la API, `security definer
 - Check `indicators_thresholds_coherent`: con "más es mejor", verde ≥ amarillo; con "menos es mejor", verde ≤ amarillo.
 - Check `indicators_cumulative_direction` (M-08): un indicador `cumulative_target` no puede ser `lower_is_better`. El motor (`validateIndicator`) aplica la misma regla en el formulario.
 - Checks `indicators_green_threshold_finite` e `indicators_yellow_threshold_finite` (M-10): los umbrales no pueden ser `NaN`, `Infinity` ni `-Infinity`. En PostgreSQL `NaN` cuenta como mayor que cualquier número, así que el check de coherencia solo no lo frenaba.
-- Checks `indicators_green_threshold_safe` e `indicators_yellow_threshold_safe` (M-11): |umbral| < 2^53 (9.007.199.254.740.992). Un valor como `1e400` es finito en PostgreSQL, pero el front y el motor lo leerían como `Infinity`. `thresholds_by_category` todavía no tiene tope ni forma más allá de ser un objeto JSON.
+- Checks `indicators_green_threshold_safe` e `indicators_yellow_threshold_safe` (M-11): |umbral| < 2^53 (9.007.199.254.740.992). Un valor como `1e400` es finito en PostgreSQL, pero el front y el motor lo leerían como `Infinity`.
+- Check `indicators_thresholds_by_category_safe` (M-12): `thresholds_by_category` es nulo o un objeto `{categoría: {green, yellow}}`. Cada categoría tiene exactamente las claves `green` y `yellow`, las dos números JSON con |v| < 2^53. Rechaza claves extra o faltantes, texto, `null`, arreglos y un JSON que no sea objeto (error 23514). No limita los nombres de las categorías.
 
 ### `commitments` — compromisos por unidad, indicador y periodo
 `id`, `unit_id`, `indicator_id`, `period` (`AAAA-Qn` o `AAAA-MM`), `green_override`, `yellow_override`, `package_total` (≥ 0), `package_by_category` (objeto JSON, ej. `{"P0P1": 1500, "P2P3": 500}`), `notes`, `created_by`, `created_at`, `updated_at` (lo pone un trigger).
@@ -49,7 +50,8 @@ Funciones de apoyo (esquema `private`, no expuesto por la API, `security definer
 - Check `commitments_override_pair`: verde y amarillo negociados van juntos o ninguno.
 - Checks `commitments_green_override_finite`, `commitments_yellow_override_finite` y `commitments_package_total_finite` (M-10): si tienen valor, no puede ser `NaN`, `Infinity` ni `-Infinity`. Siguen admitiendo nulo.
 - Checks `commitments_green_override_safe`, `commitments_yellow_override_safe` y `commitments_package_total_safe` (M-11): si tienen valor, |v| < 2^53.
-- Check `commitments_package_by_category_safe` (M-11): si hay objeto, cada valor de primer nivel debe ser un número JSON (no texto, `null`, booleano, arreglo ni objeto) con |v| < 2^53. No limita las claves ni exige enteros ≥ 0: eso lo validan la pantalla y el motor.
+- Check `commitments_package_by_category_safe` (M-11): si hay objeto, cada valor de primer nivel debe ser un número JSON (no texto, `null`, booleano, arreglo ni objeto) con |v| < 2^53. No limita las claves.
+- Check `commitments_package_by_category_whole` (M-12): además, cada valor es un entero ≥ 0 (rechaza negativos y fracciones). Las claves siguen libres: son las categorías del indicador o `total` en los indicadores de meta acumulada sin categorías.
 - Editables por el custodio: `period`, los dos overrides, `package_total`, `package_by_category`, `notes`. No se pueden cambiar `unit_id`, `indicator_id` ni `created_by`.
 
 ### `measurements` — mediciones
@@ -60,6 +62,7 @@ Funciones de apoyo (esquema `private`, no expuesto por la API, `security definer
 - Editables: `value`, `measured_on`, `app_id`, `compliant`, `category`, `kind`. No se pueden cambiar `unit_id`, `indicator_id`, `created_by` ni `source`.
 - En meta acumulada `value` es **incremental**: lo resuelto o detectado ese día. El motor suma.
 - Check `measurements_value_finite` (M-09): `value` no puede ser `NaN`, `Infinity` ni `-Infinity`. Aplica a inserciones y ediciones, de todos los roles y del backend.
+- Check `measurements_value_safe` (M-12): si hay valor, |`value`| < 2^53, en cualquier tipo de indicador.
 - Trigger `measurements_category_guard` (M-08, `AFTER INSERT OR UPDATE`, función `private.check_measurement_category`). Si el indicador es `cumulative_target` y tiene `thresholds_by_category`, cada medición (resuelta, detectada o sin `kind`) debe cumplir:
   - `category` es `P0P1` o `P2P3` (exacto, con mayúsculas);
   - `value` es un entero ≥ 0, no nulo y como máximo 2^53 − 1 (9.007.199.254.740.991, el mayor entero seguro de JavaScript; M-09).
