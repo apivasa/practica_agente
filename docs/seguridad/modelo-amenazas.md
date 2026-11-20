@@ -171,7 +171,7 @@ Superficie: 10 tablas de `public` (CRUD según grants y políticas), filtros (`e
 
 ## 4. GitHub Actions programadas con la clave secreta (C-03, C-04, V-04)
 
-Superficie: `evaluacion-mensual.yml`, `ritmo-diario.yml`, `scripts/evaluate.js` + `scripts/lib/` (C-03/C-04, construidos; `workflow_dispatch` con input `as_of`, guarda `vars.EVALUATION_ENABLED`), `salud.yml` (V-04). Usan `SUPABASE_SECRET_KEY` (BYPASSRLS) para escribir `evaluations`, `alerts` y `audit_log`. Leen mediciones cargadas por custodios (datos no confiables) y las pasan a `engine/`.
+Superficie: `evaluacion-mensual.yml`, `ritmo-diario.yml`, `scripts/evaluate.js` + `scripts/lib/` (C-03/C-04, construidos; `workflow_dispatch` con input `as_of`, guarda `vars.EVALUATION_ENABLED`), `salud.yml` (V-04, **sin** clave secreta: solo `github.token` con `actions: read` / `issues: write` por job y la clave publicable). Los dos primeros usan `SUPABASE_SECRET_KEY` (BYPASSRLS) para escribir `evaluations`, `alerts` y `audit_log`. Leen mediciones cargadas por custodios (datos no confiables) y las pasan a `engine/`.
 
 | ID | STRIDE | Amenaza | Riesgo | Control | Prueba |
 |---|---|---|---|---|---|
@@ -186,6 +186,9 @@ Superficie: `evaluacion-mensual.yml`, `ritmo-diario.yml`, `scripts/evaluate.js` 
 | T-JOB-09 | Tampering | `workflow_dispatch` con `as_of` futuro o pasado: candado anticipado, re-cierre de un mes viejo, vencimiento de excepción anticipado que consume la `dedupe_key` y silencia la alerta real | Medio | Formato validado (`parseArgs`), `as_of` > hoy rechazado, re-cierre solo con `--reprocess` auditado; inputs `AS_OF`/`REPROCESS` solo por `env:` (H-C03-01 corregido) | `automation-c03.test.js` › parseArgs |
 | T-JOB-10 | Tampering | Custodio relaja `green_override` o `package_by_category` del compromiso (incluso de un periodo cerrado) para quitar un candado o callar el ritmo | Bajo | Auditado por `audit_commitments`; rol con potestad de negociar (diseño). Falta congelar periodos cerrados (H-C03-03) | `api/idor-escalation.test.js` (RLS de commitments) |
 | T-JOB-11 | Tampering / Repudiation | Alguien pre-inserta alertas con la `dedupe_key` futura o falsifica `pace_snapshot` en `audit_log` para silenciar alertas | Alto | `authenticated` sin INSERT en `alerts` ni `audit_log`; `read_at` única columna editable; snapshots filtrados por `actor = 'system:evaluate'` | `041`; `automation-c03.test.js` › db.js snapshots, alertas |
+| T-JOB-12 | Information disclosure | El issue de salud (repo público) o el log filtran la clave publicable, la URL del proyecto Supabase, cuerpos de respuesta o datos de unidades | Medio | `check.js` solo emite nombre de check + estado HTTP; errores de red sin mensaje; `issue.js` solo acepta nombres `[a-z0-9-]` y run de github.com | `tests/security/health-v04.test.js` |
+| T-JOB-13 | Elevation / Tampering | `salud.yml` con permisos de más (escritura en `check`, secretos en `alert`), inputs manipulables o salidas de `check` interpoladas en `run:` | Medio | Permisos por job (`actions: read` en check, `issues: write` solo en alert), sin inputs, salidas por `env:`, SHA fijado | `workflows.test.js` › salud.yml (2 casos) |
+| T-JOB-14 | Tampering | La prueba de salud de CI (`scripts/ci/health.sh`) apunta a producción | Bajo | El script aborta si `API_URL` no es loopback; `ci.yml` sin secretos | `workflows.test.js` › ci.yml: la prueba de salud solo corre contra Supabase local |
 
 ## 5. CI/CD
 

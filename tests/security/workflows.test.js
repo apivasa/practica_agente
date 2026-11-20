@@ -264,3 +264,46 @@ test('seguridad.yml: job dast (S-04) con ZAP fijado por digest, e2e de seguridad
   assert.doesNotMatch(rules, /\tIGNORE\t/);
   for (const id of ['10003', '10017', '10062', '90003']) assert.match(rules, new RegExp(`^${id}\\tFAIL\\t`, 'm'));
 });
+
+// V-04 — salud.yml: lector de Actions sin secreto privilegiado; issues: write solo en el job de alerta.
+test('salud.yml: solo schedule + workflow_dispatch sin inputs, sin clave secreta', () => {
+  const wf = workflows.find((w) => w.name === 'salud.yml');
+  if (!wf) return;
+  const on = wf.text.split(/^permissions:/m)[0].split(/^on:/m)[1] ?? '';
+  const triggers = [...on.matchAll(/^ {2}([\w-]+):/gm)].map((m) => m[1]).sort();
+  assert.deepEqual(triggers, ['schedule', 'workflow_dispatch']);
+  assert.doesNotMatch(on, /inputs:/, 'salud.yml no debe aceptar inputs');
+  assert.doesNotMatch(wf.text, /SUPABASE_SECRET_KEY|sb_secret_|service_role/);
+  assert.doesNotMatch(wf.text, /^\s*environment:/m, 'salud.yml no necesita environment con secretos');
+});
+
+test('salud.yml: issues: write solo en el job alert y actions: read solo en check', () => {
+  const wf = workflows.find((w) => w.name === 'salud.yml');
+  if (!wf) return;
+  const body = wf.text.split(/^jobs:\s*$/m)[1];
+  const jobs = Object.fromEntries(
+    body.split(/^ {2}(?=[\w-]+:\s*$)/m).filter(Boolean).map((j) => [j.match(/^([\w-]+):/)?.[1], j]),
+  );
+  assert.ok(jobs.check && jobs.alert, 'se esperaban los jobs check y alert');
+  assert.equal((wf.text.match(/issues:\s*write/g) ?? []).length, 1);
+  assert.match(jobs.alert, /issues:\s*write/);
+  assert.doesNotMatch(jobs.check, /:\s*write\b/, 'check no escribe nada');
+  assert.doesNotMatch(jobs.alert, /secrets\./, 'alert no recibe secretos');
+  assert.doesNotMatch(wf.text, /(pull-requests|contents|actions|id-token|deployments|packages):\s*write/);
+  // Las salidas del job check llegan al job alert solo por env:, nunca dentro de run:.
+  for (const { n, l } of codeLines(jobs.alert)) {
+    if (/^\s*run:/.test(l)) assert.doesNotMatch(l, /\$\{\{/, `alert:${n} expresión dentro de run:`);
+  }
+  for (const { n, l } of codeLines(jobs.check)) {
+    if (/^\s*run:/.test(l)) assert.doesNotMatch(l, /\$\{\{/, `check:${n} expresión dentro de run:`);
+  }
+});
+
+test('ci.yml: la prueba de salud solo corre contra Supabase local y sin secretos', () => {
+  const ci = workflows.find((w) => w.name === 'ci.yml').text;
+  if (!/scripts\/ci\/health\.sh/.test(ci)) return;
+  assert.doesNotMatch(ci, /secrets\./, 'ci.yml no usa secretos');
+  const sh = readFileSync(join(ROOT, 'scripts', 'ci', 'health.sh'), 'utf8');
+  assert.match(sh, /http:\/\/127\.0\.0\.1:\*\|http:\/\/localhost:\*\)/, 'health.sh debe exigir Supabase local');
+  assert.doesNotMatch(sh, /set -x|echo[^\n]*SUPABASE_PUBLISHABLE_KEY|printenv|env\s*$/m, 'health.sh no imprime la clave');
+});
