@@ -17,13 +17,13 @@ Lo que existe hoy en `main` y pasó CI:
   - Custodio: compromisos con umbral negociado (M-03) y captura manual o CSV de mediciones (M-04).
   - Comité: matriz unidad × indicador con alertas (V-02) y aprobación y revocación de excepciones (C-02).
   - Líder: sus indicadores, color, meta, ritmo, restricciones y alertas (V-01).
-- **Motor** (`engine/`): color (M-01), escalada y excepciones (C-01, C-02), vulnerabilidades: paquete, ritmo y metas (M-05).
+- **Motor** (`engine/`): color (M-01), escalada y excepciones (C-01, C-02), vulnerabilidades: paquete, ritmo y metas (M-05) y color mensual por criticidad, P0/P1 y P2/P3 (M-06).
 - **Evaluación programada y alertas** (C-03, C-04): workflows mensual y diario. Hoy no hacen nada en producción: esperan el despliegue (ver "Workflows").
 - **Seguridad** (S-01 a S-04): pipeline de seguridad, modelo de amenazas, pentest de API y RLS, CSP, anti-framing y DAST con ZAP.
 - **Salud del sistema** (V-04): `salud.yml` corre cada 6 h, revisa la web, Supabase y los workflows programados, y abre o actualiza un issue si algo falla. Ver [`docs/operacion.md`](docs/operacion.md).
 - **Despliegue manual** (V-05): `deploy.yml` aplica migraciones y publica en GitHub Pages solo cuando el usuario lo dispara a mano. La app **todavía no está publicada**. Ver [`docs/despliegue.md`](docs/despliegue.md).
 
-Todavía **no** existen: la primera publicación en GitHub Pages y las migraciones en Supabase real (el usuario dispara `deploy.yml`), la fase B del pentest previo a producción (S-05, tras el primer despliegue), correo u otro canal externo de alertas (C-05, espera Q-04), fuentes automáticas de mediciones (V-07, espera Q-02) y pantalla para cargar metas mensuales (`targets`). Ver [`docs/plan-maestro.md`](docs/plan-maestro.md).
+Todavía **no** existen: la primera publicación en GitHub Pages y las migraciones en Supabase real (el usuario dispara `deploy.yml`), la fase B del pentest previo a producción (S-05, tras el primer despliegue), correo u otro canal externo de alertas (C-05, espera Q-04), fuentes automáticas de mediciones (V-07, espera Q-02) y pantalla para cargar metas mensuales (`targets`, M-07; VULN ya no las usa). Ver [`docs/plan-maestro.md`](docs/plan-maestro.md).
 
 ## Manuales por rol
 

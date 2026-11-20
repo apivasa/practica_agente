@@ -171,11 +171,13 @@ export function seedScenario() {
       ].map(([unit_id, total]) => ({ unit_id, indicator_id: I.vuln, month, target_value: Math.round(total * share) })),
     ),
     measurements: [
-      m(U.alfa, I.vuln, '2027-01-31', { value: 450, category: 'P0P1', kind: 'resolved' }),
+      // M-06: refleja supabase/seed.sql (Alfa enero 500, Alfa febrero 550, Gamma P2/P3 80).
+      m(U.alfa, I.vuln, '2027-01-31', { value: 500, category: 'P0P1', kind: 'resolved' }),
       m(U.alfa, I.vuln, '2027-01-31', { value: 250, category: 'P2P3', kind: 'resolved' }),
       m(U.beta, I.vuln, '2027-01-31', { value: 300, category: 'P0P1', kind: 'resolved' }),
       m(U.gamma, I.vuln, '2027-01-31', { value: 280, category: 'P0P1', kind: 'resolved' }),
-      m(U.alfa, I.vuln, '2027-02-09', { value: 400, category: 'P0P1', kind: 'resolved' }),
+      m(U.gamma, I.vuln, '2027-01-31', { value: 80, category: 'P2P3', kind: 'resolved' }),
+      m(U.alfa, I.vuln, '2027-02-09', { value: 550, category: 'P0P1', kind: 'resolved' }),
       m(U.alfa, I.vuln, '2027-02-09', { value: 100, category: 'P2P3', kind: 'resolved' }),
       m(U.alfa, I.vuln, '2027-02-10', { value: 200, category: 'P0P1', kind: 'detected' }),
       m(U.alfa, I.avail, '2027-01-15', { value: 99.95 }),

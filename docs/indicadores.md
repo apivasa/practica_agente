@@ -2,7 +2,7 @@
 
 Guía para la gestora de KPIs, los custodios y el comité. Explica cómo se describe un indicador, cómo se negocia un umbral, cómo se cargan las mediciones, cómo se calcula el color y qué candado recibe una unidad.
 
-> **Estado (2026-11-19).** Todo lo descrito aquí está construido y probado: pantallas de indicadores (M-02), compromisos (M-03) y mediciones (M-04), el motor (`engine/`) y la evaluación programada (C-03, C-04). La evaluación programada todavía no corre en producción: espera el despliegue (V-05). No hay pantalla para cargar metas mensuales (`targets`). Detalle técnico: [`engine/README.md`](../engine/README.md) y [`engine/ESCALATION.md`](../engine/ESCALATION.md).
+> **Estado (2026-11-20).** Todo lo descrito aquí está construido y probado: pantallas de indicadores (M-02), compromisos (M-03) y mediciones (M-04), el motor (`engine/`) y la evaluación programada (C-03, C-04). La evaluación programada todavía no corre en producción: espera el despliegue (V-05). No hay pantalla para cargar metas mensuales (`targets`); VULN no las necesita desde M-06. Detalle técnico: [`engine/README.md`](../engine/README.md) y [`engine/ESCALATION.md`](../engine/ESCALATION.md).
 
 ## 1. Los 7 atributos de un indicador
 
@@ -36,9 +36,10 @@ La ventana incluye el día de evaluación y los `ventana − 1` días anteriores
 
 - **Promedio en ventana:** promedio de los valores de la ventana.
 - **Cobertura:** % de aplicaciones distintas que cumplen. De cada aplicación cuenta solo su **última** medición en la ventana.
-- **Meta acumulada:** suma de lo resuelto en el trimestre hasta el fin del mes × 100 / meta acumulada del mes (tabla `targets`).
+- **Meta acumulada:** suma de lo resuelto en el trimestre hasta el fin del mes × 100 / meta acumulada del mes.
+  - **Con umbrales por categoría** (caso vulnerabilidades): se calcula por categoría, con la meta que sale del paquete del compromiso trimestral. No usa la tabla `targets`. Ver sección 6, «Color mensual».
+  - **Sin categorías:** la meta del mes sale de la tabla `targets`. Sin meta del mes, queda **sin evaluar** ("falta la meta del periodo").
   - Meta 0: el resultado es 100 %.
-  - Sin meta del mes: queda **sin evaluar** ("falta la meta del periodo").
   - Las mediciones de tipo "detectada" no suman a lo resuelto.
 
 ## 2. Ejemplos
@@ -195,7 +196,7 @@ El color de la unidad en un mes es el **peor** de sus indicadores evaluados. Los
 
 ### Datos que carga el custodio
 
-1. **Compromiso trimestral** (periodo `AAAA-Qn`) con el paquete por categoría. Ejemplo: `P0P1` 1500, `P2P3` 500. Sin paquete, el ritmo diario se omite para esa unidad.
+1. **Compromiso trimestral** (periodo `AAAA-Qn`) con el paquete por categoría. Ejemplo: `P0P1` 1500, `P2P3` 500. El paquete siempre sale del compromiso trimestral, aunque haya también uno mensual. Sin paquete, el ritmo diario se omite para esa unidad y el color mensual queda **sin evaluar**.
 2. **Mediciones incrementales** con categoría y tipo:
    - **Resuelta:** cuántas se resolvieron ese día.
    - **Detectada:** P0/P1 nuevas del escaneo de ese día.
@@ -223,7 +224,21 @@ El líder ve el estado "Al día" o "Atrasada" con el detalle en su pantalla. El 
 
 ### Color mensual
 
-La evaluación mensual de un indicador de meta acumulada suma **todo lo resuelto** del trimestre hasta el fin del mes, sin separar categorías, y lo divide entre la meta acumulada del mes de la tabla `targets`. Usa el umbral general (o el negociado). Sin meta del mes, queda sin evaluar. Hoy las metas mensuales solo llegan por la semilla o escritas directo en la BD: no hay pantalla para cargarlas.
+Desde M-06 ([ADR 0016](adr/0016-color-mensual-por-criticidad.md)), el color mensual de VULN se calcula **por criticidad**. Ya no usa la tabla `targets`.
+
+1. **Meta acumulada del mes**, por categoría: 1/3, 2/3 y 3/3 del paquete **efectivo** (con las P0/P1 detectadas en los meses 1 y 2), con redondeo hacia arriba en los meses 1 y 2.
+2. **Cumplimiento** por categoría: lo resuelto del trimestre hasta el último día del mes × 100 / meta del mes. Puede pasar de 100 % si la unidad va adelantada.
+3. **Color** por categoría, con sus propios umbrales (`P0P1` 96 / 90 y `P2P3` 85 / 75 en la semilla) y su mínimo de muestra.
+4. **Color del indicador:** el **peor** de sus categorías. El valor guardado es el de la categoría con peor color. El motivo detalla todas, por ejemplo `P0/P1 92.59 % (1050 de 1134, meta acumulada de 2027-02): ...`.
+5. **Categoría que no se puede evaluar** (sin paquete en el compromiso, categoría no reconocida o muestra insuficiente): el indicador nunca sale verde. Si las demás son verdes, queda **sin evaluar**; si alguna es amarilla o roja, conserva ese color.
+6. **Mediciones malformadas** (categoría distinta de `P0P1`/`P2P3` o valor no entero ≥ 0, cargadas por API): se descartan una por una y el motivo lo dice: "N medición(es) descartada(s) por categoría o valor inválido". El mes no se anula. El ritmo diario, en cambio, no se calcula hasta que se corrija la fila (ver [`docs/operacion.md`](operacion.md)).
+7. **Umbral negociado:** el verde y el amarillo negociados en un compromiso **no** se aplican a las categorías.
+
+Ejemplo de la semilla (Unidad Alfa, febrero de 2027). Paquete P0/P1 1500 + 200 detectadas en febrero = 1700 → meta de febrero 1134. P2/P3 500 → meta 334. Resueltas: P0/P1 1050 (92,6 %, amarillo) y P2/P3 350 (verde). Color del indicador: **amarillo**.
+
+Estas reglas (peor color, valor de la peor categoría, sin overrides por categoría, sin verde con una categoría sin evaluar) son valores por defecto mientras no se responda Q-07.
+
+Los indicadores de meta acumulada **sin** categorías siguen usando `targets`. Hoy esas metas solo llegan por la semilla o escritas directo en la BD: no hay pantalla para cargarlas.
 
 ## 7. Candados (escalada)
 

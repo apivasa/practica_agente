@@ -27,12 +27,12 @@ describe('runMonthly (cierre de enero, asOf 2027-02-01)', () => {
     assert.deepEqual(r.errors, []);
     assert.equal(db.tables.evaluations.length, 15);
 
-    assert.equal(indRow(db, U.alfa, I.vuln, '2027-01').color, 'green'); // 700/667
+    assert.equal(indRow(db, U.alfa, I.vuln, '2027-01').color, 'green'); // M-06: P0/P1 500/500, P2/P3 250/167
     assert.equal(indRow(db, U.alfa, I.mttr, '2027-01').color, 'green'); // 3.5 h, 3 muestras
-    assert.equal(indRow(db, U.beta, I.vuln, '2027-01').color, 'red'); // 300/500
+    assert.equal(indRow(db, U.beta, I.vuln, '2027-01').color, 'red'); // M-06: P0/P1 300/334 = 89,8 %
     assert.equal(indRow(db, U.beta, I.avail, '2027-01').color, 'yellow');
     assert.equal(indRow(db, U.beta, I.mttr, '2027-01').color, 'not_evaluated'); // muestra 1 < 3
-    assert.equal(indRow(db, U.gamma, I.vuln, '2027-01').color, 'yellow'); // 280/300 = 93,3 %
+    assert.equal(indRow(db, U.gamma, I.vuln, '2027-01').color, 'yellow'); // M-06: P2/P3 80/100 = 80 % (P0/P1 280/200 verde)
     const gAvail = indRow(db, U.gamma, I.avail, '2027-01');
     assert.equal(gAvail.color, 'green', 'umbral del compromiso 99,5 en lugar de 99,9');
     assert.match(gAvail.reason, /compromiso/);
@@ -84,7 +84,7 @@ describe('runMonthly (cierre de enero, asOf 2027-02-01)', () => {
     const gamma = unitRow(db, U.gamma, '2027-02');
     assert.deepEqual([gamma.color, gamma.escalation_level], ['red', 'frozen'], 'excepción "all" vencida el 02-05');
     const alfa = unitRow(db, U.alfa, '2027-02');
-    assert.deepEqual([alfa.color, alfa.escalation_level], ['yellow', 'restricted']); // 1200/1333
+    assert.deepEqual([alfa.color, alfa.escalation_level], ['yellow', 'restricted']); // M-06: VULN P0/P1 1050/1134 = 92,6 %
     const feb = db.tables.alerts.filter((a) => a.payload.month === '2027-02');
     assert.equal(feb.length, 6);
     const betaFeb = feb.find((a) => a.unit_id === U.beta);
@@ -271,9 +271,10 @@ describe('carga de mediciones: trimestres de 92 días', () => {
       const q = first.slice(0, 4) + '-Q' + (first.slice(5, 7) === '07' ? '3' : '4');
       const data = seedScenario();
       data.indicators = data.indicators.filter((i) => i.id === I.vuln);
-      data.commitments = [];
       data.exceptions = [];
-      data.targets = [{ unit_id: U.alfa, indicator_id: I.vuln, month: close, target_value: 100 }];
+      // M-06: VULN usa el paquete del compromiso trimestral (P0/P1 100, P2/P3 0 → meta 0).
+      data.commitments = [{ unit_id: U.alfa, indicator_id: I.vuln, period: q, package_by_category: { P0P1: 100, P2P3: 0 } }];
+      data.targets = [];
       data.measurements = [
         { unit_id: U.alfa, indicator_id: I.vuln, measured_on: first, value: 60, category: 'P0P1', kind: 'resolved', created_at: 'a' },
         { unit_id: U.alfa, indicator_id: I.vuln, measured_on: `${close}-15`, value: 40, category: 'P0P1', kind: 'resolved', created_at: 'b' },
@@ -281,7 +282,7 @@ describe('carga de mediciones: trimestres de 92 días', () => {
       const db = createFakeDb(data);
       await runMonthly(db, { asOf });
       const row = indRow(db, U.alfa, I.vuln, close);
-      assert.equal(row.value, 100, `${q}: 60 + 40 resueltas sobre meta 100`);
+      assert.equal(row.value, 100, `${q}: 60 + 40 resueltas sobre meta 100 (cierre 3/3)`);
       assert.equal(row.color, 'green');
     });
   }

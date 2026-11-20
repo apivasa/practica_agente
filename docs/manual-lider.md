@@ -34,7 +34,7 @@ Es una sola pantalla. Arriba dice "Unidades a tu cargo: N". De arriba abajo:
 | Indicador | Código y nombre |
 | Color | Color del mes y, debajo, el motivo. "Sin evaluación para este mes" si no hay cierre. |
 | Valor | El valor calculado en el cierre del mes |
-| Meta del mes | En meta acumulada: "Meta acumulada de <mes>: N" o "Sin meta mensual para <mes>". En el resto: "Verde ≥ X; amarillo ≥ Y" (o ≤ si menos es mejor), con "(compromiso)" si es un umbral negociado con tu unidad |
+| Meta del mes | En vulnerabilidades: la meta acumulada del mes por criticidad, por ejemplo "Meta acumulada de 2027-02: P0/P1 1134 · P2/P3 334" (sale del paquete del trimestre). Sin paquete: "Sin meta mensual para <mes>". En otros de meta acumulada: "Meta acumulada de <mes>: N". En el resto: "Verde ≥ X; amarillo ≥ Y" (o ≤ si menos es mejor), con "(compromiso)" si es un umbral negociado con tu unidad |
 | Avance vs. ritmo | Solo en vulnerabilidades: **Al día** o **Atrasada** con el detalle. "No aplica" en los demás. Si falta el paquete del trimestre, lo dice. |
 
 La fecha del avance es hoy si miras el mes en curso, o el último día del mes si miras uno pasado.
@@ -58,6 +58,8 @@ Las alertas solo se ven en la app; no hay correo todavía.
 - **Amarillo:** no llega a verde pero sí a amarillo.
 - **Rojo:** peor que amarillo.
 - **Sin evaluar:** faltan datos en la ventana, falta la meta del mes o no hay muestra suficiente. No cuenta para el color de la unidad.
+
+En vulnerabilidades, P0/P1 y P2/P3 tienen cada una su color. El indicador toma el **peor** de los dos, y el motivo muestra los dos porcentajes.
 
 Un valor justo en el umbral recibe el color mejor.
 

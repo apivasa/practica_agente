@@ -16,6 +16,8 @@ export {
   paceStatus,
   recalculateOnNewCritical,
   DEFAULT_COMPLIANCE_THRESHOLDS,
+  VULN_CATEGORIES,
+  categoryMonthColor,
 } from './vulnerabilities.js';
 export {
   PERIOD_RE,
@@ -46,4 +48,11 @@ export {
   validateExceptionDraft,
 } from './exceptions.js';
 export { addMonths, monthEnd, quarterBounds } from './calendar.js';
-export { pickCommitment, indicatorConfig, buildPackageInput } from './rows.js';
+export {
+  pickCommitment,
+  quarterCommitment,
+  indicatorConfig,
+  buildPackageInput,
+  hasCategoryEvaluation,
+  evaluateCategoryMonth,
+} from './rows.js';

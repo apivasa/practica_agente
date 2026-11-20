@@ -54,7 +54,9 @@ test.describe('V-01 · vista del líder', () => {
 
     const table = page.getByRole('table', { name: 'Mis indicadores' });
     const vuln = table.locator('tr[data-indicator="VULN"]');
-    await expect(vuln).toContainText('Meta acumulada de 2027-02: 1333');
+    // M-06: meta por criticidad desde el paquete efectivo (P0/P1 1500 + 200 nuevas de febrero → 2/3 = 1134;
+    // P2/P3 500 → 334), no desde targets.
+    await expect(vuln).toContainText('Meta acumulada de 2027-02: P0/P1 1134 · P2/P3 334');
     await expect(vuln).toContainText('Atrasada');
     await expect(table.locator('tr[data-indicator="AVAIL"]')).toContainText('Verde ≥ 99,9');
 

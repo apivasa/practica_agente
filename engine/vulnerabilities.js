@@ -2,7 +2,7 @@
 // Funciones puras, sin dependencias de red. Reglas: docs/diseno.md, "Caso: vulnerabilidades",
 // "Principio de control" y "Alertas".
 import { parseDay } from './measure.js';
-import { tolerance } from './color.js';
+import { tolerance, evaluateColor } from './color.js';
 import { carryOver } from './escalation.js';
 
 /** @typedef {{ p0p1: number, p2p3: number }} PackageCounts */
@@ -352,4 +352,125 @@ export function recalculateOnNewCritical(prevStatus, newStatus) {
     reason = 'Sin cambios en la meta del trimestre';
   }
   return { targetChanged, delta, previousTotal, newTotal, previousPace, newPace, carryDelta, reason };
+}
+
+/** Categorías del caso vulnerabilidades y su clave en PackageStatus. */
+export const VULN_CATEGORIES = Object.freeze({ P0P1: 'p0p1', P2P3: 'p2p3' });
+const CATEGORY_LABELS = Object.freeze({ P0P1: 'P0/P1', P2P3: 'P2/P3' });
+const COLOR_ES = Object.freeze({ green: 'verde', yellow: 'amarillo', red: 'rojo', not_evaluated: 'sin evaluar' });
+const SEVERITY = Object.freeze({ green: 0, yellow: 1, red: 2 });
+
+/** Número con hasta 2 decimales para los motivos. */
+const fmt2 = (n) => String(Math.round(n * 100) / 100);
+
+/**
+ * @typedef {Object} CategoryMonthLine
+ * @property {string} label Etiqueta de la categoría (P0/P1, P2/P3).
+ * @property {'green'|'yellow'|'red'|'not_evaluated'} color
+ * @property {number|null} value % de cumplimiento de la meta acumulada del mes (puede pasar de 100).
+ * @property {number|null} target Meta acumulada del mes de la categoría.
+ * @property {number|null} resolved Resuelto del trimestre a la fecha (recortado, ver packageStatus).
+ * @property {string} reason
+ */
+
+/**
+ * M-06: color mensual de un indicador de meta acumulada con categorías (P0P1 / P2P3).
+ * Por categoría: resuelto del trimestre × 100 / meta acumulada del mes (1/3, 2/3 y 3/3 del
+ * paquete efectivo, `monthlyTargetsByCriticality` de packageStatus), coloreado con los
+ * umbrales propios de la categoría (`thresholdsByCategory`). Meta 0 → 100 %.
+ * El indicador toma el peor color de sus categorías. Una categoría que no se puede evaluar
+ * (sin paquete, no reconocida o muestra insuficiente) impide el verde: si las demás son
+ * verdes el indicador queda sin evaluar; un amarillo o rojo conocido se mantiene.
+ * El mes evaluado es el de `status.asOf`; con asOf posterior al trimestre, el cierre (3/3).
+ * @param {any} cfg IndicatorConfig normalizable (engine/indicator.js).
+ * @param {PackageStatus} status
+ * @param {{ packageCategories?: string[], sampleSizes?: Record<string, number> }} [options]
+ *   `packageCategories`: categorías con paquete en el compromiso (por defecto ambas).
+ *   `sampleSizes`: filas de resueltas por categoría (para `minSample`; por defecto 0).
+ * @returns {{ color: 'green'|'yellow'|'red'|'not_evaluated', value: number|null, sampleSize: number,
+ *   month: string, reason: string, byCategory: Record<string, CategoryMonthLine> }}
+ */
+export function categoryMonthColor(cfg, status, { packageCategories = Object.keys(VULN_CATEGORIES), sampleSizes = {} } = {}) {
+  assertStatus(status);
+  if (!cfg || typeof cfg !== 'object') throw new TypeError('cfg es obligatorio');
+  if (cfg.measurementType !== 'cumulative_target') {
+    throw new TypeError('categoryMonthColor solo aplica a indicadores cumulative_target');
+  }
+  const byCat = cfg.thresholdsByCategory;
+  const categories = byCat && typeof byCat === 'object' ? Object.keys(byCat).sort() : [];
+  if (categories.length === 0) throw new TypeError('categoryMonthColor requiere thresholdsByCategory');
+  if (!Array.isArray(packageCategories)) throw new TypeError('packageCategories debe ser un arreglo');
+  if (!sampleSizes || typeof sampleSizes !== 'object') throw new TypeError('sampleSizes debe ser un objeto');
+
+  const idx = status.currentMonthIndex ?? 3;
+  const month = status.monthlyTargets[idx - 1].month;
+  /** @type {Record<string, CategoryMonthLine>} */
+  const byCategory = {};
+  for (const cat of categories) {
+    const label = Object.hasOwn(CATEGORY_LABELS, cat) ? CATEGORY_LABELS[cat] : cat;
+    if (!Object.hasOwn(VULN_CATEGORIES, cat)) {
+      byCategory[cat] = {
+        label, color: 'not_evaluated', value: null, target: null, resolved: null,
+        reason: `${label}: categoría no reconocida (solo P0P1 y P2P3)`,
+      };
+      continue;
+    }
+    if (!packageCategories.includes(cat)) {
+      byCategory[cat] = {
+        label, color: 'not_evaluated', value: null, target: null, resolved: null,
+        reason: `${label}: sin paquete en el compromiso del trimestre`,
+      };
+      continue;
+    }
+    const key = VULN_CATEGORIES[cat];
+    // `|| 0`: ceilTol(0) da -0 en las metas de un paquete vacío.
+    const target = status.monthlyTargetsByCriticality[key][idx - 1].cumulativeTarget || 0;
+    const resolved = status.resolvedToDate[key];
+    const value = target === 0 ? 100 : (resolved * 100) / target;
+    const n = Object.hasOwn(sampleSizes, cat) ? sampleSizes[cat] : 0;
+    const { color, reason } = evaluateColor(cfg, { value, sampleSize: n }, { category: cat });
+    const detail = color === 'not_evaluated' ? reason : COLOR_ES[color];
+    byCategory[cat] = {
+      label,
+      color,
+      value: color === 'not_evaluated' ? null : value,
+      target,
+      resolved,
+      reason: `${label} ${fmt2(value)} % (${resolved} de ${target}, meta acumulada de ${month}): ${detail}`,
+    };
+  }
+
+  const lines = categories.map((c) => byCategory[c]);
+  const evaluated = lines.filter((l) => l.color !== 'not_evaluated');
+  const missing = evaluated.length < lines.length;
+  let worst = null;
+  for (const l of evaluated) {
+    if (
+      worst === null ||
+      SEVERITY[l.color] > SEVERITY[worst.color] ||
+      (SEVERITY[l.color] === SEVERITY[worst.color] && l.value < worst.value)
+    ) {
+      worst = l;
+    }
+  }
+  const detail = lines.map((l) => l.reason).join('; ');
+  const sampleSize = categories.reduce((a, c) => a + (Object.hasOwn(sampleSizes, c) ? sampleSizes[c] : 0), 0);
+  if (worst === null || (missing && worst.color === 'green')) {
+    return {
+      color: 'not_evaluated',
+      value: null,
+      sampleSize,
+      month,
+      reason: `Sin evaluar por criticidad: ${detail}`,
+      byCategory,
+    };
+  }
+  return {
+    color: worst.color,
+    value: worst.value,
+    sampleSize,
+    month,
+    reason: `Por criticidad, peor color ${COLOR_ES[worst.color]}: ${detail}`,
+    byCategory,
+  };
 }

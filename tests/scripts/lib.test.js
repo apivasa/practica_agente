@@ -148,11 +148,28 @@ describe('build', () => {
       { measured_on: '2027-01-11', value: 500, kind: 'detected', category: 'P0P1' },
       { measured_on: '2027-02-01', value: 500, kind: 'resolved' },
     ];
-    const r = evaluateIndicatorMonth({ indicator: VULN, measurements: rows, target: { target_value: 667 }, evalMonth: '2027-01' });
+    // M-06: sin categorías la meta acumulada sigue saliendo de `targets`.
+    const PLAIN = { ...VULN, thresholds_by_category: {} };
+    const r = evaluateIndicatorMonth({ indicator: PLAIN, measurements: rows, target: { target_value: 667 }, evalMonth: '2027-01' });
     assert.equal(r.color, 'yellow');
     assert.ok(Math.abs(r.value - 95.95) < 0.01);
-    const none = evaluateIndicatorMonth({ indicator: VULN, measurements: rows, target: null, evalMonth: '2027-01' });
+    const none = evaluateIndicatorMonth({ indicator: PLAIN, measurements: rows, target: null, evalMonth: '2027-01' });
     assert.equal(none.color, 'not_evaluated');
+  });
+  test('M-06: evaluateIndicatorMonth por criticidad solo cuenta resueltas del trimestre y del mes', () => {
+    const rows = [
+      { measured_on: '2026-12-20', value: 1000, kind: 'resolved', category: 'P0P1' },
+      { measured_on: '2027-01-10', value: 640, kind: 'resolved', category: 'P0P1' },
+      { measured_on: '2027-01-10', value: 300, kind: 'resolved', category: 'P2P3' },
+      { measured_on: '2027-02-01', value: 500, kind: 'resolved', category: 'P0P1' },
+    ];
+    const commitment = { period: '2027-Q1', package_by_category: { P0P1: 2000, P2P3: 1000 } };
+    // Meta de enero: P0/P1 667, P2/P3 334. 640/667 = 95,95 % < 96 → amarillo, aunque target diga 1.
+    const r = evaluateIndicatorMonth({ indicator: VULN, commitment, measurements: rows, target: { target_value: 1 }, evalMonth: '2027-01' });
+    assert.equal(r.color, 'yellow');
+    assert.ok(Math.abs(r.value - 95.95) < 0.01);
+    const none = evaluateIndicatorMonth({ indicator: VULN, commitment: null, measurements: rows, target: { target_value: 1 }, evalMonth: '2027-01' });
+    assert.equal(none.color, 'not_evaluated', 'sin paquete no hay color aunque exista target');
   });
   test('buildHistory rellena meses faltantes y descarta otros trimestres', () => {
     assert.deepEqual(buildHistory('2027-03', { '2027-02': 'red', '2026-12': 'red' }, 'yellow'), [

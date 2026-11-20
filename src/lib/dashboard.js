@@ -5,6 +5,7 @@
 import {
   packageStatus, paceStatus, exceptionFromRow, exceptionStatus,
   buildPackageInput, indicatorConfig, pickCommitment, addMonths, monthEnd,
+  hasCategoryEvaluation, evaluateCategoryMonth, quarterCommitment,
 } from '../../engine/index.js';
 
 export const COLOR_LABELS = Object.freeze({
@@ -152,6 +153,18 @@ function thresholdGoal(indicator, commitment) {
 }
 
 /**
+ * M-06: meta acumulada del mes por criticidad, con el mismo cálculo que la evaluación mensual
+ * (engine/evaluateCategoryMonth). Sin paquete: 'Sin meta mensual para <mes>'.
+ */
+export function categoryGoal({ indicator, commitment, measurements, month }) {
+  const r = evaluateCategoryMonth({ indicator, commitment, measurements, month });
+  const lines = Object.values(r.byCategory);
+  if (!lines.some((l) => l.target !== null)) return `Sin meta mensual para ${month}`;
+  const parts = lines.map((l) => (l.target === null ? `${l.label} sin paquete` : `${l.label} ${formatNumber(l.target)}`));
+  return `Meta acumulada de ${month}: ${parts.join(' · ')}`;
+}
+
+/**
  * Ritmo del paquete trimestral (cumulative_target) a `asOf` con el motor.
  * @returns {null | { ok: true, behindAny: boolean, expected: number, resolved: number, gap: number,
  *   effectiveTotal: number, reason: string } | { ok: false, reason: string }}
@@ -189,17 +202,25 @@ export function leaderIndicatorRows({ unitId, indicators, evaluations, targets, 
     const ev = mineEval.find((e) => e.indicator_id === indicator.id) ?? null;
     const target = (targets ?? []).find((t) => t.unit_id === unitId && t.indicator_id === indicator.id && t.month === month);
     const commitment = pickCommitment(commitments ?? [], unitId, indicator.id, month);
-    const goal = indicator.measurement_type === 'cumulative_target'
-      ? (target ? `Meta acumulada de ${month}: ${formatNumber(target.target_value)}` : `Sin meta mensual para ${month}`)
-      : thresholdGoal(indicator, commitment);
     const rows = (measurements ?? []).filter((m) => m.unit_id === unitId && m.indicator_id === indicator.id);
+    // Paquete, ritmo y meta por criticidad salen del compromiso trimestral, igual que en las
+    // Actions (M-06, A1); el compromiso mensual solo aporta umbrales.
+    const pkg = quarterCommitment(commitments ?? [], unitId, indicator.id, month);
+    let goal;
+    if (hasCategoryEvaluation(indicator)) {
+      goal = categoryGoal({ indicator, commitment: pkg, measurements: rows, month });
+    } else if (indicator.measurement_type === 'cumulative_target') {
+      goal = target ? `Meta acumulada de ${month}: ${formatNumber(target.target_value)}` : `Sin meta mensual para ${month}`;
+    } else {
+      goal = thresholdGoal(indicator, commitment);
+    }
     return {
       indicator,
       color: ev?.color ?? 'not_evaluated',
       value: ev?.value ?? null,
       reason: ev?.reason ?? 'Sin evaluación para este mes',
       goal,
-      pace: packagePace({ indicator, commitment, measurements: rows, asOf }),
+      pace: packagePace({ indicator, commitment: pkg, measurements: rows, asOf }),
     };
   });
 }

@@ -105,7 +105,9 @@ test('filas del líder: color, valor, meta mensual, umbrales y ritmo del motor',
   assert.match(avail.goal, /Verde ≥ 99,5; amarillo ≥ 99 \(compromiso\)/);
   assert.equal(avail.pace, null);
   assert.equal(vuln.color, 'yellow');
-  assert.match(vuln.goal, /Meta acumulada de 2027-02: 1333/);
+  // M-06: meta por criticidad desde el paquete efectivo (P0/P1 1500+200 → 2/3 = 1134; P2/P3 500 → 334),
+  // no desde targets (1333).
+  assert.equal(vuln.goal, 'Meta acumulada de 2027-02: P0/P1 1134 · P2/P3 334');
   assert.equal(vuln.pace.ok, true);
   assert.equal(vuln.pace.effectiveTotal, 2200, 'las P0/P1 nuevas del mes 2 suman al paquete');
   assert.equal(vuln.pace.resolved, 550, 'solo cuenta lo de su unidad');

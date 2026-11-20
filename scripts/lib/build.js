@@ -8,6 +8,8 @@ import {
   evaluateEscalation,
   parseDay,
   exceptionFromRow,
+  hasCategoryEvaluation,
+  evaluateCategoryMonth,
 } from '../../engine/index.js';
 import { addDays, addMonths, monthEnd, quarterBounds } from './dates.js';
 import { num, pickCommitment, indicatorConfig, isResolved, buildPackageInput } from '../../engine/rows.js';
@@ -46,13 +48,27 @@ const daysBetween = (a, b) => parseDay(b) - parseDay(a);
 
 /**
  * Color de un indicador para una unidad en el mes evaluado (cierre del mes).
- * - `cumulative_target`: solo lo resuelto dentro del trimestre del mes, contra la meta
- *   acumulada del mes (`targets`).
+ * - `cumulative_target` con categorías (M-06): por criticidad con el paquete del compromiso
+ *   trimestral (`packageCommitment`) y los umbrales de cada categoría; no usa `targets`.
+ * - `cumulative_target` sin categorías: solo lo resuelto dentro del trimestre del mes, contra
+ *   la meta acumulada del mes (`targets`).
  * - resto: ventana del indicador terminada el último día del mes.
- * @param {{ indicator: any, commitment?: any, measurements: any[], target?: any, evalMonth: string }} input
+ * @param {{ indicator: any, commitment?: any, packageCommitment?: any, measurements: any[], target?: any,
+ *   evalMonth: string }} input
  * @returns {{ color: string, value: number|null, sampleSize: number, reason: string }}
  */
-export function evaluateIndicatorMonth({ indicator, commitment = null, measurements, target = null, evalMonth }) {
+export function evaluateIndicatorMonth({
+  indicator,
+  commitment = null,
+  packageCommitment = commitment,
+  measurements,
+  target = null,
+  evalMonth,
+}) {
+  if (hasCategoryEvaluation(indicator)) {
+    const r = evaluateCategoryMonth({ indicator, commitment: packageCommitment, measurements, month: evalMonth });
+    return { color: r.color, value: r.value, sampleSize: r.sampleSize, reason: r.reason };
+  }
   const { cfg, thresholdSource, note } = indicatorConfig(indicator, commitment);
   const asOf = monthEnd(evalMonth);
   let rows = measurements.filter((r) => r.measured_on <= asOf);

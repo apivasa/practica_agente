@@ -20,6 +20,11 @@ case "$SUPABASE_URL" in
   http://127.0.0.1:*|http://localhost:*) ;;
   *) echo "La integración solo corre contra Supabase local"; exit 1 ;;
 esac
+# H-M06-03: el script borra filas con psql; DB_URL también debe ser local.
+case "$DB_URL" in
+  postgresql://*@127.0.0.1:*|postgresql://*@localhost:*|postgres://*@127.0.0.1:*|postgres://*@localhost:*) ;;
+  *) echo "La integración solo corre contra una BD local (DB_URL)"; exit 1 ;;
+esac
 echo "::add-mask::${SUPABASE_SECRET_KEY}"
 export SUPABASE_URL SUPABASE_SECRET_KEY
 # Las fechas de la semilla (2027) son futuras: solo aquí, contra Supabase local, se permiten.
@@ -78,6 +83,11 @@ twice() {
     exit 1
   fi
 }
+
+# M-06: VULN se evalúa por criticidad con el paquete del compromiso, sin targets. Se borran
+# sus metas mensuales de la BD local para demostrarlo (solo Supabase local, ver arriba).
+psql "$DB_URL" -v ON_ERROR_STOP=1 -c \
+  "delete from public.targets where indicator_id = '33333333-3333-4333-8333-000000000001'"
 
 monthly_close 2027-02-01
 twice --mode=daily --as-of=2027-02-10

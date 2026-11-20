@@ -2,12 +2,15 @@
 // Actions (scripts/lib/build.js) y el front (V-01): una sola regla.
 import { effectiveThresholds } from './commitment.js';
 import { quarterOf } from './escalation.js';
-import { quarterBounds } from './calendar.js';
+import { quarterBounds, monthEnd } from './calendar.js';
+import { packageStatus, categoryMonthColor } from './vulnerabilities.js';
 
 /** Número finito o null (PostgREST devuelve numeric como número; se tolera texto). */
 export const num = (v) => {
-  if (v === null || v === undefined || v === '') return null;
-  const n = typeof v === 'number' ? v : Number(v);
+  let n;
+  if (typeof v === 'number') n = v;
+  else if (typeof v === 'string' && v.trim() !== '') n = Number(v);
+  else return null; // null, undefined, '', '  ', arreglos, booleanos u objetos (H-M06-02)
   return Number.isFinite(n) ? n : null;
 };
 
@@ -21,6 +24,19 @@ export const num = (v) => {
 export function pickCommitment(commitments, unitId, indicatorId, month) {
   const mine = commitments.filter((c) => c.unit_id === unitId && c.indicator_id === indicatorId);
   return mine.find((c) => c.period === month) ?? mine.find((c) => c.period === quarterOf(month)) ?? null;
+}
+
+/**
+ * Compromiso trimestral (periodo 'YYYY-Qn') de (unidad, indicador) para el trimestre del mes:
+ * el que trae el paquete por criticidad, aunque exista además un compromiso mensual.
+ * @param {any[]} commitments
+ * @param {string} unitId
+ * @param {string} indicatorId
+ * @param {string} month 'YYYY-MM'
+ */
+export function quarterCommitment(commitments, unitId, indicatorId, month) {
+  const q = quarterOf(month);
+  return (commitments ?? []).find((c) => c.unit_id === unitId && c.indicator_id === indicatorId && c.period === q) ?? null;
 }
 
 /**
@@ -70,6 +86,12 @@ export function buildPackageInput({ indicator, commitment, measurements, asOf })
   if (!pkg || typeof pkg !== 'object') {
     return { ok: false, reason: `Sin paquete por criticidad (package_by_category) para ${quarter}` };
   }
+  // H-M06-02: una clave presente con valor no numérico ([], false, ' ') no se toma como 0.
+  for (const k of ['P0P1', 'P2P3']) {
+    if (Object.hasOwn(pkg, k) && pkg[k] !== null && num(pkg[k]) === null) {
+      return { ok: false, reason: `Paquete por criticidad inválido para ${quarter}: ${k} no es un número` };
+    }
+  }
   const rows = measurements.filter((r) => r.measured_on >= start && r.measured_on <= asOf && r.measured_on <= end);
   const newCritical = rows
     .filter((r) => r.kind === 'detected' && r.category === 'P0P1')
@@ -93,4 +115,81 @@ export function buildPackageInput({ indicator, commitment, measurements, asOf })
       thresholds,
     },
   };
+}
+
+const CATEGORY_KEYS = Object.freeze(['P0P1', 'P2P3']);
+
+/**
+ * H-M06-01: separa las mediciones que el cálculo por criticidad no puede usar: resueltas con
+ * categoría distinta de P0P1/P2P3 o valor no entero >= 0, y detectadas P0/P1 con valor no
+ * entero >= 0. Solo cuenta como descartadas las del trimestre hasta asOf (las demás ya las
+ * ignora buildPackageInput). Las resueltas sin valor se siguen ignorando sin contarlas.
+ * @param {any[]} measurements
+ * @param {string} asOf
+ */
+function splitMalformed(measurements, asOf) {
+  const { start, end } = quarterBounds(asOf.slice(0, 7));
+  const kept = [];
+  let discarded = 0;
+  for (const r of measurements) {
+    const inScope = r.measured_on >= start && r.measured_on <= asOf && r.measured_on <= end;
+    const n = num(r.value);
+    const okCount = Number.isSafeInteger(n) && n >= 0;
+    let bad = false;
+    if (r.kind === 'detected') bad = r.category === 'P0P1' && !okCount;
+    else if (isResolved(r) && r.value !== null && r.value !== undefined) {
+      bad = !CATEGORY_KEYS.includes(r.category) || !okCount;
+    }
+    if (bad) {
+      if (inScope) discarded += 1;
+    } else kept.push(r);
+  }
+  return { kept, discarded };
+}
+
+/**
+ * M-06: true si el color mensual del indicador se calcula por criticidad (meta acumulada con
+ * `thresholds_by_category` no vacío). Los demás de meta acumulada siguen con `targets`.
+ * @param {any} indicator fila de `indicators`
+ */
+export function hasCategoryEvaluation(indicator) {
+  const tbc = indicator?.thresholds_by_category;
+  return (
+    indicator?.measurement_type === 'cumulative_target' &&
+    !!tbc && typeof tbc === 'object' && !Array.isArray(tbc) && Object.keys(tbc).length > 0
+  );
+}
+
+/**
+ * M-06: color de un mes por criticidad desde filas de la BD (compromiso trimestral y
+ * mediciones). El paquete y las metas son los de packageStatus al último día del mes; la
+ * regla de color es categoryMonthColor. Sin paquete o con datos que el motor rechaza, queda
+ * sin evaluar con el motivo (no lanza). La usan la evaluación mensual y la vista del líder.
+ * @param {{ indicator: any, commitment: any, measurements: any[], month: string }} input
+ * @returns {{ color: string, value: number|null, sampleSize: number, reason: string, month: string,
+ *   byCategory: Record<string, any> }}
+ */
+export function evaluateCategoryMonth({ indicator, commitment, measurements, month }) {
+  const asOf = monthEnd(month);
+  const notEvaluated = (reason) => ({ color: 'not_evaluated', value: null, sampleSize: 0, reason, month, byCategory: {} });
+  // H-M06-01: una fila malformada (cargada por API) se descarta sola y se cuenta en el motivo;
+  // no anula el mes (un "sin evaluar" reiniciaría la racha de escalada).
+  const { kept, discarded } = splitMalformed(measurements ?? [], asOf);
+  const built = buildPackageInput({ indicator, commitment, measurements: kept, asOf });
+  if (!built.ok) return notEvaluated(built.reason);
+  const pkg = commitment.package_by_category;
+  const packageCategories = Object.keys(pkg).filter((k) => num(pkg[k]) !== null);
+  /** @type {Record<string, number>} */
+  const sampleSizes = {};
+  for (const r of built.input.resolved) sampleSizes[r.criticality] = (sampleSizes[r.criticality] ?? 0) + 1;
+  try {
+    const status = packageStatus(built.input);
+    const { cfg } = indicatorConfig(indicator, commitment);
+    const r = categoryMonthColor(cfg, status, { packageCategories, sampleSizes });
+    if (discarded === 0) return r;
+    const note = `${discarded} medición(es) descartada(s) por categoría o valor inválido`;
+    return { ...r, reason: `${r.reason}; ${note}`, discarded };
+  } catch (err) {
+    return notEvaluated(`No se pudo calcular el cumplimiento por criticidad: ${err.message}`);
+  }
 }
