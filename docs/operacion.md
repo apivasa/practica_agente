@@ -101,7 +101,7 @@ Primero identifica el job fallido (consulta de jobs arriba) y lee su log. Nunca 
 Ver ADR 0008. Ambos usan `node scripts/evaluate.js --mode=monthly|daily --as-of=YYYY-MM-DD` con `SUPABASE_SECRET_KEY`. Comparten `concurrency: evaluacion-produccion`, así que nunca corren a la vez. Actor de auditoría: `system:evaluate`.
 
 ### Activación (compuerta del usuario, V-05)
-1. Secretos `SUPABASE_URL` y `SUPABASE_SECRET_KEY` (`sb_secret_...`) en el repositorio.
+1. Secretos `SUPABASE_URL` y `SUPABASE_SECRET_KEY` (`sb_secret_...`) en el repositorio. Cuando se muevan al environment `produccion` (H-C03-02, ADR 0014), estos workflows deben declarar `environment: produccion` **antes** de quitar los secretos del repositorio. Si no, se quedan sin clave y saltan la evaluación con un warning.
 2. Variable de repositorio `EVALUATION_ENABLED=true` (*Settings → Secrets and variables → Actions → Variables*).
 3. Primera corrida manual de `ritmo-diario` sin `as_of`. Verificar en el log la línea JSON final con `errors: 0`.
 Mientras falte algo, el job termina en verde con `::warning::... se omite la evaluación`. Desde la activación, un warning así en un cron significa que alguien borró un secreto o la variable: es una incidencia.
@@ -144,7 +144,17 @@ Mientras falte algo, el job termina en verde con `::warning::... se omite la eva
 
 ### Restaurar
 - Las evaluaciones son derivables: se recalculan desde `measurements`, `commitments`, `targets` y `exceptions` reprocesando los meses del trimestre en orden.
-- Las alertas y `audit_log` no se regeneran, porque son historial. Si hace falta, se restauran del respaldo diario de Supabase (plan gratuito: sin PITR). El procedimiento detallado se completa en V-05 junto con producción.
+- Las alertas y `audit_log` no se regeneran, porque son historial.
+- **Respaldos en el plan gratuito.** No hay PITR y no hay que contar con restaurar desde el panel. Antes de cada despliegue que traiga migraciones nuevas, el usuario saca un volcado lógico **en su equipo**: `supabase db dump -f esquema.sql` y `supabase db dump --data-only -f datos.sql`. Nunca se guarda como artefacto de Actions ni en el repo, porque el repo es público.
+- **Restaurar tras una migración dañina.** Primero se escribe una migración correctiva en un PR revisado y se despliega (ver `docs/despliegue.md`). Si hay que borrar tablas o columnas con datos, o recargar `datos.sql`, es compuerta del usuario (CLAUDE.md §3).
+
+## Despliegue (`deploy.yml`, V-05)
+Procedimiento completo en `docs/despliegue.md`. Decisiones en ADR 0014.
+- **Falla `verify`**: falta un secreto, el prefijo de clave es incorrecto, la rama no es `main`, `confirm` no vale `desplegar` o Auth tiene el registro abierto. Corregir la configuración. Crear o rotar secretos y cambiar Auth es tarea del usuario.
+- **Falla `build-pages`**: si la verificación de `dist/` detecta un secreto u origen local, tratarlo como el fallo de gitleaks (ver arriba). Si el build falla por la CSP, `SUPABASE_URL` no coincide con `PRODUCTION_SUPABASE_ORIGIN` (ADR 0011).
+- **Falla `migrate`**: la BD puede quedar a medias, porque `db push` aplica cada archivo en su propia transacción. Revisar `supabase migration list` y corregir con una migración nueva. Nunca se edita una migración ya aplicada.
+- **Falla `smoke`**: comprobar Settings → Pages (fuente = GitHub Actions) y relanzar solo `smoke`. Si la URL responde pero la app no carga, revisar `base` en `vite.config.js`.
+- **Cuidado con la concurrencia con las evaluaciones**: `despliegue-produccion` y `evaluacion-produccion` son grupos distintos. No hay que desplegar migraciones de `evaluations`, `alerts` o `audit_log` el día 1 a la hora del cron mensual.
 
 ## Pendiente de completar
-- Disponibilidad de Pages y Supabase y vigilancia automática de los cron (`salud.yml`, V-04). Restauración de Supabase de producción (V-05).
+- Disponibilidad de Pages y Supabase y vigilancia automática de los cron (`salud.yml`, V-04). Una vez publicado (V-05), el plan gratuito pausa el proyecto tras unos 7 días sin actividad: V-04 debe llegar antes de esa ventana o, mientras tanto, `ritmo-diario` (activado con P-05) mantiene la actividad.
