@@ -1,193 +1,270 @@
-# Indicadores y candados
+# Indicadores, compromisos, mediciones y candados
 
-Guía para la gestora de KPIs y el comité de delivery. Explica cómo se describe un indicador, cómo se calcula su color y qué candado recibe una unidad.
+Guía para la gestora de KPIs, los custodios y el comité. Explica cómo se describe un indicador, cómo se negocia un umbral, cómo se cargan las mediciones, cómo se calcula el color y qué candado recibe una unidad.
 
-> **Estado actual (2026-11-19).** Lo que se describe aquí es el **motor de cálculo** (`engine/`), ya construido y probado. Todavía no hay pantallas para dar de alta indicadores (M-02), registrar compromisos (M-03), cargar mediciones (M-04) ni aprobar excepciones (C-02). Tampoco existe el cálculo mensual automático (C-03) ni las alertas (C-04). Los ejemplos muestran la configuración tal como la recibe el motor. Detalle técnico: [`engine/README.md`](../engine/README.md) y [`engine/ESCALATION.md`](../engine/ESCALATION.md).
+> **Estado (2026-11-19).** Todo lo descrito aquí está construido y probado: pantallas de indicadores (M-02), compromisos (M-03) y mediciones (M-04), el motor (`engine/`) y la evaluación programada (C-03, C-04). La evaluación programada todavía no corre en producción: espera el despliegue (V-05). No hay pantalla para cargar metas mensuales (`targets`). Detalle técnico: [`engine/README.md`](../engine/README.md) y [`engine/ESCALATION.md`](../engine/ESCALATION.md).
 
 ## 1. Los 7 atributos de un indicador
 
-Cualquier indicador, incluso uno que no existe hoy, se describe con estos 7 atributos. No hace falta programar nada para un indicador nuevo.
+Cualquier indicador, incluso uno que no existe hoy, se describe con estos 7 atributos. No hace falta programar nada para un indicador nuevo. La gestora los llena en **Indicadores** (`#/gestora/indicadores`, ver [manual de la gestora](manual-gestora.md)).
 
-| # | Atributo | Campo | Valores | Por defecto |
+| # | Atributo | En pantalla | Valores | Por defecto |
 |---|---|---|---|---|
-| 1 | Tipo de medición | `measurementType` | `window_average` (promedio en ventana), `coverage` (cobertura), `cumulative_target` (meta acumulada) | obligatorio |
-| 2 | Sentido | `direction` | `higher_is_better` (más es mejor), `lower_is_better` (menos es mejor) | obligatorio |
-| 3 | Ventana de cálculo | `windowDays` | entero mayor que 0, en días | 30 |
-| 4 | Umbrales | `thresholds`, `thresholdsByCategory` | `{ green, yellow }`, opcionalmente por categoría | obligatorio |
-| 5 | Frecuencia | `frequency` | `monthly`, `weekly`, `quarterly` | `monthly` |
-| 6 | Mínimo de muestra | `minSample` | entero mayor o igual que 0 | 0 |
-| 7 | Fuente de datos | `source` | `manual`, `automatic` | `manual` |
+| 1 | Tipo de medición | Tipo de medición | Promedio en ventana, Cobertura, Meta acumulada | Promedio en ventana |
+| 2 | Sentido | Sentido | Más es mejor, Menos es mejor | Más es mejor |
+| 3 | Ventana de cálculo | Ventana (días) | entero mayor que 0 | 30 |
+| 4 | Umbrales | Umbral verde, Umbral amarillo, Umbrales por categoría | números | obligatorio |
+| 5 | Frecuencia | Frecuencia | Mensual, Semanal, Trimestral | Mensual |
+| 6 | Mínimo de muestra | Mínimo de muestra | entero ≥ 0 | 0 |
+| 7 | Fuente de datos | Fuente | Manual, Automática | Manual |
+
+Además: código (único; letras, números, `-` y `_`; máx. 40), nombre, descripción, custodio y si está activo.
 
 Notas:
 
-- **Umbrales.** Se dan dos límites: `green` y `yellow`. Rojo es todo lo que queda peor que amarillo.
+- **Umbrales.** Se dan dos límites: verde y amarillo. Rojo es todo lo que queda peor que amarillo.
   - Con "más es mejor", verde debe ser mayor o igual que amarillo.
   - Con "menos es mejor", verde debe ser menor o igual que amarillo.
-  - Si no se cumple, el motor rechaza el indicador con un mensaje en español.
-- **Umbrales por categoría.** Si una categoría tiene umbrales propios, se usan esos. Si no, se usan los generales.
-- **Frecuencia y fuente** hoy solo se validan. Las usarán el cálculo programado (C-03) y la captura de datos (M-04).
-- **Custodio.** Lo asigna la gestora en la tabla de indicadores (M-02). No es parte del motor.
+  - Si no se cumple, la pantalla rechaza el indicador con un mensaje en español. La BD también lo impide.
+- **Umbrales por categoría** (opcional): nombre de categoría, verde y amarillo. Para vulnerabilidades usa exactamente `P0P1` y `P2P3` (ver sección 6).
+- **Frecuencia y fuente** hoy solo se guardan. La evaluación programada corre igual para todos (mensual). Las fuentes automáticas no existen todavía (V-07, espera Q-02).
+- **Activo.** Solo los indicadores activos entran en la evaluación y en el tablero de completitud. Desactivar no borra nada.
 
 ### Cómo se calcula el valor según el tipo
 
-La ventana incluye el día de evaluación y los `windowDays - 1` días anteriores. Las mediciones fuera de la ventana no cuentan.
+La ventana incluye el día de evaluación y los `ventana − 1` días anteriores. La evaluación mensual usa como día de evaluación el último día del mes. Las mediciones fuera de la ventana no cuentan.
 
-- **Promedio en ventana:** promedio de los valores de la ventana. Los valores negativos o no numéricos se ignoran.
+- **Promedio en ventana:** promedio de los valores de la ventana.
 - **Cobertura:** % de aplicaciones distintas que cumplen. De cada aplicación cuenta solo su **última** medición en la ventana.
-- **Meta acumulada:** suma de lo resuelto × 100 / meta del periodo.
-  - Meta 0: el resultado es 100 % (no había nada que resolver).
-  - Sin meta registrada: queda **sin evaluar** ("falta la meta del periodo").
-  - El resultado puede pasar de 100 %; eso no cambia el color.
+- **Meta acumulada:** suma de lo resuelto en el trimestre hasta el fin del mes × 100 / meta acumulada del mes (tabla `targets`).
+  - Meta 0: el resultado es 100 %.
+  - Sin meta del mes: queda **sin evaluar** ("falta la meta del periodo").
+  - Las mediciones de tipo "detectada" no suman a lo resuelto.
 
 ## 2. Ejemplos
 
-Los umbrales de estos ejemplos son ilustrativos. Los reales los fija la gestora y los negocia cada custodio (Q-01 sigue abierta).
+Los umbrales son los de la semilla y son ilustrativos. Los reales los fija la gestora (Q-01 sigue abierta).
 
-### Disponibilidad (promedio en ventana, más es mejor)
+### Disponibilidad (`AVAIL`): promedio en ventana, más es mejor
 
-```js
-{
-  measurementType: 'window_average',
-  direction: 'higher_is_better',
-  windowDays: 30,
-  thresholds: { green: 99.9, yellow: 99.5 },
-  frequency: 'monthly',
-  source: 'manual',
-}
-```
+Ventana 30 días, verde 99,9, amarillo 99,5. Mediciones: 99,95 · 99,80 · 99,95. Promedio 99,9 → **verde** (empate con el umbral verde).
 
-Mediciones de noviembre: 99,95 · 99,80 · 99,95. Promedio 99,9 → **verde** (empate con el umbral verde).
+### MTTR (`MTTR`): promedio en ventana, menos es mejor, con mínimo de muestra
 
-### MTTR (promedio en ventana, menos es mejor, con mínimo de muestra)
-
-```js
-{
-  measurementType: 'window_average',
-  direction: 'lower_is_better',
-  windowDays: 30,
-  thresholds: { green: 4, yellow: 8 }, // horas
-  minSample: 3,                         // al menos 3 incidentes
-}
-```
+Ventana 30 días, verde 4 h, amarillo 8 h, mínimo de muestra 3.
 
 - 2 incidentes (3 h y 6 h): **sin evaluar**, "Muestra insuficiente: 2 de 3 requeridas".
-- 3 incidentes (3 h, 6 h y 9 h): promedio 6 h → **amarillo** (más de 4, hasta 8).
+- 3 incidentes (3 h, 6 h y 9 h): promedio 6 h → **amarillo**.
 
-### Cobertura de observabilidad (cobertura, más es mejor)
+### Observabilidad (`OBS`): cobertura, más es mejor
 
-```js
-{
-  measurementType: 'coverage',
-  direction: 'higher_is_better',
-  windowDays: 30,
-  thresholds: { green: 90, yellow: 75 }, // % de aplicaciones
-}
+Ventana 30 días, verde 90 %, amarillo 75 %. Cuatro aplicaciones: A no cumplía el día 3 pero sí el día 20 (cuenta lo último: cumple). B y C cumplen, D no. Resultado 3 de 4 = 75 % → **amarillo**.
+
+### Vulnerabilidades (`VULN`): meta acumulada
+
+Ventana 90 días, verde 96, amarillo 90, categorías `P0P1` (96 / 90) y `P2P3` (85 / 75). Ver sección 6.
+
+## 3. Compromisos con umbral negociado
+
+El custodio registra los compromisos en **Compromisos** (`#/custodio/compromisos`, ver [manual del custodio](manual-custodio.md)). Un compromiso es de una unidad, un indicador y un periodo.
+
+- **Periodo:** trimestre `AAAA-Qn` (ej. `2027-Q1`) o mes `AAAA-MM` (ej. `2027-03`).
+- **Qué compromiso aplica a un mes:** primero el del mes; si no hay, el del trimestre de ese mes.
+- **Umbral negociado:** verde y amarillo juntos, o los dos vacíos. Deben ser coherentes con el sentido del indicador. Si están, reemplazan a los umbrales generales para esa unidad y periodo. Si están vacíos, rige el umbral general.
+- **Paquete por categoría:** solo en meta acumulada. Un entero ≥ 0 por categoría del indicador. El total se guarda solo.
+- **Notas:** hasta 500 caracteres.
+
+La tabla de la pantalla muestra, por compromiso, el umbral efectivo y su origen: **Negociado** o **General**.
+
+Ejemplo de la semilla: AVAIL tiene verde 99,9 y amarillo 99,5. La Unidad Gamma negoció para `2027-01` verde 99,5 y amarillo 99,0. En enero, Gamma con 99,6 queda **verde** (con el general sería amarillo). En el motivo de la evaluación aparece "umbral del compromiso".
+
+Errores frecuentes:
+- "Umbral negociado: indica verde y amarillo, o deja los dos vacíos".
+- "Umbral negociado: con "más es mejor" el verde debe ser mayor o igual que el amarillo".
+- "Periodo: usa el formato AAAA-Qn (trimestre, ej. 2027-Q1) o AAAA-MM (mes, ej. 2027-03)".
+
+El umbral negociado reemplaza los umbrales generales. No cambia los umbrales por categoría.
+
+## 4. Carga de mediciones
+
+El custodio carga en **Mediciones** (`#/custodio/mediciones`): a mano, de a una, o con un archivo CSV. Solo para los indicadores activos que custodia.
+
+### Captura manual
+
+Campos según el tipo:
+
+| Tipo | Campos |
+|---|---|
+| Promedio en ventana | Fecha, Unidad, Valor (número ≥ 0) |
+| Cobertura | Fecha, Unidad, Aplicación (`app_id`), Cumple (Sí/No) |
+| Meta acumulada | Fecha, Unidad, Valor (entero ≥ 0, **incremental**), Categoría, Tipo (Resuelta o Detectada) |
+
+La fecha no puede ser futura (fecha de America/Guayaquil) ni anterior al año 2000.
+
+### Formato del CSV
+
+- Primera fila: cabecera con los nombres de columna. El orden no importa.
+- Separador: coma. Si la cabecera usa `;` y no tiene comas, el separador es punto y coma.
+- Cabecera sin distinguir mayúsculas ni tildes (`Categoría` = `categoria`).
+- Celdas entre comillas dobles cuando contienen el separador o saltos de línea. `""` es una comilla dentro de la celda.
+- Máximo 1 MB y 5000 filas de datos. Las líneas en blanco se ignoran.
+- **Todo o nada:** si una fila tiene un error, no se guarda ninguna. La pantalla muestra una vista previa con las primeras 50 filas válidas y el botón "Guardar N mediciones".
+
+Columnas por tipo (las de `engine/measurements-input.js`):
+
+| Tipo | Obligatorias | Opcionales |
+|---|---|---|
+| Promedio en ventana | `fecha`, `unidad`, `valor` | — |
+| Cobertura | `fecha`, `unidad`, `app_id`, `cumple` | — |
+| Meta acumulada | `fecha`, `unidad`, `valor` | `categoria`, `tipo` |
+
+Valores:
+
+- `fecha`: `AAAA-MM-DD`, fecha real.
+- `unidad`: nombre de la unidad (sin distinguir mayúsculas) o su id.
+- `valor`: número ≥ 0. Decimales con punto o coma (con coma decimal usa `;` como separador o pon el valor entre comillas). En meta acumulada, entero.
+- `app_id`: letras, números y `. _ : / -`; máx. 100.
+- `cumple`: `sí`, `si`, `true`, `1`, `cumple`, `yes` o `no`, `false`, `0`, `no cumple`.
+- `categoria`: obligatoria si el indicador tiene umbrales por categoría, y debe ser una de ellas. Si no tiene, es libre (máx. 50).
+- `tipo`: `resuelta` o `detectada` (también `resolved`, `detected` y plurales). Vacío = resuelta.
+
+Ejemplos:
+
+```csv
+fecha,unidad,valor
+2027-01-15,Unidad Alfa,99.95
+2027-01-15,Unidad Beta,99.60
 ```
 
-Cuatro aplicaciones en la ventana. La app A no cumplía el día 3 pero sí el día 20: cuenta lo último, cumple. B y C cumplen, D no. Resultado: 3 de 4 = 75 % → **amarillo** (empate con el umbral amarillo).
-
-### Vulnerabilidades (meta acumulada por criticidad)
-
-El diseño fija el cumplimiento por criticidad: **96 % para P0/P1** y **85 % para P2/P3**. Los límites amarillos (90 y 70) son de ejemplo.
-
-```js
-{
-  measurementType: 'cumulative_target',
-  direction: 'higher_is_better',
-  windowDays: 90, // el trimestre
-  thresholds: { green: 85, yellow: 70 },
-  thresholdsByCategory: {
-    'P0/P1': { green: 96, yellow: 90 },
-    'P2/P3': { green: 85, yellow: 70 },
-  },
-}
+```csv
+fecha,unidad,app_id,cumple
+2027-01-31,Unidad Alfa,app-alfa-01,sí
+2027-01-31,Unidad Beta,app-beta-01,no
 ```
 
-Cada medición lleva su categoría (`P0/P1` o `P2/P3`). Al calcular se elige una categoría y solo cuentan sus mediciones.
+```csv
+fecha;unidad;valor;categoria;tipo
+2027-01-31;Unidad Alfa;450;P0P1;resuelta
+2027-01-31;Unidad Alfa;250;P2P3;resuelta
+2027-02-10;Unidad Alfa;200;P0P1;detectada
+```
 
-- P0/P1: resueltas 100 + 80 + 12 = 192 de una meta de 200 → 96 % → **verde**.
-- P0/P1 con 180 de 200 → 90 % → **amarillo**. El mismo 90 % en P2/P3 sería verde.
-- P2/P3: resueltas 900 + 800 = 1.700 de 2.000 → 85 % → **verde**.
-- Sin meta del periodo → **sin evaluar**.
+Errores frecuentes (la fila 1 es la cabecera):
 
-Todavía no está construido el resto del caso (M-05): el ritmo esperado (pendiente / semanas restantes) y la meta parcial mensual. El arrastre al cierre sí existe (ver sección 4).
+| Mensaje | Causa |
+|---|---|
+| `Cabecera: faltan columnas ...` | Falta una columna obligatoria o está mal escrita. |
+| `Cabecera: columnas no reconocidas ...` | Sobra una columna (por ejemplo `valor` en un indicador de cobertura). |
+| `Cabecera: columnas repetidas ...` | Dos columnas con el mismo nombre. |
+| `Fila N: Tiene X columnas y la cabecera Y` | Separador de más o de menos; típico con coma decimal y separador coma. |
+| `fecha: "..." no es una fecha real con formato AAAA-MM-DD` | Formato `15/01/2027` o una fecha que no existe (30 de febrero). |
+| `fecha: ... es futura` | Fecha posterior a hoy. |
+| `unidad: "..." no existe` | Nombre mal escrito. |
+| `valor: "..." debe ser un entero mayor o igual que 0` | Decimal o negativo en meta acumulada. |
+| `... la celda empieza con =, +, -, @ ...` | Celda con forma de fórmula de hoja de cálculo. Se rechaza; un valor negativo como `-1` también cae aquí. |
+| `categoria: "..." no es una de P0P1, P2P3` | Categoría distinta a las del indicador (por ejemplo `P0/P1`). |
+| `cumple: "..." debe ser sí o no` | Valor no reconocido. |
+| `Comillas sin cerrar` | Una comilla doble abierta sin cerrar. |
+| `El archivo supera 1 MB` / `... el máximo es 5000` | Divide el archivo. |
 
-## 3. Cómo se decide el color
+## 5. Cómo se decide el color
 
 1. Si no hay datos en la ventana → **sin evaluar**.
 2. Si falta la meta (meta acumulada) → **sin evaluar**.
 3. Si la muestra es menor que el mínimo → **sin evaluar**.
-4. Si no, se compara con los umbrales (de la categoría, si tiene):
+4. Si no, se compara con los umbrales efectivos:
    - Alcanza el umbral verde → **verde**.
    - Alcanza el umbral amarillo → **amarillo**.
    - Si no → **rojo**.
 
-**Empates.** Un valor igual al umbral recibe el color mejor. 96 % con verde en 96 es verde. 8 h con amarillo en 8 es amarillo, no rojo. El motor tolera las diferencias mínimas de redondeo del cálculo: un promedio que da 99,89999999999999 cuenta como 99,9.
+**Empates.** Un valor igual al umbral recibe el color mejor. 96 % con verde en 96 es verde. 8 h con amarillo en 8 es amarillo. Se toleran diferencias mínimas de redondeo: 99,89999999999999 cuenta como 99,9.
 
-Cada color viene con un motivo en español, por ejemplo `Valor 6 <= amarillo 8`.
+Cada color viene con un motivo en español, por ejemplo `Valor 6 <= amarillo 8`. Las pantallas lo muestran junto al color.
 
 ### Color de la unidad
 
-El color de la unidad en un mes es el **peor** de sus indicadores evaluados (rojo peor que amarillo, amarillo peor que verde). Los indicadores sin evaluar no cuentan. Si ninguno se pudo evaluar, la unidad queda sin evaluar.
+El color de la unidad en un mes es el **peor** de sus indicadores evaluados. Los indicadores sin evaluar no cuentan. Si ninguno se pudo evaluar, la unidad queda sin evaluar.
 
-## 4. Candados (escalada)
+## 6. Caso vulnerabilidades
+
+### Configuración
+
+- Indicador de **meta acumulada**, más es mejor, con categorías `P0P1` y `P2P3`. Los nombres deben ser exactamente esos: el cálculo del paquete y del ritmo solo reconoce esas dos claves.
+- Ventana: 90 días. La evaluación la amplía sola al trimestre completo cuando el trimestre tiene 92 días.
+- El umbral verde de cada categoría es el % de cumplimiento exigido del paquete. El diseño fija **96 % para P0/P1 y 85 % para P2/P3** (son los valores por defecto si no se configuran).
+
+### Datos que carga el custodio
+
+1. **Compromiso trimestral** (periodo `AAAA-Qn`) con el paquete por categoría. Ejemplo: `P0P1` 1500, `P2P3` 500. Sin paquete, el ritmo diario se omite para esa unidad.
+2. **Mediciones incrementales** con categoría y tipo:
+   - **Resuelta:** cuántas se resolvieron ese día.
+   - **Detectada:** P0/P1 nuevas del escaneo de ese día.
+
+### Paquete efectivo y arrastre
+
+- Las P0/P1 detectadas en los meses 1 y 2 del trimestre se suman al paquete.
+- Las detectadas en el mes 3 pasan al paquete del trimestre siguiente.
+- Lo no resuelto al cierre también pasa al siguiente.
+
+Ejemplo del diseño: paquete de 2.000. Entran 120 P0/P1 en enero, 80 en febrero y 40 en marzo.
+- Paquete efectivo: 2.000 + 120 + 80 = **2.200**.
+- Se resuelven 2.100. Pasan al siguiente: (2.200 − 2.100) + 40 = **140**.
+
+### Metas mensuales y ritmo
+
+- **Meta parcial mensual** del motor: un tercio, dos tercios y el total del paquete efectivo, acumulados, con redondeo hacia arriba en los meses 1 y 2.
+- **Ritmo esperado:** pendiente / semanas restantes del trimestre. Se recalcula cuando entran P0/P1 nuevas.
+- **Atraso:** se compara lo resuelto con la meta acumulada a la fecha. Dentro del mes, la meta se prorratea por días: al día 10 de un mes de 30 se espera la meta del mes anterior más 10/30 de la del mes en curso. P0/P1 y P2/P3 se miden por separado: lo resuelto de una no compensa la otra. Basta que una vaya atrasada para que la unidad esté **Atrasada**.
+- Las P0/P1 del mes 3 que se resuelven en el mismo trimestre cuentan para su cumplimiento.
+
+Estas tres últimas reglas son valores por defecto mientras no se responda Q-06 ([ADR 0006](adr/0006-ritmo-vulnerabilidades.md)).
+
+El líder ve el estado "Al día" o "Atrasada" con el detalle en su pantalla. El ritmo diario genera alertas `pace_behind` (al pasar a atrasada) y `critical_intake` (cuando entran P0/P1 que cambian la meta).
+
+### Color mensual
+
+La evaluación mensual de un indicador de meta acumulada suma **todo lo resuelto** del trimestre hasta el fin del mes, sin separar categorías, y lo divide entre la meta acumulada del mes de la tabla `targets`. Usa el umbral general (o el negociado). Sin meta del mes, queda sin evaluar. Hoy las metas mensuales solo llegan por la semilla o escritas directo en la BD: no hay pantalla para cargarlas.
+
+## 7. Candados (escalada)
 
 El candado depende de cuántos meses seguidos lleva la unidad fuera de verde dentro del **trimestre calendario** y del color del último mes.
 
-| Situación | Candado | Qué significa |
-|---|---|---|
-| Mes en verde, sin evaluar o sin meses | **Normal** | Operación normal. |
-| Mes 1 en amarillo o rojo | **Restringido** | No se inicia change nuevo ni se agrega al backlog. Se continúa lo planeado del trimestre y se prioriza el RUN. |
-| Mes 2 o 3 seguido, en rojo | **Congelado** | Se frena todo el change. Toda la capacidad va al RUN. |
-| Mes 2 o 3 seguido, en amarillo | **Restringido** (por defecto) | Igual que el mes 1. Ver Q-03. |
+| Situación | Candado | En pantalla | Restricciones |
+|---|---|---|---|
+| Mes en verde, sin evaluar o sin meses | Normal | Operación normal | ninguna |
+| Mes 1 en amarillo o rojo | Restringido | Restringida | No se inicia change nuevo · No se agrega al backlog · Capacidad dedicada al RUN |
+| Mes 2 o 3 seguido, en rojo | Congelado | Congelada | Se frena todo el change · Toda la capacidad va al RUN |
+| Mes 2 o 3 seguido, en amarillo | Restringido (por defecto, Q-03) | Restringida | Igual que el mes 1 |
+| Excepción "todo" vigente | Excepción | En excepción | ninguna |
 
 Reglas de conteo:
 
-- Un mes **verde** corta la racha: el siguiente mes fuera de verde vuelve a ser "mes 1".
-- Un mes **sin evaluar** también corta la racha (decisión revisable, [ADR 0003](adr/0003-reglas-escalada.md)).
-- La racha **no cruza trimestres**: abril es "mes 1" aunque marzo cerrara en rojo. Lo que se arrastra al trimestre siguiente es el pendiente, no el candado.
-- El candado depende del último mes. Si tras dos meses en rojo el tercero es amarillo, se baja de congelado a restringido.
+- Un mes **verde** corta la racha. Un mes **sin evaluar** también ([ADR 0003](adr/0003-reglas-escalada.md)).
+- La racha **no cruza trimestres**: abril es "mes 1" aunque marzo cerrara en rojo. Lo que se arrastra es el pendiente, no el candado.
+- El candado depende del último mes: tras dos meses en rojo, un tercero en amarillo baja a restringido.
 
 Ejemplos (trimestre enero–marzo):
 
-- Enero amarillo → restringido.
-- Enero amarillo, febrero rojo → congelado.
-- Enero rojo, febrero amarillo → restringido (con Q-03 en su valor por defecto).
-- Enero rojo, febrero verde, marzo rojo → restringido (marzo es mes 1 otra vez).
+- Enero amarillo → restringida.
+- Enero amarillo, febrero rojo → congelada.
+- Enero rojo, febrero amarillo → restringida (con Q-03 en su valor por defecto).
+- Enero rojo, febrero verde, marzo rojo → restringida (marzo es mes 1 otra vez).
 
-### Q-03: amarillo en el mes 2
-
-El diseño no dice si un amarillo en el mes 2 congela como un rojo. Está abierta como pregunta Q-03. Mientras no se responda:
-
-- **Por defecto:** amarillo en mes 2 o 3 mantiene la restricción del mes 1. No congela.
-- Es una opción de configuración (`yellowMonth2EscalatesLikeRed`). Si se activa, amarillo en mes 2 o 3 congela igual que rojo.
+**Q-03.** Mientras no se responda, amarillo en mes 2 o 3 no congela. Es configurable en un solo punto (`scripts/lib/build.js`).
 
 ### Excepciones del comité
 
-El comité puede aprobar una excepción con fecha de vencimiento. Hay dos alcances:
+El comité las aprueba en **Excepciones** (`#/comite/excepciones`, ver [manual del comité](manual-comite.md)). Dos alcances:
 
-- **Todo (`all`):** suspende el candado completo. La unidad queda en estado **excepción**, sin restricciones. El resultado guarda qué restricciones quedaron suspendidas.
-- **Inicio de change (`change_start`):** permite iniciar change estando **restringido**. No levanta un **congelado**.
-
-Si hay una de cada alcance vigentes, manda la de alcance "todo".
+- **Suspende todas las restricciones (`all`):** la unidad queda "En excepción", sin restricciones.
+- **Inicio puntual de change (`change_start`):** autoriza iniciar un change concreto (se indica su referencia).
+  - Con la unidad **restringida**, quita "No se inicia change nuevo".
+  - Con la unidad **congelada**, no levanta el congelamiento. El motor la reporta como inicio puntual autorizado, pero hoy ese dato no se guarda en la evaluación ni se muestra en los tableros: la unidad se ve "Congelada" y la excepción aparece en la lista de vigentes.
 
 Vigencia:
 
-- Está vigente hasta su fecha de vencimiento **incluida** (fecha de America/Guayaquil).
-- Al día siguiente se ignora y el candado vuelve. El resultado lista las excepciones vencidas para que se puedan auditar y alertar.
-
-Ejemplo: enero amarillo, febrero rojo (congelado). Con una excepción "todo" que vence el 15 de marzo, el 1 de marzo la unidad queda en excepción. Desde el 16 de marzo vuelve a congelado.
-
-Lo que todavía no existe: registrar el motivo, aprobar desde la app y la visibilidad para todo el comité (C-02).
-
-### Arrastre al cierre del trimestre (vulnerabilidades)
-
-- Las P0/P1 nuevas de los meses 1 y 2 se suman al paquete del trimestre.
-- Las P0/P1 nuevas del mes 3 pasan al paquete siguiente.
-- Lo no resuelto al cierre también pasa al paquete siguiente.
-
-Ejemplo del diseño: paquete de 2.000. Entran 120 P0/P1 en enero, 80 en febrero y 40 en marzo.
-
-- Paquete efectivo del trimestre: 2.000 + 120 + 80 = **2.200**.
-- Se resuelven 2.100. Pasan al siguiente: (2.200 − 2.100) + 40 = **140**.
-- Si se resuelve más que el paquete, el pendiente no baja de 0; solo pasan las del mes 3.
+- Vigente hasta la fecha de vencimiento **incluida** (America/Guayaquil). Máximo 90 días desde que se crea.
+- Al día siguiente se ignora.
+- El candado guardado (el que ven el comité y el líder) solo lo recalcula la evaluación mensual. Una excepción aprobada, vencida o revocada a mitad de mes se refleja en el siguiente cierre o al reprocesar el mes.
+- Una excepción **revocada** deja de aplicar desde el día de la revocación.
+- El ritmo diario genera una alerta `exception_expired` el día que vence y otra cuando ya venció. El vencimiento queda en `audit_log`. Las revocadas no generan esta alerta.
