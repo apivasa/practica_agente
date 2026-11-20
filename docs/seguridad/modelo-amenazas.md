@@ -302,8 +302,8 @@ Con el primer despliegue cambian tres cosas: (1) el front deja de ser un build l
 |---|---|---|---|---|---|
 | T-M11-01 | Tampering | Columna numeric o JSON nueva escribible por la API sin tope 2^53 (regresión de H-M10-01) | Bajo | Barrido del catálogo (numeric con CHECK `9007199254740992`; lista cerrada de columnas JSON escribibles) | `049` (catálogo) |
 | T-M11-02 | Tampering | Bypass del CHECK por notación exponencial, cadena, UPDATE calculado, upsert, `\|\|`/`jsonb_set`, claves raras o JSON no objeto | Bajo | CHECK sobre el valor almacenado (independiente de la vía); jsonpath `strict` sobre todas las claves | `049`, `api/numeric-safe-cap-m11.test.js` |
-| T-M11-03 | Tampering | `indicators.thresholds_by_category` (JSONB) acepta `{"P0P1":{"green":1e400}}` (gestora) | Bajo | El motor (`num`) lo anula; solo gestora; auditoría | H-M11-01 (abierto) |
-| T-M11-04 | Tampering / DoS lógico | `measurements.value` sin tope 2^53 en indicadores sin categorías (custodio): `1e400` o `1e308` dejan el indicador sin evaluar | Bajo | `measure` descarta no finitos y marca fuera de rango; solo el custodio del KPI; auditoría | H-M11-02 (abierto; residual de H-M01-02) |
+| T-M11-03 | Tampering | `indicators.thresholds_by_category` (JSONB) acepta `{"P0P1":{"green":1e400}}` (gestora) | Bajo | El motor (`num`) lo anula; solo gestora; auditoría | H-M11-01 (cerrado en M-12: `050`, `api/json-shape-m12.test.js`) |
+| T-M11-04 | Tampering / DoS lógico | `measurements.value` sin tope 2^53 en indicadores sin categorías (custodio): `1e400` o `1e308` dejan el indicador sin evaluar | Bajo | `measure` descarta no finitos y marca fuera de rango; solo el custodio del KPI; auditoría | H-M11-02 (cerrado en M-12: `measurements_value_safe`; `049` sin excepción, `050`) |
 
 ## Trazabilidad: amenazas de riesgo Alto → prueba automática
 
@@ -340,3 +340,13 @@ Con el primer despliegue cambian tres cosas: (1) el front deja de ser un build l
 | T-CI-10 | `workflows.test.js` (caso deploy) | **Asignada a V-05** |
 | T-PROD-03, T-PROD-05 | `tests/security/preprod-s05.test.js` › VITE_ solo publicable, › db push/reset, › deploy.yml (si existe); `prod/fase-b.test.js` › sin secretos | Activa (S-05; la parte de producción, en fase B) |
 | T-PROD-06 | `tests/security/api/preprod-s05.test.js` › inyección, › esquemas no expuestos, › embebidos; `seguridad.yml` › `s05-fase-a` (ZAP API scan) | Activa (S-05) |
+
+## Superficie nueva (M-12)
+
+M-12 no abre superficie: solo añade tres CHECK (jsonpath y `abs`, sin funciones propias ni grants). Cierra T-M11-03 y T-M11-04.
+
+| ID | STRIDE | Amenaza | Riesgo | Control | Prueba |
+|---|---|---|---|---|---|
+| T-M12-01 | Tampering | Saltar el CHECK de forma con escrituras parciales del JSONB (jsonb_set, jsonb_insert, `\|\|`, `#-`), upsert, claves duplicadas, tipos raros (cadena, null, arreglo, objeto) o notación exponencial | Bajo | CHECK sobre la fila resultante: `indicators_thresholds_by_category_safe`, `commitments_package_by_category_whole`, `measurements_value_safe` | `supabase/tests/security/050`, `tests/security/api/json-shape-m12.test.js` |
+| T-M12-02 | DoS lógico (menor) | Números de escala enorme (`1e-16000`) en `measurements.value` o umbrales hinchan respuestas (~16 KB/valor; `JSON.parse` da 0) | Muy bajo | Solo roles que ya escriben la columna; auditoría | H-M12-01 (Info) |
+
