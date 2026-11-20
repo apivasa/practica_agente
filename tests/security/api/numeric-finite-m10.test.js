@@ -96,7 +96,13 @@ describe('pentest-api: M-10 numeric finito (H-M09-01)', { skip }, () => {
       body: { unit_id: target.unit_id, indicator_id: target.indicator_id, month: target.month, target_value: 'NaN' },
       headers: { Prefer: 'return=representation,resolution=merge-duplicates' },
     });
-    assert.ok(rejectedByCheck(r), `upsert targets NaN: ${fmt(r)}`);
+    // PostgREST pone en DO UPDATE SET todas las columnas del cuerpo (también unit_id,
+    // indicator_id y month): el grant de columna de M-09 lo corta antes del CHECK (403/42501).
+    // Cualquiera de los dos rechazos es válido; lo que importa es que la meta no cambie.
+    const denied = r.status === 403 && r.json?.code === '42501';
+    assert.ok(rejectedByCheck(r) || denied, `upsert targets NaN: ${fmt(r)}`);
+    const [now] = await adminGet(`targets?id=eq.${target.id}&select=target_value`);
+    assert.equal(String(now.target_value), String(target.target_value));
   });
 
   test('custodio · POST de compromiso nuevo con paquete u overrides no finitos se rechaza', async () => {

@@ -27,4 +27,6 @@ Verificado sin hallazgos: 1 (RLS y privilegios sin cambios; solo los roles con e
 No aplica: 2, 4 y 7 (no se tocan front, Auth ni la superficie HTTP).
 
 ## CI
-Ver la sección de runs al final (se completa tras el push).
+- Run de bc63549 (Seguridad https://github.com/apivasa/practica_agente/actions/runs/44702045451): gitleaks, semgrep, CodeQL, npm audit, DAST/ZAP y pgTAP de seguridad (`048` ok) en verde. En pentest-api, 7 de los 8 casos de M-10 pasaron. El upsert de PostgREST (`merge-duplicates`) recibe 403/42501 y no 23514: PostgREST mete en el DO UPDATE SET todas las columnas del cuerpo, y el grant de columna de M-09 corta la petición antes de llegar al CHECK. Es un rechazo correcto, así que se ajustó la prueba para aceptar los dos rechazos y comprobar que la meta no cambia. No es un hallazgo.
+- En el CI de bc63549 (https://github.com/apivasa/practica_agente/actions/runs/44702045351), `db (pgTAP)` falla solo en `supabase/tests/101_qa_m10.test.sql` (es del tester; `results_eq` da "could not determine which collation"). No es de seguridad: `100` y `048` pasan.
+- Run final: ver el último commit de `item/M-10`.
