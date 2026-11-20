@@ -33,3 +33,10 @@ export function listMeasurementDates(from, to) {
     .gte('measured_on', from).lte('measured_on', to)
     .order('measured_on').order('id'));
 }
+
+/** M-07: mediciones de un indicador entre dos fechas (gestora: todas). */
+export function listIndicatorMeasurements(indicatorId, from, to) {
+  return allPages(() => db().from('measurements').select(COLUMNS)
+    .eq('indicator_id', indicatorId).gte('measured_on', from).lte('measured_on', to)
+    .order('measured_on').order('id'));
+}

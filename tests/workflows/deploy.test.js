@@ -585,7 +585,14 @@ test('smoke: exige HTTP 200 y el título real de index.html, con reintentos y fa
 test('smoke: la URL de respaldo coincide con la base de Vite', () => {
   const vite = readFileSync(join(ROOT, 'vite.config.js'), 'utf8');
   const base = vite.match(/base:\s*['"]([^'"]+)['"]/)[1];
-  assert.ok(runScript('smoke', 'GET de la URL publicada').includes(`apivasa.github.io${base}`));
+  // Se parsea cada URL del script y se compara origen y ruta exactos, no por subcadena.
+  const urls = (runScript('smoke', 'GET de la URL publicada').match(/https?:\/\/[^\s"'}]+/g) || [])
+    .filter((u) => URL.canParse(u))
+    .map((u) => new URL(u));
+  assert.ok(
+    urls.some((u) => u.origin === 'https://apivasa.github.io' && u.pathname === base),
+    `ninguna URL del smoke es https://apivasa.github.io${base}`,
+  );
 });
 
 // Smoke en bash con curl y sleep sustituidos: la página se escribe en -o y el

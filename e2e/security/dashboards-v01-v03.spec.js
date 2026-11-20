@@ -85,7 +85,7 @@ test.describe('V-01 · el líder no ve otras unidades', () => {
 
   test('rutas de otros roles (completitud V-03, matriz V-02) redirigen al inicio del líder', async ({ page }) => {
     await login(page, 'lider1@example.test');
-    for (const r of ['#/gestora/completitud', '#/comite', '#/comite/excepciones']) {
+    for (const r of ['#/gestora/completitud', '#/gestora/metas', '#/comite', '#/comite/excepciones']) {
       await page.goto(`./${r}`);
       await expect(page).toHaveURL(/#\/lider$/);
     }

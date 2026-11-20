@@ -63,7 +63,7 @@ Funciones de apoyo (esquema `private`, no expuesto por la API, `security definer
 ### `targets` — metas parciales mensuales
 `id`, `unit_id`, `indicator_id`, `month` (`AAAA-MM`), `target_value` (≥ 0, acumulada a ese mes), `created_at`. Única por (`unit_id`, `indicator_id`, `month`).
 
-Hoy no hay pantalla para cargar metas. La semilla las trae para 2027-Q1 (un tercio, dos tercios y el total del paquete).
+La gestora las crea y edita en **Metas** (`#/gestora/metas`, M-07). La pantalla solo cambia `target_value` de una meta existente y no borra metas. A nivel de BD la gestora tiene UPDATE de toda la fila (hallazgo de seguridad H-M07-01, baja, pendiente de endurecer). La semilla trae metas para 2027-Q1 (un tercio, dos tercios y el total del paquete). Solo las usan los indicadores de meta acumulada sin categorías; VULN no.
 
 ### `evaluations` — color por unidad, indicador y mes
 `id`, `unit_id`, `indicator_id` (nulo = color global de la unidad), `month`, `color` (`green`, `yellow`, `red`, `not_evaluated`), `value`, `sample_size`, `reason`, `escalation_level` (`normal`, `restricted`, `frozen`, `exception`), `restrictions` (lista), `evaluated_at`.

@@ -140,6 +140,12 @@ Detalle en `docs/reportes/M-06-seguridad.md`. Pruebas en `tests/security/engine-
 | H-M06-02 | M-06 | Baja | 3 · Entradas | `engine/rows.js:9-13` (`num`), `buildPackageInput` (`num(pkg.P0P1) ?? 0`) | `num()` usa `Number(v)` para no números: `[]`, `false`, `''`/`' '` (cadena con espacios) y `[0]` valen 0, y `true` vale 1. Un `package_by_category` como `{"P0P1": []}` cuenta como paquete vacío → meta 0 → 100 % → verde. Sin ganancia: el custodio puede escribir `0` con el mismo efecto y queda auditado, pero un jsonb malformado debería fallar cerrado. | En `num` aceptar solo `number` o `string` no vacía tras `trim`; o CHECK en BD que exija enteros >= 0 en cada valor de `package_by_category` (`jsonb_typeof = 'number'`). | Ítem nuevo (endurecimiento) | Abierto |
 | H-M06-03 | M-06 | Info | 5 · CI | `scripts/ci/integration.sh:84-85` | Primer `delete` del script; usa `DB_URL` de `supabase status`, pero la guarda de loopback solo comprueba `API_URL`. Hoy ambos salen de la CLI local, sin riesgo real. | Añadir `case "$DB_URL" in postgresql://*@127.0.0.1:*|postgresql://*@localhost:*) ;; *) exit 1;; esac`. | Ítem nuevo (opcional) | Abierto |
 
+## Metas mensuales (M-07)
+
+| ID | Ítem | Severidad | Categoría | Ubicación | Resumen | Corrección sugerida | Estado |
+|---|---|---|---|---|---|---|---|
+| H-M07-01 | M-07 | Baja | 1/8 · Integridad | `supabase/migrations/20261119120100_rls_policies.sql:89` (`grant ... update ... on public.targets`) | `authenticated` tiene UPDATE de tabla en `targets`: la gestora puede mover una meta existente a otra unidad, indicador o mes (`PATCH /rest/v1/targets?id=eq.<id>` con `{"unit_id": "<otra>"}`) conservando `id` y `created_at`. Solo la gestora (RLS, probado en 045) y queda en `audit_targets` con old/new; equivale a borrar e insertar, que ya puede hacer. El front solo envía `{ target_value }` (`target-admin.js`, prueba estática). | `revoke update on public.targets from authenticated; grant update (target_value) on public.targets to authenticated;` y una prueba `has_column_privilege` en pgTAP. | Abierto → ítem de endurecimiento |
+
 ## Guarda de mediciones por criticidad (M-08)
 
 | ID | Ítem | Severidad | Categoría | Ubicación | Resumen | Corrección sugerida | Estado |

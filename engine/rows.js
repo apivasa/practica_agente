@@ -3,7 +3,9 @@
 import { effectiveThresholds } from './commitment.js';
 import { quarterOf } from './escalation.js';
 import { quarterBounds, monthEnd } from './calendar.js';
-import { packageStatus, categoryMonthColor } from './vulnerabilities.js';
+import { packageStatus, categoryMonthColor, cumulativeThirds } from './vulnerabilities.js';
+import { measure, parseDay } from './measure.js';
+import { evaluateColor } from './color.js';
 
 /** Número finito o null (PostgREST devuelve numeric como número; se tolera texto). */
 export const num = (v) => {
@@ -201,4 +203,124 @@ export function evaluateCategoryMonth({ indicator, commitment, measurements, mon
   } catch (err) {
     return notEvaluated(`No se pudo calcular el cumplimiento por criticidad: ${err.message}`);
   }
+}
+
+// Movidas desde scripts/lib/build.js (M-07): la pantalla de metas muestra el color con la
+// misma regla que la evaluación mensual.
+
+/**
+ * Mediciones del motor. Orden estable por fecha y creación (M-01: el desempate de
+ * cobertura depende del orden).
+ * @param {any[]} rows
+ */
+export function toEngineMeasurements(rows) {
+  return [...rows]
+    .sort((a, b) =>
+      a.measured_on === b.measured_on
+        ? String(a.created_at ?? '').localeCompare(String(b.created_at ?? ''))
+        : a.measured_on < b.measured_on
+          ? -1
+          : 1,
+    )
+    .map((r) => ({
+      date: r.measured_on,
+      value: num(r.value) ?? undefined,
+      appId: r.app_id ?? undefined,
+      compliant: r.compliant ?? undefined,
+      category: r.category ?? undefined,
+    }));
+}
+
+/** Días de a hasta b ('YYYY-MM-DD'). */
+const daysBetween = (a, b) => parseDay(b) - parseDay(a);
+
+/**
+ * Color de un indicador para una unidad en el mes evaluado (cierre del mes).
+ * - `cumulative_target` con categorías (M-06): por criticidad con el paquete del compromiso
+ *   trimestral (`packageCommitment`) y los umbrales de cada categoría; no usa `targets`.
+ * - `cumulative_target` sin categorías: solo lo resuelto dentro del trimestre del mes, contra
+ *   la meta acumulada del mes (`targets`).
+ * - resto: ventana del indicador terminada el último día del mes.
+ * @param {{ indicator: any, commitment?: any, packageCommitment?: any, measurements: any[], target?: any,
+ *   evalMonth: string }} input
+ * @returns {{ color: string, value: number|null, sampleSize: number, reason: string }}
+ */
+export function evaluateIndicatorMonth({
+  indicator,
+  commitment = null,
+  packageCommitment = commitment,
+  measurements,
+  target = null,
+  evalMonth,
+}) {
+  if (hasCategoryEvaluation(indicator)) {
+    const r = evaluateCategoryMonth({ indicator, commitment: packageCommitment, measurements, month: evalMonth });
+    return { color: r.color, value: r.value, sampleSize: r.sampleSize, reason: r.reason };
+  }
+  const { cfg, thresholdSource, note } = indicatorConfig(indicator, commitment);
+  const asOf = monthEnd(evalMonth);
+  let rows = measurements.filter((r) => r.measured_on <= asOf);
+  /** @type {{ asOf: string, target?: number|null }} */
+  const opts = { asOf };
+  if (cfg.measurementType === 'cumulative_target') {
+    const { start } = quarterBounds(evalMonth);
+    rows = rows.filter((r) => r.measured_on >= start && isResolved(r));
+    // El acumulado es del trimestre: la ventana debe cubrir desde su día 1 (Q3 y Q4 tienen
+    // 92 días; con window_days = 90 el motor descartaría el 1 de julio o de octubre).
+    const quarterDays = daysBetween(start, asOf) + 1;
+    if (quarterDays > cfg.windowDays) cfg.windowDays = quarterDays;
+    opts.target = num(target?.target_value);
+  }
+  const measured = measure(cfg, toEngineMeasurements(rows), opts);
+  const { color, reason } = evaluateColor(cfg, measured);
+  const parts = [reason];
+  if (thresholdSource === 'commitment') parts.push('umbral del compromiso');
+  if (note) parts.push(note);
+  return { color, value: measured.value, sampleSize: measured.sampleSize, reason: parts.join('; ') };
+}
+
+/**
+ * M-07: true si el color mensual del indicador se mide contra `targets` (meta acumulada sin
+ * categorías). Los de meta acumulada con categorías (VULN) usan el paquete por criticidad.
+ * @param {any} indicator fila de `indicators`
+ */
+export function usesMonthlyTargets(indicator) {
+  return indicator?.measurement_type === 'cumulative_target' && !hasCategoryEvaluation(indicator);
+}
+
+/**
+ * M-07, "Proponer un tercio": meta ACUMULADA del mes desde el paquete del compromiso
+ * trimestral (`package_total`) con la regla del motor (cumulativeThirds: un tercio, dos
+ * tercios y el total; redondeo hacia arriba en los meses 1 y 2). Es la misma serie que
+ * packageStatus.monthlyTargets y la de la semilla. No lanza: sin compromiso trimestral o sin
+ * paquete devuelve el motivo.
+ * @param {{ commitments: any[], unitId: string, indicatorId: string, month: string }} input
+ * @returns {{ ok: true, value: number, quarter: string, monthIndex: number, packageTotal: number, explanation: string }
+ *   | { ok: false, reason: string }}
+ */
+export function proposeThirdTarget({ commitments, unitId, indicatorId, month }) {
+  let bounds;
+  try {
+    bounds = quarterBounds(month);
+  } catch {
+    return { ok: false, reason: `Mes inválido: ${String(month)} (usa AAAA-MM)` };
+  }
+  const { quarter, months } = bounds;
+  const c = quarterCommitment(commitments, unitId, indicatorId, month);
+  if (!c) return { ok: false, reason: `Sin compromiso trimestral (${quarter}) para proponer la meta` };
+  const total = num(c.package_total);
+  if (total === null || total < 0) {
+    return { ok: false, reason: `El compromiso de ${quarter} no tiene paquete total para proponer la meta` };
+  }
+  const i = months.indexOf(month);
+  const value = cumulativeThirds(total)[i];
+  const share = ['un tercio', 'dos tercios', 'el total'][i];
+  return {
+    ok: true,
+    value,
+    quarter,
+    monthIndex: i + 1,
+    packageTotal: total,
+    explanation: `Propuesta para ${month} (mes ${i + 1} de ${quarter}): ${share} del paquete de ${total}, acumulado: ${value}.`,
+  };
 }
