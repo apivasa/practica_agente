@@ -383,7 +383,10 @@ jobs:
           echo "zap-full-scan.py terminó con código ${status}"
           [ "$status" -eq 0 ]
       # OpenAPI de PostgREST con todas las tablas (clave secreta LOCAL, solo en
-      # este paso) reescrito para apuntar al gateway local. La sesión de la
+      # este paso) reescrito para apuntar al gateway local. Los filtros de fila
+      # llevan por defecto `not.is.null` (sin operador PostgREST responde 400 y
+      # ZAP no llegaría a la consulta) y se quitan los DELETE (borrarían la
+      # semilla a mitad del escaneo; el borrado ya lo cubre la matriz de S-03). La sesión de la
       # gestora (seed, contraseña local pública) llega a ZAP por --env-file
       # (ZAP_AUTH_HEADER_VALUE), no por la línea de comandos.
       - name: Especificación OpenAPI y sesión de la gestora (locales)
@@ -396,7 +399,12 @@ jobs:
           # Clave y sesión locales y efímeras: nunca se imprimen (sin echo ni set -x).
           curl -sSf -H "apikey: ${secret}" -H 'Accept: application/openapi+json' \
             "${VITE_SUPABASE_URL}/rest/v1/" \
-            | jq '.host = "127.0.0.1:54321" | .basePath = "/rest/v1" | .schemes = ["http"]' \
+            | jq '.host = "127.0.0.1:54321" | .basePath = "/rest/v1" | .schemes = ["http"]
+                | .parameters |= with_entries(
+                    if (.key | startswith("rowFilter.")) then .value.default = "not.is.null"
+                    elif .key == "select" then .value.default = "*"
+                    else . end)
+                | .paths |= map_values(del(.delete))' \
             > "$RUNNER_TEMP/zap/openapi.json"
           chmod 644 "$RUNNER_TEMP/zap/openapi.json"
           jq -r '.paths | keys[]' "$RUNNER_TEMP/zap/openapi.json"
