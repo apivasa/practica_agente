@@ -12,7 +12,8 @@ El primer despliegue a producción es **compuerta del usuario** (CLAUDE.md §3).
    `SUPABASE_URL`, `SUPABASE_PROJECT_REF`, `SUPABASE_PUBLISHABLE_KEY`, `SUPABASE_SECRET_KEY`, `SUPABASE_ACCESS_TOKEN`, `SUPABASE_DB_PASSWORD`.
    `deploy.yml` usa cinco de ellos. `SUPABASE_SECRET_KEY` no la lee ningún job del despliegue (H-S05-06): la usan solo `evaluacion-mensual.yml` y `ritmo-diario.yml`, que ya declaran `environment: produccion`.
    `SUPABASE_URL` debe ser exactamente `PRODUCTION_SUPABASE_ORIGIN` de `src/security/csp.js` (ADR 0011); si no, `verify` falla antes de migrar.
-2. **Environment `produccion`** (Settings → Environments): regla de ramas de despliegue = `main`. Recomendado: revisor requerido (ver "Puntos de parada").
+2. **Environment `produccion`** (Settings → Environments): regla de ramas de despliegue = `main`, **sin revisor requerido**, con los 6 secretos del punto 1. Lo usan también los crons de evaluación (`evaluacion-mensual.yml` y `ritmo-diario.yml`): con revisor, cada run programado quedaría esperando aprobación y los candados y las alertas dejarían de ser automáticos (ADR 0015 punto 6).
+   Borra los secretos de repositorio **solo después** de una corrida manual de `ritmo-diario` (Actions → *Run workflow*) que ejecute el paso «Evaluar». Así compruebas que el environment entrega los secretos.
 3. **GitHub Pages** (P-03): Settings → Pages → Source = **GitHub Actions**. Esto crea el environment `github-pages`.
 4. **Auth del proyecto Supabase** (H-S05-01). `supabase db push` aplica solo `supabase/migrations/`, no `supabase/config.toml`, y un proyecto nuevo trae el registro abierto. En el panel de Supabase:
    - Authentication → Sign In / Providers: desactivar **Allow new users to sign up** (las cuentas las crea la gestora). `verify` lo comprueba con `GET /auth/v1/settings` y falla si `disable_signup` no es `true`.
@@ -39,15 +40,15 @@ Los jobs están encadenados: si falla uno, los siguientes no corren. El grupo de
 
 ## Puntos de parada
 
-- **Con revisor requerido en `produccion`** (recomendado): GitHub pide aprobación antes de cada job que usa el environment (`verify`, `build-pages`, `migrate-plan` y `migrate`). La aprobación de `migrate` llega **después** de que `migrate-plan` terminó, con el dry-run ya en el log: es una ventana real para leer la lista y rechazar si no cuadra. Rechazar `migrate` no toca la base ni publica el front.
-- **Sin revisor**: los jobs corren seguidos. El dry-run queda solo como registro en el log; no hay tiempo práctico para cancelar entre `migrate-plan` y `migrate`.
+- **Fase 1 (hoy):** la parada es el disparo manual con `confirm` = `desplegar`. `produccion` no tiene revisor, así que los jobs corren seguidos. El dry-run de `migrate-plan` queda en el log como registro de lo que se aplicó; no hay tiempo práctico para cancelar entre `migrate-plan` y `migrate`.
+- **Fase 2 (opcional):** si se quiere aprobar antes de `db push`, se crea un environment aparte, `produccion-migraciones`, con regla `main` y revisor. Solo lo declara `migrate` y lleva solo `SUPABASE_ACCESS_TOKEN`, `SUPABASE_DB_PASSWORD` y `SUPABASE_PROJECT_REF` (ADR 0015 punto 6). Hoy no existe.
 
 ## Primer despliegue (manual)
 
 1. Cumplir los requisitos previos (en especial el punto 4: sin registro cerrado, `verify` falla).
 2. Actions → **Despliegue** → *Run workflow*, rama `main`, `confirm` = `desplegar`.
    También por REST: `gh api -X POST repos/apivasa/practica_agente/actions/workflows/deploy.yml/dispatches -f ref=main -f inputs[confirm]=desplegar`.
-3. Si el environment tiene revisor: aprobar `verify`, `build-pages` y `migrate-plan`; leer en el log de `migrate-plan` la lista del dry-run y solo entonces aprobar `migrate` (o rechazarlo).
+3. Los jobs corren seguidos, sin aprobaciones por job. Revisa después en el log de `migrate-plan` la lista del dry-run y en el de `migrate` lo aplicado. La aprobación previa a `db push` queda para la fase 2 (`produccion-migraciones`, ver "Puntos de parada").
 
 ## Qué verificar después
 

@@ -15,7 +15,10 @@ Lo que existe hoy en `main`:
 - **Motor de color** (M-01): funciones puras en `engine/` que validan un indicador genérico, calculan su valor en la ventana y devuelven su color.
 - **Motor de escalada** (C-01): funciones puras en `engine/` que calculan el candado de una unidad (normal, restringido, congelado, excepción) y el arrastre del paquete de vulnerabilidades.
 
-Todavía **no** existen: tablas en Supabase, login, pantallas por rol, captura de mediciones, cálculo programado, alertas ni despliegue a GitHub Pages. Ver el orden de trabajo en [`docs/plan-maestro.md`](docs/plan-maestro.md).
+- **Salud del sistema** (V-04): `salud.yml` corre cada 6 h, revisa la web, Supabase y los workflows programados, y abre o actualiza un issue si algo falla. Ver [`docs/operacion.md`](docs/operacion.md).
+- **Despliegue manual** (V-05): `deploy.yml` aplica migraciones y publica en GitHub Pages solo cuando el usuario lo dispara a mano. La app **todavía no está publicada**. Ver [`docs/despliegue.md`](docs/despliegue.md).
+
+Todavía **no** existen: tablas en Supabase, login, pantallas por rol, captura de mediciones, cálculo programado, alertas ni publicación en GitHub Pages. Ver el orden de trabajo en [`docs/plan-maestro.md`](docs/plan-maestro.md).
 
 ## Requisitos
 
