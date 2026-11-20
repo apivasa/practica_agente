@@ -187,21 +187,6 @@ Superficie: `evaluacion-mensual.yml`, `ritmo-diario.yml`, `scripts/evaluate.js` 
 | T-JOB-10 | Tampering | Custodio relaja `green_override` o `package_by_category` del compromiso (incluso de un periodo cerrado) para quitar un candado o callar el ritmo | Bajo | Auditado por `audit_commitments`; rol con potestad de negociar (diseño). Falta congelar periodos cerrados (H-C03-03) | `api/idor-escalation.test.js` (RLS de commitments) |
 | T-JOB-11 | Tampering / Repudiation | Alguien pre-inserta alertas con la `dedupe_key` futura o falsifica `pace_snapshot` en `audit_log` para silenciar alertas | Alto | `authenticated` sin INSERT en `alerts` ni `audit_log`; `read_at` única columna editable; snapshots filtrados por `actor = 'system:evaluate'` | `041`; `automation-c03.test.js` › db.js snapshots, alertas |
 
-### 4.1 Workflow de salud (V-04)
-
-Superficie: `salud.yml` (cron cada 6 h + `workflow_dispatch` sin inputs), `scripts/health/{lib,check,issue}.js`, `scripts/ci/health.sh` (job `integration` de `ci.yml`, solo Supabase local). No usa `SUPABASE_SECRET_KEY`: solo la clave publicable contra `/auth/v1/health`, `GITHUB_TOKEN` con `actions: read` (job `check`) y con `issues: write` (job `alert`, sin secretos). Escribe en un issue público con la etiqueta `salud`.
-
-| ID | STRIDE | Amenaza | Riesgo | Control | Prueba |
-|---|---|---|---|---|---|
-| T-HEALTH-01 | Elevation | Token con más alcance del necesario (p. ej. `issues: write` en el job que lee la API y recibe secretos) | Medio | `contents: read` global; `actions: read` solo en `check`; `issues: write` solo en `alert`, que no recibe secretos | `tests/security/health-v04.test.js` › permisos |
-| T-HEALTH-02 | Tampering | Inyección de expresiones o contenido de evento en `run:` | Alto | Sin `${{ }}` en `run:`; sin `github.event.*`; `workflow_dispatch` sin inputs; sin `pull_request*` | `health-v04.test.js` › disparadores, › run; `workflows.test.js` |
-| T-HEALTH-03 | Spoofing / Information disclosure | Cuerpo del issue con menciones (`@`), enlaces, imágenes o HTML (phishing/notificaciones en repo público) a partir de `FAILURES` o `RUN_URL` | Medio | `parseFailures` solo `[a-z0-9-]{1,40}`; `RUN_URL` con regex exacta de github.com; resto del texto fijo | `health-v04.test.js` › cuerpo del issue |
-| T-HEALTH-04 | Information disclosure | Token, clave o URL de Supabase en log, `GITHUB_OUTPUT`, resumen o issue | Alto | `checkHttp` no usa `e.message`; errores de GitHub solo con método, ruta y estado | `health-v04.test.js` › fuga en logs |
-| T-HEALTH-05 | Information disclosure | Clave secreta puesta por error en `SUPABASE_PUBLISHABLE_KEY` se envía al sondeo | Alto | Se exige prefijo `sb_publishable_`; si no, falla sin petición | `health-v04.test.js` › sb_secret_ no se envía |
-| T-HEALTH-06 | SSRF / Tampering | `PAGES_URL`/`SUPABASE_URL` apuntan a metadatos o red interna, o a `http`/`file:` | Bajo | Solo admins editan `vars`/`secrets`; `safeUrl` exige https o http a loopback. Redirecciones seguidas con `apikey` (H-V04-01) | `health-v04.test.js` › safeUrl |
-| T-HEALTH-07 | Spoofing | Un run "verde" falso (PR de fork con rama `main`) oculta que el programado no corrió | Medio | Runs filtrados por `branch=main`; `ci.yml` filtrado a `push` y `seguridad.yml` a `schedule`; ritmo y mensual solo `schedule`/`workflow_dispatch` (escritura requerida) | `health-v04.test.js` › rama y evento |
-| T-HEALTH-08 | DoS / Repudiation | Alertas duplicadas o `salud.yml` deshabilitado en silencio | Bajo | Upsert: comenta el issue abierto; el orquestador revisa salud en cada ciclo (ADR 0014) | `health-v04.test.js` › sin duplicados; `tests/scripts/health.test.js` |
-
 ## 5. CI/CD
 
 Ver "Superficie de CI/CD (S-01)" y T-CI-01..10 arriba. El job `pentest-api` (S-03) levanta Supabase local efímero con claves locales generadas por la CLI: no usa secretos del repositorio y no apunta a hosts externos.
