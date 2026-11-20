@@ -247,7 +247,7 @@ Con el primer despliegue cambian tres cosas: (1) el front deja de ser un build l
 | T-M07-02 | Information disclosure | Líder lee metas de otra unidad por id, filtro u `or=` | Medio | `targets_select` con `is_leader_of(unit_id)` | 045 (IDOR id, `or`); `dashboards-v01-v03.spec.js` |
 | T-M07-03 | Elevation | Un tablero de otro rol arrastra el módulo de escritura | Bajo | Escritura aislada en `target-admin.js`, solo importado por la vista de la gestora; ruta `kpi_manager` | `front-v01-v03.test.js` › M-07 |
 | T-M07-04 | XSS almacenado | Nombre de unidad o indicador con marcado en la tabla o el selector de metas | Medio | `el()`/`textContent` | `e2e/security/xss.spec.js` (`#/gestora/metas`); `front-v01-v03.test.js` › sumideros M-07 |
-| T-M07-05 | Tampering / Repudiation | La gestora reasigna una meta existente a otra unidad, indicador o mes con un UPDATE de `unit_id`/`indicator_id`/`month` (el front no lo hace) | Bajo | Solo la gestora; `audit_targets` guarda old/new | H-M07-01 (abierto: grant de columna `update (target_value)`) |
+| T-M07-05 | Tampering / Repudiation | La gestora reasigna una meta existente a otra unidad, indicador o mes con un UPDATE de `unit_id`/`indicator_id`/`month` (el front no lo hace) | Bajo | Solo la gestora; `audit_targets` guarda old/new; desde M-09 grant de columna `update (target_value)` | `supabase/tests/security/045`, `047` (H-M07-01 corregido) |
 
 ## Superficie nueva (M-08)
 
@@ -260,6 +260,17 @@ Con el primer despliegue cambian tres cosas: (1) el front deja de ser un build l
 | T-M08-02 | Information disclosure | El trigger como oráculo: un rol sin permiso distingue fila válida/ inválida | Bajo | Trigger AFTER: RLS (WITH CHECK) responde 42501 antes | 046 (custodio de otro KPI, líder, comité) |
 | T-M08-03 | Tampering / DoS | Medición malformada por API apaga la escalada (H-M06-01) | Medio | Trigger en BD + descarte por fila en el motor | 046 (minúsculas, espacios, UPDATE a nulo/decimal); `080_*` (desarrollador); H-M08-01 (NaN/Infinity pasan la BD, los descarta el motor) |
 | T-M08-04 | Tampering | Desactivar el trigger o quitar las categorías del indicador para saltarse la regla | Medio | Solo el dueño de la tabla altera triggers; `indicators` solo lo escribe la gestora | 046 |
+
+## Superficie nueva (M-09)
+
+- Sin superficie nueva: endurece la existente. `targets` pasa a UPDATE solo de `target_value`; `measurements` gana el CHECK `measurements_value_finite`; se reemplaza `private.check_measurement_category()` (sigue `security definer`, `search_path = ''`, sin EXECUTE para la API); `cumulativeThirds` del motor se topa en el total.
+
+| ID | STRIDE | Amenaza | Riesgo | Control | Prueba |
+|---|---|---|---|---|---|
+| T-M09-01 | Tampering | Evadir el privilegio de columna de `targets` con upsert (`on conflict do update set unit_id`) o con un UPDATE que mezcle columnas | Bajo | Grant `update (target_value)`; RLS `targets_update` solo gestora | `047` |
+| T-M09-02 | Tampering / DoS | Convertir por UPDATE una medición válida en `NaN`/`Infinity`/> 2^53 | Bajo | CHECK `measurements_value_finite` + trigger | `047`, `090` |
+| T-M09-03 | Elevation | El `create or replace` de la función del trigger pierde el endurecimiento | Medio | `set search_path = ''`, `revoke all` en la migración | `046`, `047` (catálogo) |
+| T-M09-04 | Tampering | `NaN`/`Infinity` en `targets.target_value`, `commitments.package_total`, overrides y umbrales | Bajo | Solo roles con escritura; el motor (`num`) los anula | H-M09-01 (abierto) |
 
 ## Trazabilidad: amenazas de riesgo Alto → prueba automática
 
