@@ -92,6 +92,7 @@ Tallas: **S** = 1 ciclo · **M** = 2 ciclos · **L** = 3 ciclos.
 | V-05b | P1 | Despliegue continuo en push a main (ADR 0015 punto 5); `db push --db-url` sin token de cuenta (H-V05-01); contraseña mínima 12 en config.toml (H-S03-02) | S | V-05, S-05b | Merge a main despliega; pruebas de workflow actualizadas |
 | F-07 | P2 | CI: reintento acotado de `supabase start` con diagnóstico `ss -ltnp` (puertos 54322/54324 ocupados, intermitente) | XS | F-02 | Paso intermitente registrado en operacion.md deja de requerir relanzar a mano |
 | M-08 | P1 | Endurecimiento de mediciones VULN: trigger en `measurements` (categoría P0P1/P2P3 y entero ≥ 0 en indicadores con categorías), rechazo de `cumulative_target` + `lower_is_better` en `validateIndicator` y CHECK, descarte movido a `buildPackageInput` (H-M06-01, H-M06-QA-02, A4, A7) | S | M-06 | pgTAP y node:test; verificar antes de producción que no haya filas que violen la regla |
+| M-11 | P3 | Tope de entero seguro en columnas numéricas configurables y en `package_by_category` (H-M10-01) | XS | M-10 | pgTAP con '1e400' por columna y por clave JSONB |
 | M-10 | P2 | Valores finitos en todas las columnas numéricas configurables (H-M09-01): CHECK o dominio `finite_numeric` en targets, commitments e indicators | XS | M-09 | pgTAP con 'NaN' e 'Infinity' por columna; verificación previa a producción |
 | M-09 | P2 | Endurecimiento de hallazgos bajos de M-07/M-08: grant UPDATE por columna (`target_value`) en `targets`; `cumulativeThirds` nunca supera el total; mediciones rechazan NaN, Infinity y enteros no seguros | XS | M-07, M-08 | pgTAP `has_column_privilege` y de valores no finitos; prueba unitaria de `cumulativeThirds(0.5)` |
 
@@ -139,7 +140,8 @@ El orquestador toma el **primer ítem `Pendiente`** cuyas dependencias estén `H
 | 26j | F-08 | Hecho | 0 | #29 | Alertas CodeQL abiertas en main (4 altas, solo en pruebas: URL por subcadena en tests/scripts/health.test.js:150,256 y qa-v04.test.js:193,213) fusionadas con #22; constructor: tester. Regla nueva: no fusionar con el check CodeQL en rojo |
 | 26h | F-07 | Hecho | 1 | #30 | CI: reintento acotado de `supabase start` por puertos 54322/54324 ocupados (intermitente) |
 | 26k | M-09 | Hecho | 0 | #34 | Endurecimiento bajo: UPDATE de `targets` solo en `target_value` (H-M07-01); `cumulativeThirds` acotado al total o CHECK entero en `package_total` (H-M07-QA-01); rechazo de NaN/Infinity y enteros > 2^53 en mediciones (H-M08-01, obs. QA M-08); quitar en docs/operacion.md la instrucción de relanzar pentest-api a mano |
-| 26l | M-10 | En curso | 0 | | H-M09-01: CHECK de valor finito (sin NaN/Infinity) en `targets.target_value`, `commitments.package_total`, `green_override`, `yellow_override` y umbrales de `indicators`; pgTAP |
+| 26l | M-10 | Hecho | 0 | #35 | H-M09-01: CHECK de valor finito (sin NaN/Infinity) en `targets.target_value`, `commitments.package_total`, `green_override`, `yellow_override` y umbrales de `indicators`; pgTAP |
+| 26m | M-11 | Pendiente | 0 | | H-M10-01: tope < 2^53 en los CHECK numéricos de M-10 y CHECK de valores en `commitments.package_by_category` (JSON.parse vuelve Infinity valores como 1e400) |
 | 27 | C-05 | Bloqueado | 0 | | Espera Q-04 |
 | 28 | V-07 | Bloqueado | 0 | | Espera Q-02 |
 
