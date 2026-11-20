@@ -3,8 +3,9 @@
 --  - plan-maestro M-11: "pgTAP con '1e400' por columna y por clave JSONB" -> también por la vía
 --    real de escritura (authenticated con RLS: gestora en indicators y targets, custodio en
 --    commitments), por INSERT y UPDATE, y con 1e300 (finito, no tocado por M-10, ahora fuera).
---  - plan-maestro M-11: "tope |v| < 2^53" -> borde exacto: ±2^53 rechazado, ±(2^53 - 1) y
---    2^53 - 0.5 aceptados (estricto <), en las siete restricciones; 2^53 en notación exponencial.
+--  - plan-maestro M-11: "tope |v| < 2^53" -> borde exacto: ±2^53 rechazado, ±(2^53 - 1)
+--    aceptado, en las siete restricciones; 2^53 en notación exponencial. M-14 (H-ARQ-M13-01)
+--    movió el borde a |v| < 2^53 - 0,5: ±(2^53 - 0,6) aceptado y ±(2^53 - 0,5) rechazado.
 --  - plan-maestro M-11: "cada valor de package_by_category sea número JSON finito" -> el valor
 --    malo en cualquier clave (no solo la primera), texto numérico, claves extra; un
 --    package_by_category que no es objeto sigue rechazado con 23514 (no con un error de jsonpath).
@@ -13,7 +14,7 @@
 --  - CLAUDE.md 4: prueba por rol -> los roles que no escriben la tabla siguen sin escribirla con
 --    un valor válido (el CHECK no reemplaza ni rompe RLS); NaN sigue rechazado.
 begin;
-select plan(41);
+select plan(44);
 
 insert into auth.users (id, email, aud, role) values
   ('aaaaaaaa-0000-4000-8000-000000001111', 'fx-qa-m11-gestora@example.test', 'authenticated', 'authenticated'),
@@ -99,9 +100,19 @@ select throws_ok(
       where id = 'cccccccc-0000-4000-8000-000000001111' $$,
   '23514', null, 'gestora: NaN en ambos umbrales sigue rechazado');
 select lives_ok(
-  $$ update public.indicators set green_threshold = 9007199254740991.5, yellow_threshold = -9007199254740991.5
+  $$ update public.indicators set green_threshold = 9007199254740991.4, yellow_threshold = -9007199254740991.4
       where id = 'cccccccc-0000-4000-8000-000000001111' $$,
-  'gestora: umbrales en ±(2^53 - 0.5) aceptados (el tope es estricto en 2^53)');
+  'gestora: umbrales en ±(2^53 - 0,6) aceptados (M-14: JSON.parse los lee como ±(2^53 - 1))');
+select throws_ok(
+  $$ update public.indicators set green_threshold = 9007199254740991.5, yellow_threshold = 90
+      where id = 'cccccccc-0000-4000-8000-000000001111' $$,
+  '23514', 'new row for relation "indicators" violates check constraint "indicators_green_threshold_safe"',
+  'gestora: green_threshold 2^53 - 0,5 rechazado (M-14: JSON.parse lo lee como 2^53)');
+select throws_ok(
+  $$ update public.indicators set green_threshold = 95, yellow_threshold = -9007199254740991.5
+      where id = 'cccccccc-0000-4000-8000-000000001111' $$,
+  '23514', 'new row for relation "indicators" violates check constraint "indicators_yellow_threshold_safe"',
+  'gestora: yellow_threshold -(2^53 - 0,5) rechazado (M-14)');
 select lives_ok(
   $$ update public.indicators set green_threshold = 95, yellow_threshold = 90
       where id = 'cccccccc-0000-4000-8000-000000001111' $$,
@@ -211,9 +222,14 @@ select lives_ok(
   'custodio: package_by_category con enteros >= 0 bajo el tope y clave libre aceptado');
 select lives_ok(
   $$ update public.commitments set green_override = 9007199254740991, yellow_override = -9007199254740991,
-            package_total = 9007199254740991.5, package_by_category = '{"P0P1": 200, "P2P3": 100}'
+            package_total = 9007199254740991.4, package_by_category = '{"P0P1": 200, "P2P3": 100}'
       where id = 'dddddddd-0000-4000-8000-000000001111' $$,
-  'custodio: overrides y paquete bajo el tope aceptados');
+  'custodio: overrides y paquete bajo el tope aceptados (package_total 2^53 - 0,6, borde de M-14)');
+select throws_ok(
+  $$ update public.commitments set package_total = 9007199254740991.5
+      where id = 'dddddddd-0000-4000-8000-000000001111' $$,
+  '23514', 'new row for relation "commitments" violates check constraint "commitments_package_total_safe"',
+  'custodio: package_total 2^53 - 0,5 rechazado (M-14)');
 
 -- ---------------------------------------------------------------------------
 -- Roles que no escriben: RLS sigue mandando (con valor válido)
