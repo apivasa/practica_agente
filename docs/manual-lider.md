@@ -1,6 +1,6 @@
 # Manual del líder de unidad
 
-Qué ve y qué puede hacer un líder de unidad en la app. Solo describe lo que está construido (2026-11-19).
+Qué ve y qué puede hacer un líder de unidad en la app. Solo describe lo que está construido (2026-11-20).
 
 > La app todavía no está publicada en GitHub Pages (V-05). Hoy se usa en local; ver [README](../README.md#correr-en-local). En local: `lider1@example.test` (Unidad Alfa), `lider2` (Beta) o `lider3` (Gamma).
 
@@ -25,7 +25,10 @@ Es una sola pantalla. Arriba dice "Unidades a tu cargo: N". De arriba abajo:
 
 **2. Resumen de la unidad** ("<unidad> · <mes>").
 - **Color de la unidad:** el peor de tus indicadores evaluados ese mes.
-- **Restricciones activas:** el candado y la lista de restricciones (ver "Cómo leer los candados").
+- **Restricciones del cierre de AAAA-MM:** el candado que guardó la evaluación mensual del mes elegido y su lista de restricciones (ver "Cómo leer los candados").
+- **Candado vigente hoy:** el candado de hoy, con el último cierre mensual guardado y las excepciones tal como están hoy (America/Guayaquil). No depende del mes elegido. Muestra el nivel y sus restricciones; "Inicio autorizado: REF" por cada inicio puntual vigente con la unidad congelada ("sin referencia" si no tiene); y debajo, la base: "Según el cierre de AAAA-MM y las excepciones vigentes al AAAA-MM-DD".
+  - "Sin cierre vigente: no hay evaluación mensual de AAAA-MM ni de AAAA-MM": no hay cierre del mes en curso ni del anterior. Pasa cada día 1 desde las 00:00 hasta que corre la evaluación mensual (06:07 Guayaquil), o más si esa evaluación falla o se retrasa.
+  - "No se pudo calcular el candado de hoy con los datos guardados": algún dato guardado de tu unidad no es válido.
 
 **3. Mis indicadores** (avance al <fecha>). Una fila por indicador:
 
@@ -79,10 +82,10 @@ Un valor justo en el umbral recibe el color mejor.
 
 ## Cómo leer las excepciones
 
-- **Permite iniciar change** (el comité lo llama "Inicio puntual de change"): el comité autorizó iniciar el change indicado en "Ref. de change". Si estás restringida, puedes iniciarlo. Si estás congelada, el congelamiento sigue: el resumen muestra "Congelada" con sus restricciones, y la autorización solo se ve en la lista de excepciones vigentes.
-- **Suspende todos los candados** ("Suspende todas las restricciones"): mientras esté vigente no tienes restricciones.
+- **Inicio puntual de change:** el comité autorizó iniciar el change indicado en "Ref. de change". Si estás restringida, puedes iniciarlo. Si estás congelada, el congelamiento sigue: "Candado vigente hoy" muestra "Congelada" con sus restricciones y, debajo, "Inicio autorizado: REF".
+- **Suspende todas las restricciones:** mientras esté vigente no tienes restricciones.
 - Vigente hasta la fecha de "Vence", incluida. El día siguiente vuelven los candados.
-- El candado del resumen es el del último cierre mensual. Una excepción aprobada a mitad de mes aparece en la lista de vigentes, pero el resumen cambia en el siguiente cierre.
+- "Restricciones del cierre de AAAA-MM" es el candado del cierre mensual: una excepción aprobada o revocada a mitad de mes no lo cambia hasta el siguiente cierre. "Candado vigente hoy" sí la refleja el mismo día, tras recargar la página.
 
 ## Qué no puedes hacer
 
