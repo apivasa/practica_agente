@@ -30,7 +30,10 @@ Los 71 casos de `tests/workflows/qa-s05.test.js` ejecutan los scripts reales de 
 **Hallazgo nuevo:**
 - **QA-S05-05 (bajo, proceso):** `f96881b` borra `docs/reportes/S-05-arquitectura.md`, el informe del arquitecto-SRE (`039b5c2`, 81 líneas). Seguridad no tiene permiso de escritura ahí (CLAUDE.md §1) y el commit no lo menciona. Parece un efecto secundario de que dos worktrees compartan la rama `item/S-05`. El PR necesita los tres informes enlazados: el orquestador o el arquitecto deben restaurarlo (`git checkout 039b5c2 -- docs/reportes/S-05-arquitectura.md`) o volver a emitirlo para el intento 2. QA no lo toca. No afecta al criterio de S-05.
 
-**CI (intento 2):** se completa abajo, en «Resultado CI (intento 2)».
+**Resultado CI (intento 2), commit `43e75c1`:**
+- [CI 44668471546](https://github.com/apivasa/practica_agente/actions/runs/44668471546): **verde**. 1227 tests, 0 fallos; los 3 que no cuentan como pasados son TODO u omitidos ya conocidos.
+- [Seguridad 44668471544](https://github.com/apivasa/practica_agente/actions/runs/44668471544): **verde**. Los 8 jobs previos pasan. `s05-fase-a` y `s05-fase-b` se omiten, como corresponde a un push.
+- La fase A en verde de referencia es la del dispatch 44664594826, y el PR la vuelve a ejecutar.
 
 ---
 
