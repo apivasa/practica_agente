@@ -475,15 +475,15 @@ test('deploy.yml: ningún job aplica la semilla, resetea, usa psql ni config pus
 
 test('migrate-plan: solo dry-run, nunca db push real', () => {
   const lines = job('migrate-plan').split('\n');
-  assert.ok(lines.some((l) => /supabase db push --dry-run\s*$/.test(l)), 'falta el dry-run');
-  assert.ok(!lines.some((l) => /supabase db push\s*$/.test(l)), 'migrate-plan no debe aplicar migraciones');
+  assert.ok(lines.some((l) => /supabase db push --remote --dry-run\s*$/.test(l)), 'falta el dry-run');
+  assert.ok(!lines.some((l) => /supabase db push --remote\s*$/.test(l)), 'migrate-plan no debe aplicar migraciones');
 });
 
 test('migrate: dry-run en un paso previo a db push y migration list después', () => {
   const lines = job('migrate').split('\n');
-  const dry = lines.findIndex((l) => /supabase db push --dry-run\s*$/.test(l));
-  const push = lines.findIndex((l) => /supabase db push\s*$/.test(l));
-  const list = lines.findIndex((l) => /supabase migration list\s*$/.test(l));
+  const dry = lines.findIndex((l) => /supabase db push --remote --dry-run\s*$/.test(l));
+  const push = lines.findIndex((l) => /supabase db push --remote\s*$/.test(l));
+  const list = lines.findIndex((l) => /supabase migration list --remote\s*$/.test(l));
   assert.ok(dry >= 0 && push > dry && list > push, `orden dry-run(${dry}) → push(${push}) → list(${list})`);
   assert.ok(lines.slice(dry, push).some((l) => /^\s+- name:/.test(l)), 'dry-run y push en pasos distintos');
 });
@@ -667,4 +667,19 @@ test('docs/despliegue.md: documenta disparo manual, secretos, verificación y re
   assert.match(DOC, /dry-run/);
   assert.match(DOC, /seed\.sql/);
   assert.match(DOC, /[Rr]evers/);
+});
+
+test('deploy.yml: todo comando de BD de la CLI apunta al proyecto remoto (CLI 3.x usa el stack local por defecto)', () => {
+  const cmds = CODE.split('\n').filter((l) => /^\s*(run:\s*)?supabase\s+(db\s+push|migration\s+list)\b/.test(l));
+  assert.ok(cmds.length >= 4, `se esperaban al menos 4 comandos, hay ${cmds.length}`);
+  for (const l of cmds) {
+    assert.match(l, /\s--remote(\s|$)/, `sin --remote: ${l.trim()}`);
+    assert.doesNotMatch(l, /--local|--db-url|--password|-p\s|--include-seed|--debug/, l.trim());
+  }
+});
+
+test('deploy.yml: los pasos con db push/migration list reciben la contraseña por env', () => {
+  const steps = CODE.split(/^\s+- (?=name:|uses:)/m).filter((s) => /supabase\s+(db\s+push|migration\s+list)/.test(s));
+  assert.ok(steps.length >= 4);
+  for (const s of steps) assert.match(s, /SUPABASE_DB_PASSWORD:\s*\$\{\{\s*secrets\.SUPABASE_DB_PASSWORD\s*\}\}/, s.split('\n')[0]);
 });
