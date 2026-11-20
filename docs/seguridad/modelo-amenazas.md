@@ -283,7 +283,16 @@ Con el primer despliegue cambian tres cosas: (1) el front deja de ser un build l
 | T-M09-01 | Tampering | Evadir el privilegio de columna de `targets` con upsert (`on conflict do update set unit_id`) o con un UPDATE que mezcle columnas | Bajo | Grant `update (target_value)`; RLS `targets_update` solo gestora | `047` |
 | T-M09-02 | Tampering / DoS | Convertir por UPDATE una medición válida en `NaN`/`Infinity`/> 2^53 | Bajo | CHECK `measurements_value_finite` + trigger | `047`, `090` |
 | T-M09-03 | Elevation | El `create or replace` de la función del trigger pierde el endurecimiento | Medio | `set search_path = ''`, `revoke all` en la migración | `046`, `047` (catálogo) |
-| T-M09-04 | Tampering | `NaN`/`Infinity` en `targets.target_value`, `commitments.package_total`, overrides y umbrales | Bajo | Solo roles con escritura; el motor (`num`) los anula | H-M09-01 (abierto) |
+| T-M09-04 | Tampering | `NaN`/`Infinity` en `targets.target_value`, `commitments.package_total`, overrides y umbrales | Bajo | CHECK `*_finite` de M-10 en las 6 columnas; el motor (`num`) los anula | `048`, `100`, `api/numeric-finite-m10.test.js` (H-M09-01 corregido en M-10) |
+
+## Superficie nueva (M-10)
+
+- Sin superficie nueva: seis CHECK aditivos de valor finito en `indicators` (umbrales), `commitments` (overrides y paquete) y `targets.target_value`. No cambia privilegios, RLS ni funciones.
+
+| ID | STRIDE | Amenaza | Riesgo | Control | Prueba |
+|---|---|---|---|---|---|
+| T-M10-01 | Tampering | Columna numeric nueva escribible por la API sin CHECK de finito (regresión de H-M08-01/H-M09-01) | Bajo | Barrido del catálogo | `048` (catálogo) |
+| T-M10-02 | Tampering | Numeric finito en PostgreSQL pero > 1.8e308 (`1e400`) en umbrales, metas, paquete o JSONB: JSON.parse lo vuelve `Infinity` en el front y las Actions | Bajo | El motor (`num`) lo anula (sin meta / paquete inválido); solo roles con escritura; auditoría | `engine-m10.test.js`; H-M10-01 (abierto) |
 
 ## Trazabilidad: amenazas de riesgo Alto → prueba automática
 
