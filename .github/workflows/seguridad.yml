@@ -197,6 +197,10 @@ jobs:
         run: |
           set -euo pipefail
           set -a; . /tmp/pentest.env; set +a
+          # F-09: una sola ronda de inicios de sesión para todos los archivos;
+          # los tokens viajan por entorno (nunca a disco ni al log).
+          PENTEST_TOKENS="$(node tests/security/api/login-all.mjs)"
+          export PENTEST_TOKENS
           node --test --test-concurrency=1 'tests/security/api/*.test.js'
       - name: Detener Supabase
         if: always()

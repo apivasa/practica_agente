@@ -4,6 +4,7 @@ Una línea por ítem, la más reciente arriba.
 
 ## Sin publicar
 
+- 2026-11-20 · F-09 · Sin cambio en pantalla. Las pruebas de pentest de la API ya no guardan tokens en un archivo temporal (elimina la causa de las alertas CodeQL `js/file-access-to-http` #14–#16; su cierre se confirma tras el merge). Inician sesión una vez con `login-all.mjs`, comparten los tokens por la variable `PENTEST_TOKENS` y reintentan el login de forma acotada ante 429.
 - 2026-11-20 · M-14 · La BD rechaza ahora los valores entre 2^53 − 0,5 y 2^53 en umbrales, compromisos, metas y mediciones (error 23514). Solo podían entrar por API directa: el front los leía como 2^53 y hacían fallar la evaluación mensual. Lo que la BD acepta, el motor también lo acepta. En pantalla nada cambia.
 - 2026-11-20 · M-13 · Las pantallas revisan el tope |v| < 2^53 antes de guardar: umbrales del indicador (generales y por categoría), umbrales negociados, paquete y su total en compromisos, y mediciones manuales y por CSV. En vez del mensaje genérico de error al guardar ves "…: fuera de rango, debe ser menor que 2^53 (9007199254740992) en valor absoluto". 2^53 − 1 se acepta. La notación exponencial (`1e20`) no se admite y se rechaza como valor no numérico.
 - 2026-11-20 · M-12 · La BD revisa la forma de los umbrales por categoría (cada categoría con `green` y `yellow` numéricos, |v| < 2^53), rechaza mediciones con |valor| ≥ 2^53 en cualquier indicador y exige enteros ≥ 0 en el paquete por categoría de los compromisos. Error 23514; en pantalla se ve el mensaje genérico de error al guardar.
