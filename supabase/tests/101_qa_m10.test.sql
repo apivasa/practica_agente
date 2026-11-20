@@ -35,16 +35,13 @@ insert into public.targets (id, unit_id, indicator_id, month, target_value) valu
 -- ---------------------------------------------------------------------------
 -- Catálogo: restricciones presentes y validadas (verificación previa a producción)
 -- ---------------------------------------------------------------------------
-select results_eq(
-  $$ select conname::text, convalidated from pg_constraint
-      where conname in ('indicators_green_threshold_finite', 'indicators_yellow_threshold_finite',
-                        'commitments_green_override_finite', 'commitments_yellow_override_finite',
-                        'commitments_package_total_finite', 'targets_target_value_finite')
-      order by conname $$,
-  $$ values ('commitments_green_override_finite'::text, true), ('commitments_package_total_finite', true),
-            ('commitments_yellow_override_finite', true), ('indicators_green_threshold_finite', true),
-            ('indicators_yellow_threshold_finite', true), ('targets_target_value_finite', true) $$,
-  'las seis restricciones de valor finito existen y están validadas (no NOT VALID)');
+select is(
+  (select count(*)::int from pg_constraint
+    where convalidated
+      and conname in ('indicators_green_threshold_finite', 'indicators_yellow_threshold_finite',
+                      'commitments_green_override_finite', 'commitments_yellow_override_finite',
+                      'commitments_package_total_finite', 'targets_target_value_finite')),
+  6, 'las seis restricciones de valor finito existen y están validadas (no NOT VALID)');
 
 -- Consultas de verificación del final de la migración: sobre la BD con semilla y fixtures, 0 filas.
 select is_empty(
