@@ -73,7 +73,7 @@ Una unidad cuenta como cargada para un KPI si tiene al menos una medición con f
 ## Qué no puedes hacer desde la app (hoy)
 
 - Cargar mediciones o compromisos. Eso es del custodio. Si necesitas corregir datos, pide el rol de custodio del indicador.
-- Cargar las metas mensuales (`targets`). No hay pantalla.
+- Cargar las metas mensuales (`targets`). No hay pantalla. Vulnerabilidades no las necesita: su meta sale del paquete trimestral (M-06). Solo las usaría un indicador de meta acumulada sin categorías.
 - Crear usuarios ni asignar roles de líder o comité.
 - Ver la bandeja de alertas ni aprobar excepciones: son del comité y del líder.
 
