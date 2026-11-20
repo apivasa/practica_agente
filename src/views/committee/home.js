@@ -1,9 +1,11 @@
 // V-02 · Inicio del comité: matriz unidad × indicador con el color del mes y el nivel de
-// escalada por unidad, alertas recientes (bandeja propia) y excepciones vigentes.
+// escalada por unidad (cierre del mes y candado vigente hoy, V-08), alertas recientes (bandeja
+// propia) y excepciones vigentes.
 import { el } from '../dom.js';
 import { messages } from '../form.js';
 import {
   activeExceptions, historySince, committeeMatrix, evaluatedMonths, formatNumber, monthOptions, pickMonth,
+  unitLockToday,
 } from '../../lib/dashboard.js';
 import { todayInBusinessTz } from '../../lib/dates.js';
 import { ROLE_LABELS, findRoute } from '../../lib/route-logic.js';
@@ -12,7 +14,7 @@ import { listIndicators } from '../../data/indicators.js';
 import { listEvaluations } from '../../data/evaluations.js';
 import { listCurrentExceptions } from '../../data/exceptions.js';
 import { listMyAlerts, markAlertRead } from '../../data/alerts.js';
-import { alertsInbox, colorBadge, escalationInfo, exceptionsTable, monthPicker } from '../dashboard-parts.js';
+import { alertsInbox, colorBadge, escalationInfo, exceptionsTable, lockTodayInfo, monthPicker } from '../dashboard-parts.js';
 
 const EXCEPTIONS_PATH = '/comite/excepciones';
 
@@ -31,7 +33,7 @@ export function renderCommitteeHome({ session }) {
   const matrixBox = el('div', { class: 'matrix-box' }, [el('p', { text: 'Cargando la matriz…' })]);
   const exceptionsBox = el('div', { class: 'exceptions-box' });
   const inbox = el('div', { class: 'inbox-box' });
-  const state = { units: [], indicators: [], evaluations: [], month: null };
+  const state = { units: [], indicators: [], evaluations: [], exceptions: [], month: null };
 
   const unitName = (id) => state.units.find((u) => u.id === id)?.name ?? 'Unidad';
 
@@ -64,12 +66,16 @@ export function renderCommitteeHome({ session }) {
           el('th', { scope: 'col', text: 'Unidad' }),
           el('th', { scope: 'col', text: 'Color de la unidad' }),
           el('th', { scope: 'col', text: 'Escalada' }),
+          el('th', { scope: 'col', text: 'Candado hoy' }),
           ...columns.map((c) => el('th', { scope: 'col', title: c.name, text: c.code })),
         ])]),
         el('tbody', {}, rows.map((r) => el('tr', { 'data-unit': r.unit.name }, [
           el('th', { scope: 'row', text: r.unit.name }),
           el('td', {}, [colorBadge(r.global?.color ?? 'not_evaluated')]),
           el('td', {}, [escalationInfo(r.global)]),
+          el('td', { class: 'lock-today-cell' }, [lockTodayInfo(unitLockToday({
+            unitId: r.unit.id, evaluations: state.evaluations, exceptions: state.exceptions, today,
+          }))]),
           ...r.cells.map(cell),
         ]))),
       ])
@@ -81,7 +87,7 @@ export function renderCommitteeHome({ session }) {
       const [units, indicators, evaluations, exceptions] = await Promise.all([
         listUnits(), listIndicators(), listEvaluations({ since: historySince(today) }), listCurrentExceptions(today),
       ]);
-      Object.assign(state, { units, indicators, evaluations });
+      Object.assign(state, { units, indicators, evaluations, exceptions });
       showMatrix();
       const link = findRoute(EXCEPTIONS_PATH)
         ? el('a', { href: `#${EXCEPTIONS_PATH}`, text: 'Aprobar o revocar una excepción' })

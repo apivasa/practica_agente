@@ -1,11 +1,11 @@
 // V-01 · Inicio del líder de unidad: por indicador de su unidad, color del mes, valor, meta
-// mensual, avance frente al ritmo (motor), restricciones activas, excepciones vigentes y su
-// bandeja de alertas. RLS limita todas las lecturas a sus unidades.
+// mensual, avance frente al ritmo (motor), restricciones del cierre y candado vigente hoy (V-08),
+// excepciones vigentes y su bandeja de alertas. RLS limita todas las lecturas a sus unidades.
 import { el } from '../dom.js';
 import { field, messages, select } from '../form.js';
 import {
   activeExceptions, historySince, evaluatedMonths, formatNumber, leaderIndicatorRows, leaderMeasurementsRange,
-  monthOptions, paceAsOf, pickMonth, unitEvaluation,
+  monthOptions, paceAsOf, pickMonth, unitEvaluation, unitLockToday,
 } from '../../lib/dashboard.js';
 import { todayInBusinessTz } from '../../lib/dates.js';
 import { ROLE_LABELS } from '../../lib/route-logic.js';
@@ -17,7 +17,7 @@ import { listUnitCommitments } from '../../data/commitments.js';
 import { listUnitMeasurements } from '../../data/measurements.js';
 import { listCurrentExceptions } from '../../data/exceptions.js';
 import { listMyAlerts, markAlertRead } from '../../data/alerts.js';
-import { alertsInbox, colorBadge, escalationInfo, exceptionsTable, monthPicker } from '../dashboard-parts.js';
+import { alertsInbox, colorBadge, escalationInfo, exceptionsTable, lockTodayInfo, monthPicker } from '../dashboard-parts.js';
 
 function paceCell(pace) {
   if (!pace) return el('span', { class: 'muted', text: 'No aplica' });
@@ -84,7 +84,12 @@ export function renderLeaderHome({ rows, session }) {
       summary.replaceChildren(
         el('h3', { text: `${unitName(unitId)} · ${month}` }),
         el('p', { class: 'unit-color' }, ['Color de la unidad: ', colorBadge(global?.color ?? 'not_evaluated')]),
-        el('div', { class: 'unit-escalation' }, [el('span', { text: 'Restricciones activas: ' }), escalationInfo(global)]),
+        el('div', { class: 'unit-escalation' }, [el('span', { text: `Restricciones del cierre de ${month}: ` }), escalationInfo(global)]),
+        // V-08: candado de hoy con las excepciones tal como están hoy (sin esperar al cierre).
+        el('div', { class: 'unit-lock-today' }, [
+          el('span', { text: 'Candado vigente hoy: ' }),
+          lockTodayInfo(unitLockToday({ unitId, evaluations, exceptions, today })),
+        ]),
       );
 
       const list = leaderIndicatorRows({
