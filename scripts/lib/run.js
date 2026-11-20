@@ -1,6 +1,6 @@
 // C-03/C-04: orquestación de la evaluación mensual y del ritmo diario.
 // Recibe la capa de datos (`db`) por parámetro: las pruebas usan una BD en memoria.
-import { packageStatus, paceStatus, recalculateOnNewCritical } from '../../engine/index.js';
+import { packageStatus, paceStatus, recalculateOnNewCritical, quarterCommitment } from '../../engine/index.js';
 import { addMonths, monthEnd, quarterBounds, addDays } from './dates.js';
 import {
   pickCommitment,
@@ -153,6 +153,7 @@ export async function runMonthly(db, { asOf, reprocess = false, guardReclose = f
         const r = evaluateIndicatorMonth({
           indicator: ind,
           commitment: pickCommitment(commitments, unit.id, ind.id, evalMonth),
+          packageCommitment: quarterCommitment(commitments, unit.id, ind.id, evalMonth),
           measurements: measurements.filter((m) => m.unit_id === unit.id && m.indicator_id === ind.id),
           target: targets.find((t) => t.unit_id === unit.id && t.indicator_id === ind.id) ?? null,
           evalMonth,

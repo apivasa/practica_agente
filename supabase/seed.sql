@@ -127,6 +127,8 @@ insert into public.commitments (unit_id, indicator_id, period, green_override, y
 
 -- ---------------------------------------------------------------------------
 -- Metas parciales mensuales (aprox. un tercio del paquete, acumuladas)
+-- M-06: VULN tiene categorías y ya no usa targets para su color; las filas quedan para las
+-- pruebas de RLS y para indicadores de meta acumulada sin categorías.
 -- ---------------------------------------------------------------------------
 insert into public.targets (unit_id, indicator_id, month, target_value)
 select c.unit_id, c.indicator_id, m.month, round(c.package_total * m.share)
@@ -139,12 +141,20 @@ where c.period = '2027-Q1';
 -- ---------------------------------------------------------------------------
 -- Vulnerabilidades: resueltas (kind = 'resolved', el motor las suma) y P0/P1 nuevas
 -- detectadas por escaneo (kind = 'detected').
+-- M-06: el color mensual se calcula por criticidad (P0/P1 >= 96 %, P2/P3 >= 85 % de la meta
+-- acumulada del mes sobre el paquete efectivo), sin usar targets. Con estos datos:
+--   Alfa   enero  P0/P1 500/500 = 100 %, P2/P3 250/167 → verde
+--          febrero P0/P1 1050/1134 = 92,6 % (amarillo), P2/P3 350/334 → amarillo
+--   Beta   enero  P0/P1 300/334 = 89,8 % → rojo
+--   Gamma  enero  P0/P1 280/200, P2/P3 80/100 = 80 % (amarillo) → amarillo
+--          febrero P0/P1 280/400 = 70 % → rojo
 insert into public.measurements (unit_id, indicator_id, measured_on, value, category, kind, source, created_by) values
-  ('22222222-2222-4222-8222-000000000001', '33333333-3333-4333-8333-000000000001', '2027-01-31', 450, 'P0P1', 'resolved', 'manual', '11111111-1111-4111-8111-000000000002'),
+  ('22222222-2222-4222-8222-000000000001', '33333333-3333-4333-8333-000000000001', '2027-01-31', 500, 'P0P1', 'resolved', 'manual', '11111111-1111-4111-8111-000000000002'),
   ('22222222-2222-4222-8222-000000000001', '33333333-3333-4333-8333-000000000001', '2027-01-31', 250, 'P2P3', 'resolved', 'manual', '11111111-1111-4111-8111-000000000002'),
   ('22222222-2222-4222-8222-000000000002', '33333333-3333-4333-8333-000000000001', '2027-01-31', 300, 'P0P1', 'resolved', 'manual', '11111111-1111-4111-8111-000000000002'),
   ('22222222-2222-4222-8222-000000000003', '33333333-3333-4333-8333-000000000001', '2027-01-31', 280, 'P0P1', 'resolved', 'manual', '11111111-1111-4111-8111-000000000002'),
-  ('22222222-2222-4222-8222-000000000001', '33333333-3333-4333-8333-000000000001', '2027-02-09', 400, 'P0P1', 'resolved', 'manual', '11111111-1111-4111-8111-000000000002'),
+  ('22222222-2222-4222-8222-000000000003', '33333333-3333-4333-8333-000000000001', '2027-01-31', 80, 'P2P3', 'resolved', 'manual', '11111111-1111-4111-8111-000000000002'),
+  ('22222222-2222-4222-8222-000000000001', '33333333-3333-4333-8333-000000000001', '2027-02-09', 550, 'P0P1', 'resolved', 'manual', '11111111-1111-4111-8111-000000000002'),
   ('22222222-2222-4222-8222-000000000001', '33333333-3333-4333-8333-000000000001', '2027-02-09', 100, 'P2P3', 'resolved', 'manual', '11111111-1111-4111-8111-000000000002'),
   ('22222222-2222-4222-8222-000000000001', '33333333-3333-4333-8333-000000000001', '2027-02-10', 200, 'P0P1', 'detected', 'manual', '11111111-1111-4111-8111-000000000002');
 

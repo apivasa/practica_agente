@@ -79,6 +79,11 @@ twice() {
   fi
 }
 
+# M-06: VULN se evalúa por criticidad con el paquete del compromiso, sin targets. Se borran
+# sus metas mensuales de la BD local para demostrarlo (solo Supabase local, ver arriba).
+psql "$DB_URL" -v ON_ERROR_STOP=1 -c \
+  "delete from public.targets where indicator_id = '33333333-3333-4333-8333-000000000001'"
+
 monthly_close 2027-02-01
 twice --mode=daily --as-of=2027-02-10
 monthly_close 2027-03-01

@@ -2,7 +2,8 @@
 // Actions (scripts/lib/build.js) y el front (V-01): una sola regla.
 import { effectiveThresholds } from './commitment.js';
 import { quarterOf } from './escalation.js';
-import { quarterBounds } from './calendar.js';
+import { quarterBounds, monthEnd } from './calendar.js';
+import { packageStatus, categoryMonthColor } from './vulnerabilities.js';
 
 /** Número finito o null (PostgREST devuelve numeric como número; se tolera texto). */
 export const num = (v) => {
@@ -21,6 +22,19 @@ export const num = (v) => {
 export function pickCommitment(commitments, unitId, indicatorId, month) {
   const mine = commitments.filter((c) => c.unit_id === unitId && c.indicator_id === indicatorId);
   return mine.find((c) => c.period === month) ?? mine.find((c) => c.period === quarterOf(month)) ?? null;
+}
+
+/**
+ * Compromiso trimestral (periodo 'YYYY-Qn') de (unidad, indicador) para el trimestre del mes:
+ * el que trae el paquete por criticidad, aunque exista además un compromiso mensual.
+ * @param {any[]} commitments
+ * @param {string} unitId
+ * @param {string} indicatorId
+ * @param {string} month 'YYYY-MM'
+ */
+export function quarterCommitment(commitments, unitId, indicatorId, month) {
+  const q = quarterOf(month);
+  return (commitments ?? []).find((c) => c.unit_id === unitId && c.indicator_id === indicatorId && c.period === q) ?? null;
 }
 
 /**
@@ -93,4 +107,45 @@ export function buildPackageInput({ indicator, commitment, measurements, asOf })
       thresholds,
     },
   };
+}
+
+/**
+ * M-06: true si el color mensual del indicador se calcula por criticidad (meta acumulada con
+ * `thresholds_by_category` no vacío). Los demás de meta acumulada siguen con `targets`.
+ * @param {any} indicator fila de `indicators`
+ */
+export function hasCategoryEvaluation(indicator) {
+  const tbc = indicator?.thresholds_by_category;
+  return (
+    indicator?.measurement_type === 'cumulative_target' &&
+    !!tbc && typeof tbc === 'object' && !Array.isArray(tbc) && Object.keys(tbc).length > 0
+  );
+}
+
+/**
+ * M-06: color de un mes por criticidad desde filas de la BD (compromiso trimestral y
+ * mediciones). El paquete y las metas son los de packageStatus al último día del mes; la
+ * regla de color es categoryMonthColor. Sin paquete o con datos que el motor rechaza, queda
+ * sin evaluar con el motivo (no lanza). La usan la evaluación mensual y la vista del líder.
+ * @param {{ indicator: any, commitment: any, measurements: any[], month: string }} input
+ * @returns {{ color: string, value: number|null, sampleSize: number, reason: string, month: string,
+ *   byCategory: Record<string, any> }}
+ */
+export function evaluateCategoryMonth({ indicator, commitment, measurements, month }) {
+  const asOf = monthEnd(month);
+  const notEvaluated = (reason) => ({ color: 'not_evaluated', value: null, sampleSize: 0, reason, month, byCategory: {} });
+  const built = buildPackageInput({ indicator, commitment, measurements, asOf });
+  if (!built.ok) return notEvaluated(built.reason);
+  const pkg = commitment.package_by_category;
+  const packageCategories = Object.keys(pkg).filter((k) => num(pkg[k]) !== null);
+  /** @type {Record<string, number>} */
+  const sampleSizes = {};
+  for (const r of built.input.resolved) sampleSizes[r.criticality] = (sampleSizes[r.criticality] ?? 0) + 1;
+  try {
+    const status = packageStatus(built.input);
+    const { cfg } = indicatorConfig(indicator, commitment);
+    return categoryMonthColor(cfg, status, { packageCategories, sampleSizes });
+  } catch (err) {
+    return notEvaluated(`No se pudo calcular el cumplimiento por criticidad: ${err.message}`);
+  }
 }

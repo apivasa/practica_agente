@@ -50,6 +50,36 @@ select pg_temp.expect(
     where e.unit_id = :beta and i.code = 'MTTR' and e.month = '2027-01'),
   'Beta enero MTTR: sin evaluar (muestra insuficiente)');
 
+-- M-06: VULN por criticidad (P0/P1 96/90, P2/P3 85/75), sin targets
+select pg_temp.expect(
+  (select count(*) from public.targets t join public.indicators i on i.id = t.indicator_id where i.code = 'VULN') = 0,
+  'VULN sin metas en targets durante la integración');
+select pg_temp.expect(
+  (select bool_and(e.reason like '%P0/P1%' and e.reason like '%P2/P3%')
+     from public.evaluations e join public.indicators i on i.id = e.indicator_id
+    where i.code = 'VULN' and e.month in ('2027-01', '2027-02')),
+  'VULN: el motivo detalla P0/P1 y P2/P3 en cada unidad y mes');
+select pg_temp.expect(
+  (select e.color = 'green' and e.value = 100
+     from public.evaluations e join public.indicators i on i.id = e.indicator_id
+    where e.unit_id = :alfa and i.code = 'VULN' and e.month = '2027-01'),
+  'Alfa enero VULN: verde (P0/P1 500/500, P2/P3 250/167)');
+select pg_temp.expect(
+  (select e.color = 'yellow' and round(e.value, 1) = 92.6
+     from public.evaluations e join public.indicators i on i.id = e.indicator_id
+    where e.unit_id = :alfa and i.code = 'VULN' and e.month = '2027-02'),
+  'Alfa febrero VULN: amarillo por P0/P1 1050/1134 (paquete efectivo 1700)');
+select pg_temp.expect(
+  (select e.color = 'yellow' and e.value = 80
+     from public.evaluations e join public.indicators i on i.id = e.indicator_id
+    where e.unit_id = :gamma and i.code = 'VULN' and e.month = '2027-01'),
+  'Gamma enero VULN: amarillo por P2/P3 80/100 aunque P0/P1 supera su meta');
+select pg_temp.expect(
+  (select e.color = 'red'
+     from public.evaluations e join public.indicators i on i.id = e.indicator_id
+    where e.unit_id = :beta and i.code = 'VULN' and e.month = '2027-01'),
+  'Beta enero VULN: rojo (P0/P1 300/334)');
+
 -- Escalada en el mes 2 (febrero)
 select pg_temp.expect(
   (select color = 'red' and escalation_level = 'frozen'
