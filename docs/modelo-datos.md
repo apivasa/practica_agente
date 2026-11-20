@@ -40,9 +40,9 @@ Funciones de apoyo (esquema `private`, no expuesto por la API, `security definer
 - Check `indicators_thresholds_coherent`: con "más es mejor", verde ≥ amarillo; con "menos es mejor", verde ≤ amarillo.
 - Check `indicators_cumulative_direction` (M-08): un indicador `cumulative_target` no puede ser `lower_is_better`. El motor (`validateIndicator`) aplica la misma regla en el formulario.
 - Checks `indicators_green_threshold_finite` e `indicators_yellow_threshold_finite` (M-10): los umbrales no pueden ser `NaN`, `Infinity` ni `-Infinity`. En PostgreSQL `NaN` cuenta como mayor que cualquier número, así que el check de coherencia solo no lo frenaba.
-- Checks `indicators_green_threshold_safe` e `indicators_yellow_threshold_safe` (M-11): |umbral| < 2^53 (9.007.199.254.740.992). Un valor como `1e400` es finito en PostgreSQL, pero el front y el motor lo leerían como `Infinity`.
-- Desde M-13 el motor (`engine/numeric.js`, `isSafeMagnitude`) aplica el mismo tope antes de guardar umbrales, overrides, paquete, `package_total` y mediciones. Diferencia conocida: la BD compara el `numeric` exacto y el motor el `double` leído. Un valor en [2^53 − 0,5, 2^53), solo posible por API directa, pasa el CHECK pero el motor lo redondea a 2^53 y lo rechaza; la evaluación mensual de ese mes falla para todas las unidades y queda reportada como error, sin dar un color falso (H-ARQ-M13-01).
-- Check `indicators_thresholds_by_category_safe` (M-12): `thresholds_by_category` es nulo o un objeto `{categoría: {green, yellow}}`. Cada categoría tiene exactamente las claves `green` y `yellow`, las dos números JSON con |v| < 2^53. Rechaza claves extra o faltantes, texto, `null`, arreglos y un JSON que no sea objeto (error 23514). No limita los nombres de las categorías.
+- Checks `indicators_green_threshold_safe` e `indicators_yellow_threshold_safe` (M-11, borde ajustado en M-14): |umbral| < 2^53 − 0,5 (`9007199254740991.5`). Un valor como `1e400` es finito en PostgreSQL, pero el front y el motor lo leerían como `Infinity`.
+- Tope de los nueve CHECK `_safe` (M-14). Desde M-13 el motor (`engine/numeric.js`, `isSafeMagnitude`) exige |v| < 2^53 sobre el `double` leído, antes de guardar umbrales, overrides, paquete, `package_total` y mediciones. La BD compara el `numeric` exacto. `JSON.parse` redondea al `double` más cercano, así que todo valor en [2^53 − 0,5, 2^53) llega al front como 2^53. Hasta M-13 esos valores pasaban la BD (tope 2^53) y hacían fallar la evaluación mensual (H-ARQ-M13-01). Desde M-14 los nueve CHECK `_safe` (tres de `indicators`, cuatro de `commitments`, uno de `targets` y uno de `measurements`) usan `abs(v) < 9007199254740991.5`. Ejemplo: `9007199254740991.4` pasa (se lee como 2^53 − 1); `9007199254740991.5` da 23514 (se leería como 2^53). Lo que pasa la BD también pasa el motor. H-ARQ-M13-01 queda cerrado por M-14.
+- Check `indicators_thresholds_by_category_safe` (M-12): `thresholds_by_category` es nulo o un objeto `{categoría: {green, yellow}}`. Cada categoría tiene exactamente las claves `green` y `yellow`, las dos números JSON con |v| < 2^53 − 0,5 (M-14). Rechaza claves extra o faltantes, texto, `null`, arreglos y un JSON que no sea objeto (error 23514). No limita los nombres de las categorías.
 
 ### `commitments` — compromisos por unidad, indicador y periodo
 `id`, `unit_id`, `indicator_id`, `period` (`AAAA-Qn` o `AAAA-MM`), `green_override`, `yellow_override`, `package_total` (≥ 0), `package_by_category` (objeto JSON, ej. `{"P0P1": 1500, "P2P3": 500}`), `notes`, `created_by`, `created_at`, `updated_at` (lo pone un trigger).
@@ -50,8 +50,8 @@ Funciones de apoyo (esquema `private`, no expuesto por la API, `security definer
 - Único por (`unit_id`, `indicator_id`, `period`).
 - Check `commitments_override_pair`: verde y amarillo negociados van juntos o ninguno.
 - Checks `commitments_green_override_finite`, `commitments_yellow_override_finite` y `commitments_package_total_finite` (M-10): si tienen valor, no puede ser `NaN`, `Infinity` ni `-Infinity`. Siguen admitiendo nulo.
-- Checks `commitments_green_override_safe`, `commitments_yellow_override_safe` y `commitments_package_total_safe` (M-11): si tienen valor, |v| < 2^53.
-- Check `commitments_package_by_category_safe` (M-11): si hay objeto, cada valor de primer nivel debe ser un número JSON (no texto, `null`, booleano, arreglo ni objeto) con |v| < 2^53. No limita las claves.
+- Checks `commitments_green_override_safe`, `commitments_yellow_override_safe` y `commitments_package_total_safe` (M-11): si tienen valor, |v| < 2^53 − 0,5 (M-14).
+- Check `commitments_package_by_category_safe` (M-11): si hay objeto, cada valor de primer nivel debe ser un número JSON (no texto, `null`, booleano, arreglo ni objeto) con |v| < 2^53 − 0,5 (M-14). No limita las claves.
 - Check `commitments_package_by_category_whole` (M-12): además, cada valor es un entero ≥ 0 (rechaza negativos y fracciones). Las claves siguen libres: son las categorías del indicador o `total` en los indicadores de meta acumulada sin categorías.
 - Editables por el custodio: `period`, los dos overrides, `package_total`, `package_by_category`, `notes`. No se pueden cambiar `unit_id`, `indicator_id` ni `created_by`.
 
@@ -63,7 +63,7 @@ Funciones de apoyo (esquema `private`, no expuesto por la API, `security definer
 - Editables: `value`, `measured_on`, `app_id`, `compliant`, `category`, `kind`. No se pueden cambiar `unit_id`, `indicator_id`, `created_by` ni `source`.
 - En meta acumulada `value` es **incremental**: lo resuelto o detectado ese día. El motor suma.
 - Check `measurements_value_finite` (M-09): `value` no puede ser `NaN`, `Infinity` ni `-Infinity`. Aplica a inserciones y ediciones, de todos los roles y del backend.
-- Check `measurements_value_safe` (M-12): si hay valor, |`value`| < 2^53, en cualquier tipo de indicador.
+- Check `measurements_value_safe` (M-12): si hay valor, |`value`| < 2^53 − 0,5 (M-14), en cualquier tipo de indicador.
 - Trigger `measurements_category_guard` (M-08, `AFTER INSERT OR UPDATE`, función `private.check_measurement_category`). Si el indicador es `cumulative_target` y tiene `thresholds_by_category`, cada medición (resuelta, detectada o sin `kind`) debe cumplir:
   - `category` es `P0P1` o `P2P3` (exacto, con mayúsculas);
   - `value` es un entero ≥ 0, no nulo y como máximo 2^53 − 1 (9.007.199.254.740.991, el mayor entero seguro de JavaScript; M-09).
@@ -74,7 +74,7 @@ Funciones de apoyo (esquema `private`, no expuesto por la API, `security definer
 `id`, `unit_id`, `indicator_id`, `month` (`AAAA-MM`), `target_value` (≥ 0, acumulada a ese mes), `created_at`. Única por (`unit_id`, `indicator_id`, `month`).
 
 - Check `targets_target_value_finite` (M-10): `target_value` no puede ser `NaN`, `Infinity` ni `-Infinity`.
-- Check `targets_target_value_safe` (M-11): |`target_value`| < 2^53.
+- Check `targets_target_value_safe` (M-11): |`target_value`| < 2^53 − 0,5 (M-14).
 
 La gestora las crea y edita en **Metas** (`#/gestora/metas`, M-07). La pantalla solo cambia `target_value` de una meta existente y no borra metas. Desde M-09 la BD solo permite UPDATE de la columna `target_value` (privilegio por columna); cambiar `unit_id`, `indicator_id`, `month` o `id`, también por upsert, da 42501. Para otra unidad, indicador o mes se crea una meta nueva. La semilla trae metas para 2027-Q1 (un tercio, dos tercios y el total del paquete). Solo las usan los indicadores de meta acumulada sin categorías; VULN no.
 
