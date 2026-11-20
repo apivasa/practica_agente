@@ -211,6 +211,18 @@ Ver "Superficie de CI/CD (S-01)" y T-CI-01..10 arriba. El job `pentest-api` (S-0
 | I/T | XSS almacenado en nombre de indicador, categoría, notas, unidad o en el mensaje de error que repite la celda | Todo por `textContent`; `el()` rechaza `on*` de texto y URL `javascript:` | `front-m02-m04.test.js` › XSS, `front-f05.test.js` |
 | E | Ser gestora da escritura en mediciones de KPIs que no custodia | `measurements_insert` exige `is_custodian_of` | `api/m02-m04.test.js` › multirol |
 
+## Superficie nueva (M-06)
+
+- **Color mensual por criticidad:** la evaluación mensual (`scripts/lib/build.js` → `engine/rows.js` `evaluateCategoryMonth` → `categoryMonthColor`) colorea los indicadores `cumulative_target` con `thresholds_by_category` a partir de `commitments.package_by_category` (lo escribe el custodio) y de las mediciones `resolved`/`detected` (custodio), ya no de `targets`. Ese color alimenta la escalada (racha de rojos → congelamiento).
+- **Meta del líder:** `src/lib/dashboard.js` `categoryGoal` muestra etiquetas de categoría (claves jsonb que escribe la gestora) y metas en la vista del líder.
+
+| ID | STRIDE | Amenaza | Riesgo | Control | Prueba |
+|---|---|---|---|---|---|
+| T-M06-01 | Tampering | Claves `__proto__`/`constructor` en `thresholds_by_category`, `package_by_category` o `measurements.category` contaminan prototipos o se leen como categoría válida | Medio | `Object.hasOwn` en lecturas; `normalizeIndicator` con `Object.create(null)` y descarta `__proto__`; categorías no reconocidas → sin evaluar | `engine-m06.test.js` › cat 3 prototipo |
+| T-M06-02 | Tampering | Paquete o umbrales NaN/Infinity/negativos/decimales fuerzan verde | Medio | `count()`/`pct()` de `packageStatus`, `validateIndicator`; `num()` descarta no finitos | `engine-m06.test.js` › cat 3/5 cifras (H-M06-02: `[]`, `false`, `' '` → 0) |
+| T-M06-03 | Tampering / DoS | Una medición malformada cargada por API (decimal, categoría nula o desconocida) deja el mes `not_evaluated` y corta la racha de rojos (evita el congelamiento) | Medio | Validación en el front (`measurements-input.js`); auditoría de `measurements`. Falta validar en BD o filtrar en el motor | H-M06-01 (abierto); `engine-m06.test.js` fija que nunca da verde |
+| T-M06-04 | Information disclosure / XSS | Etiqueta de categoría con marcado llega al DOM | Medio | Todo por `textContent` (`el()`) | `engine-m06.test.js` › cat 4/6 |
+
 ## Trazabilidad: amenazas de riesgo Alto → prueba automática
 
 | Amenaza | Prueba (archivo › caso) | Estado |
