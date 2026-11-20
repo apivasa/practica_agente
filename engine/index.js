@@ -54,6 +54,7 @@ export {
   quarterCommitment,
   indicatorConfig,
   buildPackageInput,
+  discardedNote,
   hasCategoryEvaluation,
   evaluateCategoryMonth,
   toEngineMeasurements,

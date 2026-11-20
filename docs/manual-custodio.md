@@ -1,6 +1,6 @@
 # Manual del custodio de indicador
 
-Qué ve y qué puede hacer un custodio en la app. Solo describe lo que está construido (2026-11-19).
+Qué ve y qué puede hacer un custodio en la app. Solo describe lo que está construido (2026-11-20).
 
 > La app todavía no está publicada en GitHub Pages (V-05). Hoy se usa en local; ver [README](../README.md#correr-en-local). En local: `custodio1@example.test` (VULN) o `custodio2@example.test` (AVAIL, MTTR, OBS).
 
@@ -69,6 +69,8 @@ La fecha no puede ser futura.
 Formato de columnas, ejemplos y errores frecuentes: [docs/indicadores.md, sección 4](indicadores.md#4-carga-de-mediciones).
 
 **Vulnerabilidades.** Además de las resueltas, carga las P0/P1 nuevas como **Detectada**. Registra en Compromisos el paquete trimestral por `P0P1` y `P2P3`: sin él no se calcula el ritmo. Ver [sección 6](indicadores.md#6-caso-vulnerabilidades).
+
+Desde M-08 la base de datos también revisa cada medición de un indicador de meta acumulada con categorías: la categoría debe ser `P0P1` o `P2P3` y el valor un entero ≥ 0. La pantalla ya valida lo mismo antes de guardar. Si la BD rechaza una fila igual (por ejemplo, un indicador con otras categorías), ves "No se pudo guardar. Inténtalo de nuevo." y no se guarda nada del lote.
 
 ## Qué no puedes hacer desde la app (hoy)
 

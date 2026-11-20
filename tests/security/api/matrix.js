@@ -93,9 +93,13 @@ export const MATRIX = {
   measurements: {
     read: (a) => scopedRead(a, { custodianMust: true }),
     insert: ['custodio1', 'custodio2'],
+    // M-08: VULN (cumulative_target con categorías) exige category P0P1/P2P3 y valor
+    // entero (trigger measurements_category_guard). La fila del custodio es válida para
+    // que una negación sea por RLS y una aceptación no choque con el trigger.
     insertBody: (a) => ({
       unit_id: ownUnit(a), indicator_id: ownKpi(a), measured_on: '2027-02-01', value: 1,
       created_by: uid(a), source: 'manual',
+      ...(ownKpi(a) === KPI.vuln ? { category: 'P0P1', kind: 'resolved' } : {}),
     }),
     update: ['custodio1'],
     updateTarget: () => ({
