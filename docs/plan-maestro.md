@@ -84,6 +84,13 @@ Tallas: **S** = 1 ciclo · **M** = 2 ciclos · **L** = 3 ciclos.
 | V-05 | P0 | Despliegue: `deploy.yml` publica `dist/` en GitHub Pages y aplica migraciones a Supabase real en cada merge a `main` | M | V-01, V-02, S-05, **P-02, P-03** | Primera publicación accesible en la URL de Pages; migraciones aplicadas |
 | V-06 | P1 | Manual por rol (gestora, custodio, comité, líder) y guía de configuración de indicadores | S | V-01..V-03 | Revisado por el documentador y el arquitecto |
 | V-07 | P2 | Fuentes automáticas de mediciones (Q-02) | L | Q-02 | Bloqueado hasta respuesta Q-02 |
+| S-05b | P0 | Pentest fase B contra producción: `seguridad.yml` dispatch `fase_b=anonimo` desde main tras el primer despliegue | S | V-05 (primer run) | Sin hallazgos altos ni críticos; solo entonces P-05 |
+| M-06 | P0 | Color mensual de vulnerabilidades por criticidad: función pura en `engine/` (resuelto trimestral / meta acumulada del mes por categoría, peor color), usada por `scripts/lib/build.js` y `src/lib/dashboard.js` | M | M-05, C-03 | Tabla de verdad (96/85 verde; P0/P1 95 % no verde; meta 0; categoría sin paquete = sin evaluar); integración CI evalúa VULN sin `targets`; ADR nuevo |
+| M-07 | P1 | Pantalla `#/gestora/metas`: alta y edición de `targets` para indicadores de meta acumulada, con "Proponer un tercio" | S | M-02, M-06 | e2e gestora; otros roles no escriben; un indicador pasa de "Sin evaluar" a color al cargar la meta |
+| V-08 | P2 | Candado vigente hoy en el front (motor `evaluateEscalation` + excepciones vigentes) e "Inicio autorizado: REF" | S | V-01, V-02, C-02 | e2e: excepción "todo" se ve el mismo día; inicio puntual con unidad congelada |
+| V-09 | P2 | Un solo mapa de etiquetas de alcance de excepciones | XS | V-08 | Prueba unitaria; manuales sin nota de equivalencia |
+| V-05b | P1 | Despliegue continuo en push a main (ADR 0015 punto 5); `db push --db-url` sin token de cuenta (H-V05-01); contraseña mínima 12 en config.toml (H-S03-02) | S | V-05, S-05b | Merge a main despliega; pruebas de workflow actualizadas |
+| F-07 | P2 | CI: reintento acotado de `supabase start` con diagnóstico `ss -ltnp` (puertos 54322/54324 ocupados, intermitente) | XS | F-02 | Paso intermitente registrado en operacion.md deja de requerir relanzar a mano |
 
 ---
 
@@ -115,10 +122,17 @@ El orquestador toma el **primer ítem `Pendiente`** cuyas dependencias estén `H
 | 20 | V-03 | Hecho | 1 | #21 |  |
 | 21 | V-01 | Hecho | 1 | #21 |  |
 | 22 | V-02 | Hecho | 1 | #21 |  |
-| 23 | V-04 | En revisión | 0 | |  |
-| 24 | V-06 | En curso | 0 | |  |
-| 25 | S-05 | En revisión | 0 | | P-02 y P-03 resueltos; constructor: seguridad |
-| 26 | V-05 | En curso | 1 | | P-02 y P-03 resueltos; espera S-05 |
+| 23 | V-04 | Hecho | 0 | #22 | Constructor: arquitecto-SRE |
+| 24 | V-06 | Hecho | 0 | #23 | Constructor: documentador |
+| 25 | S-05 | En revisión | 1 | #26 | Fase A (pre-despliegue). Constructor: seguridad |
+| 26 | V-05 | En revisión | 1 | #27 | Despliegue manual primero (ADR 0015); P-06 aprobado |
+| 26b | S-05b | Pendiente | 0 | | Fase B del pentest contra Pages y Supabase real; depende del primer run de V-05; compuerta de P-05 |
+| 26c | M-06 | Pendiente | 0 | | Color mensual de VULN por criticidad (96 % P0/P1, 85 % P2/P3); antes de P-05 |
+| 26d | M-07 | Pendiente | 0 | | Pantalla de metas mensuales (`targets`) para la gestora |
+| 26e | V-08 | Pendiente | 0 | | Candado vigente hoy e inicio autorizado; agrupar con V-09 |
+| 26f | V-09 | Pendiente | 0 | | Un solo mapa de etiquetas de alcance de excepciones |
+| 26g | V-05b | Pendiente | 0 | | Despliegue en push a main (ADR 0015 punto 5); incluye H-V05-01 (`db push --db-url` sin token de cuenta) y H-S03-02 (contraseña mínima 12 en config.toml) |
+| 26h | F-07 | Pendiente | 0 | | CI: reintento acotado de `supabase start` por puertos 54322/54324 ocupados (intermitente) |
 | 27 | C-05 | Bloqueado | 0 | | Espera Q-04 |
 | 28 | V-07 | Bloqueado | 0 | | Espera Q-02 |
 
