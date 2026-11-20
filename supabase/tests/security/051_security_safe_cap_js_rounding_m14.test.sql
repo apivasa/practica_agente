@@ -43,10 +43,10 @@ insert into auth.users (id, email, aud, role) values
 insert into public.units (id, name, leader_user_id) values
   ('5ec10000-0000-4000-8000-000000000d01', 'SEC M14 Unidad', '5ec00000-0000-4000-8000-000000000d03');
 insert into public.indicators (id, code, name, measurement_type, direction, green_threshold, yellow_threshold, thresholds_by_category) values
-  ('5ec20000-0000-4000-8000-000000000d01', 'SEC_M14_AVG', 'SEC M14 promedio', 'window_average', 'higher_is_better', 95, 90, null),
+  ('5ec20000-0000-4000-8000-000000000d01', 'SEC_M14_AVG', 'SEC M14 promedio', 'window_average', 'higher_is_better', 95, 90, '{}'),
   ('5ec20000-0000-4000-8000-000000000d02', 'SEC_M14_CUM', 'SEC M14 acumulado', 'cumulative_target', 'higher_is_better', 100, 80,
    '{"P0P1": {"green": 100, "yellow": 80}}'),
-  ('5ec20000-0000-4000-8000-000000000d03', 'SEC_M14_LOW', 'SEC M14 menos es mejor', 'window_average', 'lower_is_better', 90, 100, null);
+  ('5ec20000-0000-4000-8000-000000000d03', 'SEC_M14_LOW', 'SEC M14 menos es mejor', 'window_average', 'lower_is_better', 90, 100, '{}');
 insert into public.user_roles (user_id, role, unit_id, indicator_id) values
   ('5ec00000-0000-4000-8000-000000000d01', 'kpi_manager', null, null),
   ('5ec00000-0000-4000-8000-000000000d02', 'custodian',   null, '5ec20000-0000-4000-8000-000000000d01'),

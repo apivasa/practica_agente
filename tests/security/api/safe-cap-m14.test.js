@@ -84,7 +84,7 @@ describe('pentest-api: M-14 borde |v| < 2^53 - 0,5 (H-ARQ-M13-01)', { skip }, ()
   });
 
   test('gestora · thresholds_by_category con una clave en el borde se rechaza', async () => {
-    if (!vuln.thresholds_by_category) return;
+    assert.ok(Object.keys(vuln.thresholds_by_category ?? {}).length > 0, 'VULN tiene umbrales por categoría');
     const [cat] = Object.keys(vuln.thresholds_by_category);
     for (const v of ['9007199254740991.5', '-9.0071992547409915e15']) {
       const body = `{"thresholds_by_category": {"${cat}": {"green": ${v}, "yellow": 1}}}`;
