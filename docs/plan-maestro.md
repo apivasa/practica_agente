@@ -91,6 +91,7 @@ Tallas: **S** = 1 ciclo · **M** = 2 ciclos · **L** = 3 ciclos.
 | V-09 | P2 | Un solo mapa de etiquetas de alcance de excepciones | XS | V-08 | Prueba unitaria; manuales sin nota de equivalencia |
 | V-05b | P1 | Despliegue continuo en push a main (ADR 0015 punto 5); `db push --db-url` sin token de cuenta (H-V05-01); contraseña mínima 12 en config.toml (H-S03-02) | S | V-05, S-05b | Merge a main despliega; pruebas de workflow actualizadas |
 | F-07 | P2 | CI: reintento acotado de `supabase start` con diagnóstico `ss -ltnp` (puertos 54322/54324 ocupados, intermitente) | XS | F-02 | Paso intermitente registrado en operacion.md deja de requerir relanzar a mano |
+| M-08 | P1 | Endurecimiento de mediciones VULN: trigger en `measurements` (categoría P0P1/P2P3 y entero ≥ 0 en indicadores con categorías), rechazo de `cumulative_target` + `lower_is_better` en `validateIndicator` y CHECK, descarte movido a `buildPackageInput` (H-M06-01, H-M06-QA-02, A4, A7) | S | M-06 | pgTAP y node:test; verificar antes de producción que no haya filas que violen la regla |
 
 ---
 
@@ -125,13 +126,14 @@ El orquestador toma el **primer ítem `Pendiente`** cuyas dependencias estén `H
 | 23 | V-04 | Hecho | 0 | #22 | Constructor: arquitecto-SRE |
 | 24 | V-06 | Hecho | 0 | #23 | Constructor: documentador |
 | 25 | S-05 | Hecho | 1 | #26 | Fase A (pre-despliegue). Constructor: seguridad |
-| 26 | V-05 | En revisión | 1 | #27 | Despliegue manual primero (ADR 0015); P-06 aprobado |
+| 26 | V-05 | En curso | 1 | #27 | Workflow fusionado. Falta el primer run de `deploy.yml` (P-06): la sesión programada no pudo lanzarlo (bloqueo de permisos), lo lanza el usuario |
 | 26b | S-05b | Pendiente | 0 | | Fase B del pentest contra Pages y Supabase real; depende del primer run de V-05; compuerta de P-05 |
-| 26c | M-06 | En curso | 1 | | Color mensual de VULN por criticidad (96 % P0/P1, 85 % P2/P3); antes de P-05 |
+| 26c | M-06 | Hecho | 1 | #28 | Color mensual de VULN por criticidad (96 % P0/P1, 85 % P2/P3); antes de P-05 |
 | 26d | M-07 | Pendiente | 0 | | Pantalla de metas mensuales (`targets`) para la gestora |
 | 26e | V-08 | Pendiente | 0 | | Candado vigente hoy e inicio autorizado; agrupar con V-09 |
 | 26f | V-09 | Pendiente | 0 | | Un solo mapa de etiquetas de alcance de excepciones |
 | 26g | V-05b | Pendiente | 0 | | Despliegue en push a main (ADR 0015 punto 5); incluye H-V05-01 (`db push --db-url` sin token de cuenta) y H-S03-02 (contraseña mínima 12 en config.toml) |
+| 26i | M-08 | Pendiente | 0 | | Validación en BD de mediciones VULN (trigger), rechazo cumulative_target + lower_is_better, descarte compartido en buildPackageInput |
 | 26h | F-07 | Pendiente | 0 | | CI: reintento acotado de `supabase start` por puertos 54322/54324 ocupados (intermitente) |
 | 27 | C-05 | Bloqueado | 0 | | Espera Q-04 |
 | 28 | V-07 | Bloqueado | 0 | | Espera Q-02 |
