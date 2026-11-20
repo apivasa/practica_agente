@@ -401,10 +401,13 @@ jobs:
             "${VITE_SUPABASE_URL}/rest/v1/" \
             | jq '.host = "127.0.0.1:54321" | .basePath = "/rest/v1" | .schemes = ["http"]
                 | .parameters |= with_entries(
-                    if (.key | startswith("rowFilter.")) then .value.default = "not.is.null"
-                    elif .key == "select" then .value.default = "*"
+                    if (.key | startswith("rowFilter.")) then .value.default = "not.is.null" | .value.enum = ["not.is.null"]
+                    elif .key == "select" then .value.default = "*" | .value.enum = ["*"]
                     else . end)
-                | .paths |= map_values(del(.delete))' \
+                | .paths |= map_values(del(.delete)
+                    | map_values(if type == "object" and has("parameters") then
+                        .parameters |= map(select((."$ref" // "") | test("/(rowFilter\\.|select$|body\\.)")))
+                      else . end))' \
             > "$RUNNER_TEMP/zap/openapi.json"
           chmod 644 "$RUNNER_TEMP/zap/openapi.json"
           jq -r '.paths | keys[]' "$RUNNER_TEMP/zap/openapi.json"
@@ -433,6 +436,10 @@ jobs:
           docker logs "$kong" 2>&1 | tail -n +"$((before + 1))" \
             | grep -oE '"(GET|POST|PATCH|PUT|DELETE|HEAD|OPTIONS) /rest/v1/[^"]*" [0-9]{3}' \
             | awk '{print $1, $NF}' | tr -d '"' | sort | uniq -c | sort -rn | tee "$RUNNER_TEMP/zap/api-status.txt"
+          echo "Muestra de peticiones rechazadas (solo método, ruta y estado):"
+          docker logs "$kong" 2>&1 | tail -n +"$((before + 1))" \
+            | grep -oE '"(GET|PATCH|POST) /rest/v1/[^"]*" 4[0-9]{2}' | cut -c1-220 | sort -u | head -n 15 \
+            || echo "(sin muestra)"
           ok="$(awk '$3 ~ /^2/ {n += $1} END {print n + 0}' "$RUNNER_TEMP/zap/api-status.txt")"
           echo "Respuestas 2xx de PostgREST durante el escaneo: ${ok}"
           [ "$ok" -ge 20 ] || { echo "::error::ZAP no llegó autenticado a PostgREST (solo ${ok} respuestas 2xx)"; exit 1; }
@@ -447,6 +454,9 @@ jobs:
             if [ ! -f "$report" ]; then echo "::error::ZAP no generó ${name}.json"; fail=1; continue; fi
             echo "== ${name}"
             jq -r '.site[].alerts[] | "\(.riskdesc)\t\(.pluginid)\t\(.alert)\t\(.count)"' "$report" | sort -r
+            echo "-- instancias de riesgo medio o superior (método, URI, evidencia)"
+            jq -r '.site[].alerts[] | select((.riskcode | tonumber) >= 2) | .pluginid as $p
+              | .instances[:4][] | "\($p)\t\(.method)\t\(.uri[:160])\t\((.evidence // "")[:120])"' "$report"
             high=$(jq '[.site[].alerts[] | select((.riskcode | tonumber) >= 3)] | length' "$report")
             [ "$high" -eq 0 ] || { echo "::error::${name}: ${high} alertas de riesgo alto"; fail=1; }
           done
