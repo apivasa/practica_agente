@@ -141,7 +141,7 @@ El orquestador toma el **primer ítem `Pendiente`** cuyas dependencias estén `H
 | 26h | F-07 | Hecho | 1 | #30 | CI: reintento acotado de `supabase start` por puertos 54322/54324 ocupados (intermitente) |
 | 26k | M-09 | Hecho | 0 | #34 | Endurecimiento bajo: UPDATE de `targets` solo en `target_value` (H-M07-01); `cumulativeThirds` acotado al total o CHECK entero en `package_total` (H-M07-QA-01); rechazo de NaN/Infinity y enteros > 2^53 en mediciones (H-M08-01, obs. QA M-08); quitar en docs/operacion.md la instrucción de relanzar pentest-api a mano |
 | 26l | M-10 | Hecho | 0 | #35 | H-M09-01: CHECK de valor finito (sin NaN/Infinity) en `targets.target_value`, `commitments.package_total`, `green_override`, `yellow_override` y umbrales de `indicators`; pgTAP |
-| 26m | M-11 | Pendiente | 0 | | H-M10-01: tope < 2^53 en los CHECK numéricos de M-10 y CHECK de valores en `commitments.package_by_category` (JSON.parse vuelve Infinity valores como 1e400) |
+| 26m | M-11 | En curso | 0 | | H-M10-01: tope < 2^53 en los CHECK numéricos de M-10 y CHECK de valores en `commitments.package_by_category` (JSON.parse vuelve Infinity valores como 1e400) |
 | 27 | C-05 | Bloqueado | 0 | | Espera Q-04 |
 | 28 | V-07 | Bloqueado | 0 | | Espera Q-02 |
 
