@@ -45,6 +45,8 @@ Muestra "Indicadores a tu cargo: N" (cuenta tus asignaciones de custodio, activa
 
 Si ya existe un compromiso para esa unidad, indicador y periodo, se actualiza. Si no, se crea. **Editar** en una fila llena el formulario con sus datos.
 
+Los umbrales negociados, cada paquete y la suma del paquete deben ser menores que 2^53 (9007199254740992) en valor absoluto (M-13). Si no, ves por ejemplo "Paquete de P0P1: fuera de rango, …" o "Paquete total: fuera de rango, la suma debe ser …", y no se guarda.
+
 Reglas y errores frecuentes: ver [docs/indicadores.md, sección 3](indicadores.md#3-compromisos-con-umbral-negociado).
 
 ### Mediciones (`#/custodio/mediciones`)
@@ -70,7 +72,7 @@ Formato de columnas, ejemplos y errores frecuentes: [docs/indicadores.md, secci�
 
 **Vulnerabilidades.** Además de las resueltas, carga las P0/P1 nuevas como **Detectada**. Registra en Compromisos el paquete trimestral por `P0P1` y `P2P3`: sin él no se calcula el ritmo. Ver [sección 6](indicadores.md#6-caso-vulnerabilidades).
 
-Desde M-08 la base de datos también revisa cada medición de un indicador de meta acumulada con categorías: la categoría debe ser `P0P1` o `P2P3` y el valor un entero ≥ 0. Desde M-09 ese entero no puede pasar de 2^53 − 1, y en cualquier indicador la BD rechaza valores `NaN` o `Infinity`. La pantalla ya valida lo mismo antes de guardar. Desde M-12 la BD también rechaza, en cualquier indicador, valores de 2^53 o más (en valor absoluto); la pantalla todavía no revisa ese tope en los indicadores de promedio o cobertura. Si la BD rechaza una fila igual (por ejemplo, un indicador con otras categorías), ves "No se pudo guardar. Inténtalo de nuevo." y no se guarda nada del lote.
+Desde M-08 la base de datos también revisa cada medición de un indicador de meta acumulada con categorías: la categoría debe ser `P0P1` o `P2P3` y el valor un entero ≥ 0. Desde M-09 ese entero no puede pasar de 2^53 − 1, y en cualquier indicador la BD rechaza valores `NaN` o `Infinity`. La pantalla ya valida lo mismo antes de guardar. Desde M-12 la BD también rechaza, en cualquier indicador, valores de 2^53 o más (en valor absoluto). Desde M-13 la pantalla revisa ese tope en todos los tipos, a mano y en el CSV: ves "valor: fuera de rango, debe ser menor que 2^53 (9007199254740992) en valor absoluto" (en el CSV, "Fila N: valor: fuera de rango …") y no se guarda nada. Escribe los números sin notación exponencial: `1e20` se rechaza como "debe ser un número mayor o igual que 0" (o "entero" en meta acumulada). Si la BD rechaza una fila igual (por ejemplo, un indicador con otras categorías), ves "No se pudo guardar. Inténtalo de nuevo." y no se guarda nada del lote.
 
 ## Qué no puedes hacer desde la app (hoy)
 

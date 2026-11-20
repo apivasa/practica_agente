@@ -26,6 +26,8 @@ Notas:
   - Con "más es mejor", verde debe ser mayor o igual que amarillo.
   - Con "menos es mejor", verde debe ser menor o igual que amarillo.
   - Si no se cumple, la pantalla rechaza el indicador con un mensaje en español. La BD también lo impide.
+  - Cada umbral, general o por categoría, debe ser menor que 2^53 (9007199254740992) en valor absoluto. La pantalla lo revisa antes de guardar (M-13) y la BD también (M-11, M-12). Mensaje: "Umbral verde: fuera de rango, debe ser menor que 2^53 (9007199254740992) en valor absoluto".
+  - Los números se escriben sin notación exponencial: `1e20` da "debe ser un número".
 - **Meta acumulada solo admite "más es mejor"** (M-08). Con "menos es mejor" la pantalla muestra "Sentido: una meta acumulada (cumulative_target) solo admite higher_is_better (más es mejor)". La BD también lo impide (check `indicators_cumulative_direction`).
 - **Umbrales por categoría** (opcional): nombre de categoría, verde y amarillo. Para vulnerabilidades usa exactamente `P0P1` y `P2P3` (ver sección 6). En un indicador de meta acumulada con categorías, la BD solo acepta mediciones con categoría `P0P1` o `P2P3` y valor entero ≥ 0 y ≤ 2^53 − 1 (M-08, tope desde M-09): otras categorías no sirven para ese tipo.
 - **Frecuencia y fuente** hoy solo se guardan. La evaluación programada corre igual para todos (mensual). Las fuentes automáticas no existen todavía (V-07, espera Q-02).
@@ -87,6 +89,7 @@ El custodio registra los compromisos en **Compromisos** (`#/custodio/compromisos
 - **Qué compromiso aplica a un mes:** primero el del mes; si no hay, el del trimestre de ese mes.
 - **Umbral negociado:** verde y amarillo juntos, o los dos vacíos. Deben ser coherentes con el sentido del indicador. Si están, reemplazan a los umbrales generales para esa unidad y periodo. Si están vacíos, rige el umbral general.
 - **Paquete por categoría:** solo en meta acumulada. Un entero ≥ 0 por categoría del indicador. El total se guarda solo.
+- **Tope numérico** (M-13): umbrales negociados, cada paquete y su total deben ser menores que 2^53 (9007199254740992) en valor absoluto.
 - **Notas:** hasta 500 caracteres.
 
 La tabla de la pantalla muestra, por compromiso, el umbral efectivo y su origen: **Negociado** o **General**.
@@ -97,6 +100,7 @@ Errores frecuentes:
 - "Umbral negociado: indica verde y amarillo, o deja los dos vacíos".
 - "Umbral negociado: con "más es mejor" el verde debe ser mayor o igual que el amarillo".
 - "Periodo: usa el formato AAAA-Qn (trimestre, ej. 2027-Q1) o AAAA-MM (mes, ej. 2027-03)".
+- "Paquete de P0P1: fuera de rango, debe ser menor que 2^53 (9007199254740992) en valor absoluto" o "Paquete total: fuera de rango, la suma debe ser …".
 
 El umbral negociado reemplaza los umbrales generales. No cambia los umbrales por categoría.
 
@@ -176,6 +180,8 @@ Errores frecuentes (la fila 1 es la cabecera):
 | `fecha: ... es futura` | Fecha posterior a hoy. |
 | `unidad: "..." no existe` | Nombre mal escrito. |
 | `valor: "..." debe ser un entero mayor o igual que 0` | Decimal o negativo en meta acumulada. |
+| `valor: fuera de rango, debe ser menor que 2^53 ...` | Valor de 2^53 (9007199254740992) o más en cualquier tipo (M-13). |
+| `valor: "..." debe ser un número mayor o igual que 0` | Texto, negativo o notación exponencial como `1e20`, que no se admite. En meta acumulada el mensaje dice "entero". |
 | `... la celda empieza con =, +, -, @ ...` | Celda con forma de fórmula de hoja de cálculo. Se rechaza; un valor negativo como `-1` también cae aquí. |
 | `categoria: "..." no es una de P0P1, P2P3` | Categoría distinta a las del indicador (por ejemplo `P0/P1`). |
 | `cumple: "..." debe ser sí o no` | Valor no reconocido. |
