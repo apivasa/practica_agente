@@ -124,6 +124,7 @@ Desde V-04 lo hace `salud.yml` (ver «Salud del sistema»). A mano:
 3. **Errores por unidad** (exit 1, hay otras unidades bien): el script escribió las unidades sanas y reporta las otras. Causas típicas:
    - `El historial termina en ... (H-C01-02)`: `as_of` no corresponde al mes que se cierra (ver "Reprocesar un mes").
    - Un indicador con configuración inválida: lo corrige la gestora o el custodio en la app.
+   - En el **diario**, un error de `packageStatus` (por ejemplo, `resolved[n].count debe ser un entero seguro >= 0`, o una criticidad no reconocida) indica una medición de VULN malformada que se cargó por API (H-M06-01). El cierre mensual sí la descarta y lo dice en el motivo: "N medición(es) descartada(s)". El ritmo, en cambio, no se calcula hasta que se corrija. Buscar la fila en `measurements` (unidad, indicador, trimestre en curso, `category` fuera de `P0P1`/`P2P3` o `value` no entero) y en `audit_measurements`, y pedir al custodio que la corrija con una medición nueva. Las mediciones no se borran.
    Después relanzar con `workflow_dispatch`, el mismo `as_of` y `reprocess=true` (mensual) o solo el `as_of` (diario).
 4. **`evaluations upsert` / `alerts insert` / `audit_log insert`**: error de BD (migración no aplicada en producción, constraint, Supabase pausado o caído). Comprobar que Supabase responde y que las migraciones de `supabase/migrations/` están aplicadas, y relanzar.
 5. **`npm ci` falla**: lockfile desincronizado con `main`. Mismo tratamiento que en `seguridad.yml`.
