@@ -6,6 +6,8 @@
 --    acepta para numeric ('nan', 'inf', '+inf', 'infinity').
 --  - plan-maestro M-10 / H-M09-01: "valores finitos" -> los finitos grandes, el cero y los
 --    negativos que ya permitía el modelo siguen aceptados (la migración no recorta el dominio).
+--    Desde M-11 (H-M10-01) "grande" es como máximo |v| = 2^53 - 1; 1e300 ya no se acepta
+--    (ver 111_qa_m11.test.sql).
 --  - plan-maestro M-10: "verificación previa a producción" -> las restricciones quedan
 --    validadas (no NOT VALID) y las consultas de verificación del archivo devuelven 0 filas.
 --  - CLAUDE.md 4: prueba por rol -> un rol que no escribe la tabla no la escribe ni con valor
@@ -90,9 +92,9 @@ select throws_ok(
   '23514', 'new row for relation "indicators" violates check constraint "indicators_green_threshold_finite"',
   'gestora: UPDATE green_threshold a nan (minúsculas) rechazado por el CHECK finito (NaN >= amarillo es verdadero)');
 select lives_ok(
-  $$ update public.indicators set green_threshold = 1e300, yellow_threshold = -1e300
+  $$ update public.indicators set green_threshold = 9007199254740991, yellow_threshold = -9007199254740991
       where id = 'cccccccc-0000-4000-8000-000000001011' $$,
-  'gestora: umbrales finitos extremos (1e300 / -1e300) aceptados');
+  'gestora: umbrales finitos extremos (±(2^53 - 1), tope de M-11) aceptados');
 select lives_ok(
   $$ update public.indicators set green_threshold = 0, yellow_threshold = 0
       where id = 'cccccccc-0000-4000-8000-000000001012' $$,
@@ -151,8 +153,8 @@ select throws_ok(
   $$ update public.targets set target_value = 'nan' where id = 'eeeeeeee-0000-4000-8000-000000001011' $$,
   '23514', null, 'gestora: UPDATE de meta a nan rechazado');
 select lives_ok(
-  $$ update public.targets set target_value = 1e300 where id = 'eeeeeeee-0000-4000-8000-000000001011' $$,
-  'gestora: meta finita grande aceptada');
+  $$ update public.targets set target_value = 9007199254740991 where id = 'eeeeeeee-0000-4000-8000-000000001011' $$,
+  'gestora: meta finita grande (2^53 - 1) aceptada');
 select lives_ok(
   $$ update public.targets set target_value = 0 where id = 'eeeeeeee-0000-4000-8000-000000001011' $$,
   'gestora: meta 0 aceptada');
@@ -174,7 +176,7 @@ select is_empty(
 reset role;
 
 -- Estado final: solo quedaron los valores finitos que escribieron los roles autorizados.
-select is((select green_threshold from public.indicators where id = 'cccccccc-0000-4000-8000-000000001011'), 1e300::numeric,
+select is((select green_threshold from public.indicators where id = 'cccccccc-0000-4000-8000-000000001011'), 9007199254740991::numeric,
   'indicators: queda el último umbral finito de la gestora');
 select is((select package_total from public.commitments where id = 'dddddddd-0000-4000-8000-000000001011'), null::numeric,
   'commitments: queda el último valor del custodio (NULL)');
