@@ -128,9 +128,8 @@ describe('QA F-07 · alcance en los workflows', () => {
     for (const s of starts) assert.doesNotMatch(s, /continue-on-error/);
   });
 
-  test('criterio: seguridad.yml (donde se registró el intermitente, pentest-api) también reintenta', {
-    todo: 'H-F07-QA-01: seguridad.yml (pentest-api, dast, S-05) sigue con `supabase start` directo; lo cambia el agente seguridad',
-  }, () => {
+  // Antes era `todo` (H-F07-QA-01); lo cerró seguridad en 1e03204.
+  test('criterio: seguridad.yml (donde se registró el intermitente, pentest-api) también reintenta', () => {
     const sec = readFileSync(join(ROOT, '.github', 'workflows', 'seguridad.yml'), 'utf8');
     assert.doesNotMatch(sec, /run:[ \t]*supabase (db )?start/);
     assert.ok((sec.match(/run: bash scripts\/ci\/supabase-start\.sh supabase start/g) || []).length >= 3);
