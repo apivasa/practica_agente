@@ -117,3 +117,12 @@ Detalle en `docs/reportes/C-02-seguridad.md`. Pruebas en `tests/security/excepti
 | H-C02-03 | C-02 | Baja | 5/8 Alertas | `scripts/lib/alerts.js:141-150` | `exceptionAlerts` no filtra revocadas: al llegar `expires_on` avisa "venció; vuelven a regir los candados" de una excepción que ya fue revocada (aviso tardío y engañoso); la revocación no genera alerta. | Excluir revocadas de `exception_expired`; opcional: alerta `exception_revoked`. | Abierto → C-02 o ítem nuevo |
 | H-C02-04 | C-02 | Info | 1 | `exceptions_insert` (`expires_on >= current_date`) vs trigger (fecha de Guayaquil) | La política usa la fecha UTC del servidor: entre las 19:00 y 24:00 de Guayaquil se rechaza una excepción que vence "hoy". Falla cerrada, no es explotable. | Usar `(now() at time zone 'America/Guayaquil')::date` en la política. | Abierto (funcional) |
 
+## Salud del sistema (V-04)
+
+Detalle en `docs/reportes/V-04-seguridad.md`. Pruebas en `tests/security/health-v04.test.js`.
+
+| ID | Ítem | Severidad | Categoría | Ubicación | Resumen | Corrección sugerida | Estado |
+|---|---|---|---|---|---|---|---|
+| H-V04-01 | V-04 | Baja | 2/5 | `scripts/health/lib.js` (`checkHttp`, `redirect: 'follow'`) | El sondeo sigue redirecciones: la cabecera `apikey` se reenvía a otro origen (undici solo quita `Authorization`; reproducido con dos servidores locales) y se acepta `https`→`http`. Solo viaja la clave publicable (pública por diseño) y las URLs las fija un admin: sin impacto real hoy. | `redirect: 'manual'` (o `'error'`) en el sondeo de Supabase y tratar 3xx como falla; para Pages, validar con `safeUrl` el `res.url` final. | Abierto → endurecimiento V-0x |
+| H-V04-02 | V-04 | Info | 5 | `scripts/health/lib.js` (`createGitHubClient`, regex de `repo`) | `GITHUB_REPOSITORY='../x'` pasa la regex y normaliza la ruta a `/x/...` en `api.github.com`. El valor lo fija el runner y el host no cambia (probado), así que el token no sale de la API de GitHub. | Rechazar segmentos `.`/`..` (`/^(?!\.{1,2}\/)[\w.-]+\/(?!\.{1,2}$)[\w.-]+$/`). | Aceptado |
+
