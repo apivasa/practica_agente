@@ -32,7 +32,7 @@ Resultado local: 47/47 en verde; suite unitaria completa 1181/1181 en verde.
 
 ## Resultado CI
 
-Ver la sección "CI tras el push de QA" al final.
+Commit `e401178` (pruebas de QA incluidas): CI `success` (https://github.com/apivasa/practica_agente/actions/runs/44656732175) y Seguridad `success` (https://github.com/apivasa/practica_agente/actions/runs/44656732079).
 
 ## Cobertura engine/
 
