@@ -76,6 +76,8 @@ jobs:
         run: supabase start -x studio,imgproxy,mailpit,edge-runtime,logflare,vector,realtime,storage-api,supavisor,postgres-meta
       - name: Evaluación mensual y diaria, dos veces cada una
         run: bash scripts/ci/integration.sh
+      - name: Salud contra Supabase local y simulación de caída de Pages (V-04)
+        run: bash scripts/ci/health.sh
       - name: Detener Supabase
         if: always()
         run: supabase stop --no-backup
