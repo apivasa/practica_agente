@@ -10,7 +10,7 @@
 // - Capa de datos nueva: solo lecturas (salvo read_at), sin claves ni service role.
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { join } from 'node:path';
 
@@ -148,6 +148,44 @@ describe('1 · capa de datos nueva (alerts, evaluations, targets, …)', () => {
   test('evaluations/targets: solo lectura desde el front', () => {
     for (const f of ['src/data/evaluations.js', 'src/data/targets.js']) {
       assert.doesNotMatch(read(f), /\.(insert|upsert|update|delete|rpc)\(/, f);
+    }
+  });
+
+  // M-07: la escritura de metas vive aparte (target-admin.js) y solo la importa la vista
+  // de la gestora (#/gestora/metas, rol kpi_manager). La intención: ningún tablero de
+  // líder, custodio o comité arrastra código que escriba `targets`.
+  test('M-07: solo la vista de la gestora importa target-admin.js; escribe solo targets', async () => {
+    const walk = (dir) => readdirSync(join(ROOT, dir), { withFileTypes: true }).flatMap((d) =>
+      d.isDirectory() ? walk(`${dir}/${d.name}`) : d.name.endsWith('.js') ? [`${dir}/${d.name}`] : []);
+    const importers = walk('src').filter((f) => /target-admin(\.js)?['"]/.test(read(f)));
+    assert.deepEqual(importers, ['src/views/kpi_manager/targets.js'], `importan target-admin.js: ${importers.join(', ')}`);
+
+    const s = read('src/data/target-admin.js');
+    assert.doesNotMatch(s, /\.(upsert|delete|rpc)\(/, 'target-admin.js: sin upsert, delete ni rpc');
+    const tables = [...s.matchAll(/\.from\('([^']+)'\)/g)].map((m) => m[1]);
+    assert.ok(tables.length > 0);
+    assert.deepEqual([...new Set(tables)], ['targets'], 'target-admin.js solo toca targets');
+    assert.match(s, /\.update\(\{\s*target_value:\s*targetValue\s*\}\)\.eq\('id',/, 'el update solo cambia target_value por id');
+    assert.equal((s.match(/\.update\(/g) ?? []).length, 1, 'un solo update');
+    assert.doesNotMatch(s, new RegExp('sb_' + 'secret_|service_' + 'role|SECRET_KEY'));
+
+    const { ROUTES, resolveRoute } = await import('../../src/lib/route-logic.js');
+    const r = ROUTES.find((x) => x.path === '/gestora/metas');
+    assert.equal(r?.role, 'kpi_manager');
+    assert.equal(r?.view, 'kpi-targets');
+    for (const role of ['custodian', 'committee', 'unit_leader']) {
+      const res = resolveRoute('/gestora/metas', { authenticated: true, roles: [role] });
+      assert.notEqual(res.view, 'kpi-targets', `${role} llega a metas`);
+      assert.equal(res.redirected, true);
+    }
+    assert.equal(resolveRoute('/gestora/metas', { authenticated: false }).view, 'login');
+    assert.equal(resolveRoute('/gestora/metas', { authenticated: true, roles: ['kpi_manager'] }).view, 'kpi-targets');
+  });
+
+  test('M-07: la vista de metas y su lógica no usan sumideros HTML', () => {
+    const SINKS = new RegExp(['\\.inner' + 'HTML', '\\.outer' + 'HTML', 'insertAdjacent' + 'HTML', 'document\\.wr' + 'ite', 'srcdoc', 'ev' + 'al\\(', 'new Fun' + 'ction', "el\\('(script|iframe|object|embed|frame|base|meta|link|style|img|a)'", 'set' + 'Attribute\\([\'"]on', 'location\\.href\\s*='].join('|'));
+    for (const v of ['src/views/kpi_manager/targets.js', 'src/lib/targets-form.js', 'src/data/target-admin.js']) {
+      assert.doesNotMatch(read(v), SINKS, `${v} usa un sumidero o atributo peligroso`);
     }
   });
 
