@@ -10,7 +10,7 @@ Alcance: revisión estática y de comportamiento de `.github/workflows/deploy.ym
 |---|---|
 | `deploy.yml` publica `dist/` en GitHub Pages | Cumplido en estructura: build → verificación de dist/ → `upload-pages-artifact` → (migraciones) → `deploy-pages` (environment `github-pages`). Sin ejecución real todavía. |
 | Aplica migraciones a Supabase real | Cumplido en estructura: `migrate-plan` (dry-run) → `migrate` (dry-run, `db push`, `migration list`), sin semilla, solo si `SUPABASE_URL` es el origen de producción y el registro de Auth está cerrado. Sin ejecución real todavía. |
-| "En cada merge a `main`" | Diferido a propósito (ADR 0014): solo `workflow_dispatch` con confirm=`desplegar`. Ver H-V05-QA-03. |
+| "En cada merge a `main`" | Diferido a propósito (ADR 0015): solo `workflow_dispatch` con confirm=`desplegar`. Ver H-V05-QA-03. |
 | Primera publicación accesible en Pages | Pendiente de la compuerta del usuario. `smoke` lo comprobará (HTTP 200, título real y JS principal 200). |
 | Migraciones aplicadas | Pendiente de la compuerta del usuario. `supabase migration list` deja la evidencia en el log. |
 

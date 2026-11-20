@@ -96,7 +96,16 @@ test('deploy.yml: solo se dispara con workflow_dispatch (compuerta del primer de
 
 test('deploy.yml: input confirm obligatorio y sin valor por defecto que habilite', () => {
   const on = topBlock('on');
-  assert.match(on, /confirm:\s*\n(\s+.*\n)*?\s+required:\s*true/);
+  // Sin regex multilínea (CodeQL js/redos): se recorren las líneas hijas de confirm:.
+  const lines = on.split('\n');
+  const c = lines.findIndex((l) => /^\s+confirm:\s*$/.test(l));
+  assert.ok(c >= 0, 'falta el input confirm');
+  const base = indentOf(lines[c]);
+  const children = [];
+  for (let i = c + 1; i < lines.length && (lines[i].trim() === '' || indentOf(lines[i]) > base); i++) {
+    children.push(lines[i].trim());
+  }
+  assert.ok(children.includes('required: true'), 'confirm debe ser required: true');
   assert.doesNotMatch(on, /default:\s*['"]?desplegar/);
 });
 
@@ -114,7 +123,7 @@ const needsOf = (id) => {
   return m[1].replace(/[[\]]/g, '').split(',').map((s) => s.trim()).filter(Boolean).sort();
 };
 
-// ADR 0014 (intento 2): lo barato y reversible (build, verificación de dist/)
+// ADR 0015 (intento 2): lo barato y reversible (build, verificación de dist/)
 // falla antes que lo irreversible (db push).
 test('deploy.yml: jobs y cadena verify → build-pages → migrate-plan → migrate → deploy-pages → smoke', () => {
   assert.deepEqual(JOBS.map((j) => j.id), ['verify', 'build-pages', 'migrate-plan', 'migrate', 'deploy-pages', 'smoke']);
@@ -398,10 +407,20 @@ function runAuth(settings, { exit = 0, url = PROD_ORIGIN } = {}) {
   });
 }
 
+// Exactamente un argumento de curl es URL, con origen de producción y ruta exactos.
+function assertSettingsUrl(args) {
+  const urls = args.filter((a) => /^https?:\/\//.test(a));
+  assert.equal(urls.length, 1, args.join(' '));
+  const u = new URL(urls[0]);
+  assert.equal(u.origin, PROD_ORIGIN);
+  assert.equal(u.pathname, '/auth/v1/settings');
+  assert.equal(u.search + u.hash, '');
+}
+
 test('verify auth (bash): disable_signup = true pasa, consulta /auth/v1/settings con la clave publicable y no la imprime', () => {
   const r = runAuth('{"disable_signup":true,"external":{"email":true}}');
   assert.equal(r.code, 0, r.out);
-  assert.ok(r.args.includes(`${PROD_ORIGIN}/auth/v1/settings`), r.args.join(' '));
+  assertSettingsUrl(r.args);
   assert.ok(r.args.includes(`apikey: ${GOOD.SUPABASE_PUBLISHABLE_KEY}`));
   assert.ok(r.args.some((a) => /^-[a-zA-Z]*f/.test(a)), 'curl con -f: un 4xx/5xx no pasa como respuesta válida');
   assert.ok(!r.out.includes(GOOD.SUPABASE_PUBLISHABLE_KEY));
@@ -410,7 +429,7 @@ test('verify auth (bash): disable_signup = true pasa, consulta /auth/v1/settings
 test('verify auth (bash): con barra final en SUPABASE_URL la ruta no lleva doble barra', () => {
   const r = runAuth('{"disable_signup":true}', { url: `${PROD_ORIGIN}/` });
   assert.equal(r.code, 0, r.out);
-  assert.ok(r.args.includes(`${PROD_ORIGIN}/auth/v1/settings`));
+  assertSettingsUrl(r.args);
 });
 
 for (const [label, body] of [
@@ -593,12 +612,21 @@ function runSmoke({ page = PAGE_OK, code = '200', jsCode = '200', pageUrl = 'htt
   });
 }
 
+// La URL pedida es el último argumento de curl: se comparan protocolo, host y ruta exactos.
+function assertCallUrl(call, pathname) {
+  const u = new URL(call.trim().split(/\s+/).pop());
+  assert.equal(u.protocol, 'https:', call);
+  assert.equal(u.host, 'apivasa.github.io', call);
+  assert.equal(u.pathname, pathname, call);
+  assert.equal(u.search + u.hash, '', call);
+}
+
 test('smoke (bash): HTML 200 con título y JS principal 200 → pasa al primer intento', () => {
   const r = runSmoke();
   assert.equal(r.code, 0, r.out);
   assert.equal(r.calls.length, 2, r.calls.join('\n'));
-  assert.ok(r.calls[0].includes('https://apivasa.github.io/practica_agente/'));
-  assert.ok(r.calls[1].includes('https://apivasa.github.io/practica_agente/assets/index-AbC123.js'), r.calls[1]);
+  assertCallUrl(r.calls[0], '/practica_agente/');
+  assertCallUrl(r.calls[1], '/practica_agente/assets/index-AbC123.js');
 });
 
 test('smoke (bash): JS principal 404 (base rota) → falla tras 6 intentos', () => {
@@ -621,7 +649,7 @@ test('smoke (bash): HTML 404 o título distinto → falla', () => {
 test('smoke (bash): sin page_url usa la URL de respaldo de Pages', () => {
   const r = runSmoke({ pageUrl: '' });
   assert.equal(r.code, 0, r.out);
-  assert.ok(r.calls[0].includes('https://apivasa.github.io/practica_agente/'));
+  assertCallUrl(r.calls[0], '/practica_agente/');
 });
 
 // ---------------------------------------------------------------- documentación
