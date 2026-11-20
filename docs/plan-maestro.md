@@ -112,13 +112,13 @@ El orquestador toma el **primer ítem `Pendiente`** cuyas dependencias estén `H
 | 17 | C-02 | Hecho | 1 | #20 |  |
 | 18 | C-03 | Hecho | 1 | #15 |  |
 | 19 | C-04 | Hecho | 1 | #15 |  |
-| 20 | V-03 | En curso | 0 | |  |
-| 21 | V-01 | En curso | 0 | |  |
-| 22 | V-02 | En curso | 0 | |  |
-| 23 | V-04 | Pendiente | 0 | |  |
-| 24 | V-06 | Pendiente | 0 | |  |
-| 25 | S-05 | Pendiente | 0 | | P-02 y P-03 resueltos; constructor: seguridad |
-| 26 | V-05 | Pendiente | 0 | | P-02 y P-03 resueltos; espera S-05 |
+| 20 | V-03 | Hecho | 1 | #21 |  |
+| 21 | V-01 | Hecho | 1 | #21 |  |
+| 22 | V-02 | Hecho | 1 | #21 |  |
+| 23 | V-04 | En revisión | 0 | |  |
+| 24 | V-06 | En curso | 0 | |  |
+| 25 | S-05 | En revisión | 0 | | P-02 y P-03 resueltos; constructor: seguridad |
+| 26 | V-05 | En curso | 1 | | P-02 y P-03 resueltos; espera S-05 |
 | 27 | C-05 | Bloqueado | 0 | | Espera Q-04 |
 | 28 | V-07 | Bloqueado | 0 | | Espera Q-02 |
 

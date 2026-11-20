@@ -237,6 +237,10 @@ jobs:
           [ -n "$url" ] || { echo "::error::supabase status no expone API_URL"; exit 1; }
           echo "VITE_SUPABASE_URL=$url" >> "$GITHUB_ENV"
           echo "VITE_SUPABASE_PUBLISHABLE_KEY=$key" >> "$GITHUB_ENV"
+      - name: Evaluar la semilla (evaluaciones y alertas para el pentest de V-01..V-03)
+        # Mismo script que ci.yml: solo Supabase local; la clave secreta local queda
+        # dentro del script (enmascarada) y no pasa a GITHUB_ENV ni al build.
+        run: bash scripts/ci/seed-evaluations.sh
       - name: Build conectado a Supabase local
         run: npm run build
       - name: La CSP del build admite Supabase local y nada más

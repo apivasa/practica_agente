@@ -31,6 +31,7 @@ const ROLE_ORDER = Object.keys(ROLE_ROUTES);
 export const ROUTES = Object.freeze([
   { path: '/gestora', role: 'kpi_manager', view: 'kpi_manager', label: 'Inicio' },
   { path: '/gestora/indicadores', role: 'kpi_manager', view: 'kpi-indicators', label: 'Indicadores' },
+  { path: '/gestora/completitud', role: 'kpi_manager', view: 'kpi-completeness', label: 'Completitud' },
   { path: '/custodio', role: 'custodian', view: 'custodian', label: 'Inicio' },
   { path: '/custodio/compromisos', role: 'custodian', view: 'custodian-commitments', label: 'Compromisos' },
   { path: '/custodio/mediciones', role: 'custodian', view: 'custodian-measurements', label: 'Mediciones' },
