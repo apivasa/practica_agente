@@ -27,7 +27,7 @@ insert into public.units (id, name) values
   ('bbbbbbbb-0000-4000-8000-000000001501', 'FX QA M14 Unidad');
 insert into public.indicators (id, code, name, measurement_type, direction, green_threshold, yellow_threshold,
                                thresholds_by_category) values
-  ('cccccccc-0000-4000-8000-000000001501', 'FX_QA_M14_HI', 'FX QA M14 alto', 'window_average', 'higher_is_better', 95, 90, null),
+  ('cccccccc-0000-4000-8000-000000001501', 'FX_QA_M14_HI', 'FX QA M14 alto', 'window_average', 'higher_is_better', 95, 90, '{}'),
   ('cccccccc-0000-4000-8000-000000001502', 'FX_QA_M14_CAT', 'FX QA M14 categorías', 'cumulative_target', 'higher_is_better', 96, 90,
    '{"P0P1": {"green": 96, "yellow": 90}}');
 insert into public.user_roles (user_id, role, unit_id, indicator_id) values
