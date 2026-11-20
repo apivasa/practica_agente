@@ -67,9 +67,8 @@ describe('QA M-07 · Proponer un tercio (diseño: aprox. un tercio por mes, acum
     assert.deepEqual(['2026-10', '2026-11', '2026-12'].map((mo) => propose([pkg('2026-Q4', 0)], mo).value), [0, 0, 0]);
   });
 
-  test('paquete con decimales (la BD solo exige >= 0): la meta acumulada nunca supera el paquete', {
-    todo: 'H-M07-QA-01: cumulativeThirds(0.5) = [1, 1, 0.5]; el mes 1 propone más que el paquete',
-  }, () => {
+  // H-M07-QA-01, corregido en M-09.
+  test('paquete con decimales (la BD solo exige >= 0): la meta acumulada nunca supera el paquete', () => {
     for (const P of [0.5, 1.5, 2.4, 10.2]) {
       const [a, b, c] = cumulativeThirds(P);
       assert.ok(a <= b && b <= c && c === P, `P=${P}: ${[a, b, c]}`);

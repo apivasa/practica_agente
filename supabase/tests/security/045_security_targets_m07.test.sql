@@ -4,7 +4,7 @@
 -- insert o update de target_value), más IDOR del líder, filas sin cambios
 -- parciales y auditoría de la escritura de la gestora.
 begin;
-select plan(22);
+select plan(23);
 
 insert into auth.users (id, email, aud, role) values
   ('5ec00000-0000-4000-8000-0000000007a1', 'sec-m07-gestora@example.test',  'authenticated', 'authenticated'),
@@ -70,7 +70,11 @@ select throws_ok(
      values ('5ec10000-0000-4000-8000-0000000007a1', '5ec20000-0000-4000-8000-0000000007a1', '2031-02', 1) $$,
   '42501', null, 'líder A: no crea la meta de su propia unidad');
 update public.targets set target_value = 0 where id = '5ec30000-0000-4000-8000-0000000007a1';
-update public.targets set unit_id = '5ec10000-0000-4000-8000-0000000007a1' where id = '5ec30000-0000-4000-8000-0000000007a2';
+-- Desde M-09 (H-M07-01) authenticated solo tiene UPDATE de la columna target_value:
+-- cambiar unit_id falla por privilegio (42501) antes de llegar a RLS.
+select throws_ok(
+  $$ update public.targets set unit_id = '5ec10000-0000-4000-8000-0000000007a1' where id = '5ec30000-0000-4000-8000-0000000007a2' $$,
+  '42501', null, 'líder A: no puede cambiar unit_id de la meta de B (privilegio de columna)');
 
 -- Usuario autenticado sin rol: nada.
 set local request.jwt.claims = '{"sub":"5ec00000-0000-4000-8000-0000000007a5","role":"authenticated"}';

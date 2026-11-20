@@ -247,7 +247,7 @@ Con el primer despliegue cambian tres cosas: (1) el front deja de ser un build l
 | T-M07-02 | Information disclosure | Líder lee metas de otra unidad por id, filtro u `or=` | Medio | `targets_select` con `is_leader_of(unit_id)` | 045 (IDOR id, `or`); `dashboards-v01-v03.spec.js` |
 | T-M07-03 | Elevation | Un tablero de otro rol arrastra el módulo de escritura | Bajo | Escritura aislada en `target-admin.js`, solo importado por la vista de la gestora; ruta `kpi_manager` | `front-v01-v03.test.js` › M-07 |
 | T-M07-04 | XSS almacenado | Nombre de unidad o indicador con marcado en la tabla o el selector de metas | Medio | `el()`/`textContent` | `e2e/security/xss.spec.js` (`#/gestora/metas`); `front-v01-v03.test.js` › sumideros M-07 |
-| T-M07-05 | Tampering / Repudiation | La gestora reasigna una meta existente a otra unidad, indicador o mes con un UPDATE de `unit_id`/`indicator_id`/`month` (el front no lo hace) | Bajo | Solo la gestora; `audit_targets` guarda old/new | H-M07-01 (abierto: grant de columna `update (target_value)`) |
+| T-M07-05 | Tampering / Repudiation | La gestora reasigna una meta existente a otra unidad, indicador o mes con un UPDATE de `unit_id`/`indicator_id`/`month` (el front no lo hace) | Bajo | Solo la gestora; `audit_targets` guarda old/new; desde M-09 grant de columna `update (target_value)` | `supabase/tests/security/045`, `047` (H-M07-01 corregido) |
 
 ## Superficie nueva (M-08)
 
@@ -273,6 +273,17 @@ Con el primer despliegue cambian tres cosas: (1) el front deja de ser un build l
 | T-V08-03 | Tampering / Repudiation | Falsear el candado de hoy desde el cliente (excepción inventada en el navegador) para que tenga efecto en el servidor | Bajo | Es solo vista: ninguna Action ni función SQL lee lo que calcula el cliente; el candado oficial lo escribe la evaluación mensual con la clave secreta y queda en auditoría | `front-v08-v09.test.js` › solo vista (sin uso en `scripts/`, `supabase/`, `.github/`; vistas sin escrituras); `lock-today-v08.spec.js` › sin escrituras |
 | T-V08-04 | Tampering / DoS | Datos hostiles (mes `__proto__`, color desconocido, `change_ref` no texto) rompen el tablero o contaminan prototipos | Bajo | `Object.create(null)`, regex de mes, lista blanca de colores, `try/catch` con mensaje fijo | `front-v08-v09.test.js` › entradas hostiles |
 | T-V09-01 | Tampering | `scopeLabel` con clave heredada (`__proto__`, `constructor`) pinta funciones u objetos | Bajo | `Object.hasOwn` sobre mapa congelado | `front-v08-v09.test.js` › scopeLabel |
+
+## Superficie nueva (M-09)
+
+- Sin superficie nueva: endurece la existente. `targets` pasa a UPDATE solo de `target_value`; `measurements` gana el CHECK `measurements_value_finite`; se reemplaza `private.check_measurement_category()` (sigue `security definer`, `search_path = ''`, sin EXECUTE para la API); `cumulativeThirds` del motor se topa en el total.
+
+| ID | STRIDE | Amenaza | Riesgo | Control | Prueba |
+|---|---|---|---|---|---|
+| T-M09-01 | Tampering | Evadir el privilegio de columna de `targets` con upsert (`on conflict do update set unit_id`) o con un UPDATE que mezcle columnas | Bajo | Grant `update (target_value)`; RLS `targets_update` solo gestora | `047` |
+| T-M09-02 | Tampering / DoS | Convertir por UPDATE una medición válida en `NaN`/`Infinity`/> 2^53 | Bajo | CHECK `measurements_value_finite` + trigger | `047`, `090` |
+| T-M09-03 | Elevation | El `create or replace` de la función del trigger pierde el endurecimiento | Medio | `set search_path = ''`, `revoke all` en la migración | `046`, `047` (catálogo) |
+| T-M09-04 | Tampering | `NaN`/`Infinity` en `targets.target_value`, `commitments.package_total`, overrides y umbrales | Bajo | Solo roles con escritura; el motor (`num`) los anula | H-M09-01 (abierto) |
 
 ## Trazabilidad: amenazas de riesgo Alto → prueba automática
 
