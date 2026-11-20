@@ -34,8 +34,8 @@ select is_empty(
 select ok(
   exists (select 1 from pg_constraint
            where conrelid = 'public.measurements'::regclass and contype = 'c' and convalidated
-             and pg_get_constraintdef(oid) like '%abs(value)%9007199254740992%'),
-  'measurements.value tiene CHECK validado |v| < 2^53 (cierre de H-M11-02)');
+             and pg_get_constraintdef(oid) like '%abs(value) < 9007199254740991.5%'),
+  'measurements.value tiene CHECK validado |v| < 2^53 - 0,5 (cierre de H-M11-02, borde de M-14)');
 
 -- Fixtures --------------------------------------------------------------------
 insert into auth.users (id, email, aud, role) values
@@ -185,8 +185,8 @@ select throws_ok(
 select throws_ok(
   $$ update public.commitments set package_by_category = '{"P0P1": 9007199254740991.9999}'
       where id = '5ec50000-0000-4000-8000-000000000c01' $$,
-  '23514', 'new row for relation "commitments" violates check constraint "commitments_package_by_category_whole"',
-  'custodio: 9007199254740991.9999 (JSON.parse lo lee como 2^53) rechazado');
+  '23514', 'new row for relation "commitments" violates check constraint "commitments_package_by_category_safe"',
+  'custodio: 9007199254740991.9999 (JSON.parse lo lee como 2^53) rechazado ya por el tope de M-14');
 select throws_ok(
   $$ insert into public.commitments (unit_id, indicator_id, period, package_total, package_by_category)
      values ('5ec10000-0000-4000-8000-000000000c01', '5ec20000-0000-4000-8000-000000000c02', '2031-Q1', 30, '{"P0P1": 2.5}')
@@ -224,7 +224,7 @@ select is(
       where indicator_id = '5ec20000-0000-4000-8000-000000000c01' and measured_on = '2031-01-03'),
   0, 'no quedó ningún indicador ni medición creados por los intentos rechazados');
 select ok(
-  not exists (select 1 from public.measurements where not (abs(value) < 9007199254740992))
+  not exists (select 1 from public.measurements where not (abs(value) < 9007199254740991.5))
   and not exists (select 1 from public.commitments where package_by_category is not null
                     and jsonb_path_exists(package_by_category, 'strict $.* ? (@.type() != "number" || @ < 0 || @ != @.floor())')),
   'ninguna medición ni paquete guardados (incluida la semilla) incumple M-12');

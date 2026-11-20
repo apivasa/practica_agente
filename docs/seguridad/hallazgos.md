@@ -179,3 +179,7 @@ Detalle en `docs/reportes/M-06-seguridad.md`. Pruebas en `tests/security/engine-
 |---|---|---|---|---|---|---|---|
 | H-M12-01 | M-12 | Info | 3 · Entradas | `measurements.value`, `indicators.thresholds_by_category` (y las columnas numeric de M-11) | Los CHECK acotan la magnitud pero no la escala: `1e-16000` (o 0.333… con miles de decimales) se acepta (comprobado en PG 16 bajo RLS con el custodio y la gestora). PostgREST lo devuelve como literal de ~16 KB que `JSON.parse` vuelve `0`: sin impacto de color ni de cálculo, solo hinchado de respuestas en el propio KPI o en los umbrales. Solo roles que ya escriben la columna; queda en auditoría. En `package_by_category` ya se rechaza (entero). | Opcional: `scale(value) <= 6` (o redondeo a N decimales) en los CHECK de columnas numeric y `@ == @.round(6)`-equivalente en jsonpath; no prioritario. | Registrado (sin ítem) |
 
+
+## Borde de redondeo JS M-14
+
+Sin hallazgos nuevos. M-14 cierra H-ARQ-M13-01 (informe de arquitectura de M-13): valores en [2^53 − 0,5, 2^53) que los CHECK `*_safe` aceptaban y `JSON.parse` redondea a 2^53. Verificado bajo RLS (`supabase/tests/security/051`) y por PostgREST con JWT por rol (`tests/security/api/safe-cap-m14.test.js`); el reemplazo de los CHECK es atómico y validado (`tests/security/db-static-m14.test.js`). H-M12-01 (escala, Info) sigue registrado sin cambios.

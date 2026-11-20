@@ -49,8 +49,9 @@ select is_empty(
            where k.conrelid = format('public.%I', c.table_name)::regclass
              and k.contype = 'c' and k.convalidated
              and a.attname = c.column_name
-             and pg_get_constraintdef(k.oid) like '%9007199254740992%') $$,
-  'toda columna numeric escribible por la API tiene un CHECK validado con tope 2^53');
+             -- M-14: el tope vigente es 2^53 - 0,5 (redondeo de JSON.parse); más estricto que 2^53.
+             and pg_get_constraintdef(k.oid) like '%< 9007199254740991.5%') $$,
+  'toda columna numeric escribible por la API tiene un CHECK validado con tope 2^53 - 0,5 (M-14)');
 
 select is(
   (select string_agg(c.table_name || '.' || c.column_name, ',' order by c.table_name, c.column_name)
@@ -208,7 +209,7 @@ select is(
 select ok(
   not jsonb_path_exists(
     (select coalesce(jsonb_agg(package_by_category), '[]') from public.commitments where package_by_category is not null),
-    'strict $[*].* ? (@.type() != "number" || @.abs() >= 9007199254740992)'),
+    'strict $[*].* ? (@.type() != "number" || @.abs() >= 9007199254740991.5)'),
   'ningún package_by_category guardado (incluida la semilla) incumple el tope');
 
 select * from finish();

@@ -4,7 +4,8 @@
 --    es la primera, en `yellow` y no solo en `green`; por INSERT además de UPDATE; booleano,
 --    objeto anidado, clave con otra capitalización, raíz escalar; 2^53 en notación exponencial.
 --  - plan-maestro M-12: "tope en measurements.value" -> también por UPDATE del custodio y en
---    notación exponencial; ±(2^53 - 0,5) en un promedio sigue entrando (el tope es |v| < 2^53).
+--    notación exponencial; ±(2^53 - 0,6) en un promedio sigue entrando y 2^53 - 0,5 ya no (M-14,
+--    H-ARQ-M13-01: el tope es |v| < 2^53 - 0,5, el borde de redondeo de JSON.parse).
 --  - plan-maestro M-12: "enteros >= 0 en package_by_category" -> por INSERT, en la segunda clave,
 --    -0,5, 2^53 - 1,5; un entero escrito como 1.0 o 1e2 es entero (lo que lee JSON.parse).
 --  - plan-maestro M-12: "verificación previa a producción" -> las tres consultas comentadas de
@@ -15,7 +16,7 @@
 --  - CLAUDE.md 4: prueba por rol -> los roles que no escriben la tabla siguen sin escribirla con un
 --    valor válido (el CHECK no reemplaza ni rompe RLS).
 begin;
-select plan(51);
+select plan(54);
 
 insert into auth.users (id, email, aud, role) values
   ('aaaaaaaa-0000-4000-8000-000000001211', 'fx-qa-m12-gestora@example.test',   'authenticated', 'authenticated'),
@@ -108,16 +109,28 @@ select throws_ok(
   $$ update public.indicators set thresholds_by_category = '"P0P1"'
       where id = 'cccccccc-0000-4000-8000-000000001211' $$,
   '23514', null, 'gestora: raíz cadena rechazada con 23514');
--- Forma del formulario (src/lib/indicator-form.js): nombres libres, decimales, ±(2^53 - 0,5).
+-- Forma del formulario (src/lib/indicator-form.js): nombres libres, decimales, ±(2^53 - 0,6).
+-- M-14: ±(2^53 - 0,5) ya no entra (JSON.parse lo lee como ±2^53).
 select lives_ok(
   $$ insert into public.indicators (code, name, measurement_type, direction, green_threshold, yellow_threshold, thresholds_by_category)
      values ('FX_QA_M12_N2', 'x', 'window_average', 'lower_is_better', 5, 10,
-             '{"Critica / alta-1": {"green": 2.5, "yellow": 7.25}, "baja_2": {"green": 0, "yellow": 9007199254740991.5}}') $$,
+             '{"Critica / alta-1": {"green": 2.5, "yellow": 7.25}, "baja_2": {"green": 0, "yellow": 9007199254740991.4}}') $$,
   'gestora: INSERT con categorías de nombre libre y decimales (forma del formulario) aceptado');
+select throws_ok(
+  $$ insert into public.indicators (code, name, measurement_type, direction, green_threshold, yellow_threshold, thresholds_by_category)
+     values ('FX_QA_M12_N3', 'x', 'window_average', 'lower_is_better', 5, 10,
+             '{"Critica / alta-1": {"green": 2.5, "yellow": 7.25}, "baja_2": {"green": 0, "yellow": 9007199254740991.5}}') $$,
+  '23514', 'new row for relation "indicators" violates check constraint "indicators_thresholds_by_category_safe"',
+  'gestora: INSERT con yellow 2^53 - 0,5 en la segunda categoría rechazado (M-14)');
 select lives_ok(
-  $$ update public.indicators set thresholds_by_category = '{"P0P1": {"yellow": -9007199254740991.5, "green": 9007199254740991.5}}'
+  $$ update public.indicators set thresholds_by_category = '{"P0P1": {"yellow": -9007199254740991.4, "green": 9007199254740991.4}}'
       where id = 'cccccccc-0000-4000-8000-000000001211' $$,
-  'gestora: ±(2^53 - 0,5) y claves en otro orden aceptados');
+  'gestora: ±(2^53 - 0,6) y claves en otro orden aceptados');
+select throws_ok(
+  $$ update public.indicators set thresholds_by_category = '{"P0P1": {"yellow": -9007199254740991.5, "green": 96}}'
+      where id = 'cccccccc-0000-4000-8000-000000001211' $$,
+  '23514', 'new row for relation "indicators" violates check constraint "indicators_thresholds_by_category_safe"',
+  'gestora: yellow -(2^53 - 0,5) con claves en otro orden rechazado (M-14)');
 select lives_ok(
   $$ update public.indicators set thresholds_by_category = '{"P0P1": {"green": 96, "yellow": 90}, "P2P3": {"green": 85, "yellow": 75}}'
       where id = 'cccccccc-0000-4000-8000-000000001211' $$,
@@ -169,8 +182,12 @@ select throws_ok(
   '23514', 'new row for relation "measurements" violates check constraint "measurements_value_safe"',
   'custodio: INSERT 2^53 en notación exponencial rechazado');
 select lives_ok(
+  $$ update public.measurements set value = 9007199254740991.4 where id = 'eeeeeeee-0000-4000-8000-000000001211' $$,
+  'custodio: UPDATE de un promedio a 2^53 - 0,6 aceptado (tope estricto, sin exigir entero)');
+select throws_ok(
   $$ update public.measurements set value = 9007199254740991.5 where id = 'eeeeeeee-0000-4000-8000-000000001211' $$,
-  'custodio: UPDATE de un promedio a 2^53 - 0,5 aceptado (tope estricto, sin exigir entero)');
+  '23514', 'new row for relation "measurements" violates check constraint "measurements_value_safe"',
+  'custodio: UPDATE de un promedio a 2^53 - 0,5 rechazado (M-14)');
 select lives_ok(
   $$ update public.measurements set value = 99.9 where id = 'eeeeeeee-0000-4000-8000-000000001211' $$,
   'custodio: UPDATE de un promedio a un valor normal aceptado');
