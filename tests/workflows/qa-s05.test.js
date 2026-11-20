@@ -206,6 +206,18 @@ describe('S-05 fase A · paso "Sin alertas de riesgo alto" falla con riesgo alto
     assert.notEqual(r.code, 0, r.out);
   });
 
+  test('una URI fuera de /practica_agente/ en el full scan del front → falla (QA-S05-03)', (t) => {
+    if (!hasJq) return t.skip('sin jq');
+    const sb = sandbox();
+    const out = { ...alert(1, '10021'), instances: [{ method: 'GET', uri: 'http://127.0.0.1:54321/auth/v1/token', evidence: '' }] };
+    write(sb, 'front-full', report([alert(2), out]));
+    write(sb, 'api-scan', report([]));
+    const r = runScript(s().run, sb);
+    rmSync(sb.dir, { recursive: true, force: true });
+    assert.notEqual(r.code, 0, r.out);
+    assert.match(r.out, /salió de su subárbol: http:\/\/127\.0\.0\.1:54321\/auth\/v1\/token/);
+  });
+
   test('si ZAP no generó el informe → falla (no es un verde vacío)', (t) => {
     if (!hasJq) return t.skip('sin jq');
     const sb = sandbox();
@@ -280,10 +292,9 @@ describe('S-05 fase A · ZAP API scan falla si no llega autenticado, ante 5xx o 
   });
 
   test('log del gateway vacío o con otro formato (0 peticiones contadas) → falla', () => {
-    // Falla cerrado: con pipefail el grep sin coincidencias corta el paso
-    // antes del mensaje; lo que importa es que no quede en verde.
     const r = run([]);
     assert.notEqual(r.code, 0, r.out);
+    assert.match(r.out, /ZAP apenas atacó la API \(0 peticiones\)/); // QA-S05-04: mensaje propio
   });
 
   test('solo cuenta las líneas del gateway posteriores al inicio del escaneo', () => {
@@ -303,7 +314,8 @@ describe('S-05 fase A · ZAP API scan falla si no llega autenticado, ante 5xx o 
 
   test('sin contenedor Kong de Supabase local → falla', () => {
     const r = run(AUTH_OK, { env: { STUB_NO_KONG: '1' } });
-    assert.notEqual(r.code, 0, r.out); // falla cerrado (pipefail), aunque sin el mensaje propio
+    assert.notEqual(r.code, 0, r.out);
+    assert.match(r.out, /no se encontró el contenedor Kong/); // QA-S05-04: mensaje propio
   });
 
   test('borra el archivo con la sesión de la gestora tras el escaneo', () => {
@@ -345,20 +357,28 @@ describe('S-05 fase A · ZAP full scan del front propaga el fallo de ZAP', () =>
 // ---------------------------------------------------------------------------
 describe('S-05 · qué fase corre en cada evento', () => {
   // Traducción directa de la expresión `if:` del job a JS.
-  const evaluate = (expr, ev, faseB) =>
-    new Function('github', 'inputs', `return (${expr.replace(/\$\{\{|\}\}/g, '')});`)({ event_name: ev }, { fase_b: faseB });
+  // Intento 2 (H-ARQ): la fase A, pesada, corre en PR, semanal y a mano con
+  // fase_b=no, no en cada push. La fase B exige además github.ref == main.
+  const evaluate = (expr, ev, faseB, ref) =>
+    new Function('github', 'inputs', `return (${expr.replace(/\$\{\{|\}\}/g, '')});`)({ event_name: ev, ref }, { fase_b: faseB });
+  const MAIN = 'refs/heads/main';
   const cases = [
-    ['push', '', true, false],
-    ['pull_request', '', true, false],
-    ['schedule', '', true, false],
-    ['workflow_dispatch', 'no', true, false],
-    ['workflow_dispatch', 'anonimo', false, true],
-    ['workflow_dispatch', 'roles', false, true],
+    ['push', '', MAIN, false, false],
+    ['push', '', 'refs/heads/item/S-05', false, false],
+    ['pull_request', '', 'refs/pull/1/merge', true, false],
+    ['schedule', '', MAIN, true, false],
+    ['workflow_dispatch', 'no', MAIN, true, false],
+    ['workflow_dispatch', 'no', 'refs/heads/item/S-05', true, false],
+    ['workflow_dispatch', 'anonimo', MAIN, false, true],
+    ['workflow_dispatch', 'roles', MAIN, false, true],
+    ['workflow_dispatch', 'anonimo', 'refs/heads/item/S-05', false, false],
+    ['workflow_dispatch', 'roles', 'refs/heads/main-falsa', false, false],
+    ['workflow_dispatch', 'roles', 'refs/tags/v1', false, false],
   ];
-  for (const [ev, fb, a, b] of cases) {
-    test(`${ev}${fb ? ` (fase_b=${fb})` : ''}: fase A ${a ? 'sí' : 'no'}, fase B ${b ? 'sí' : 'no'}`, () => {
-      assert.equal(Boolean(evaluate(jobIf('s05-fase-a'), ev, fb)), a);
-      assert.equal(Boolean(evaluate(jobIf('s05-fase-b'), ev, fb)), b);
+  for (const [ev, fb, ref, a, b] of cases) {
+    test(`${ev}${fb ? ` (fase_b=${fb})` : ''} en ${ref}: fase A ${a ? 'sí' : 'no'}, fase B ${b ? 'sí' : 'no'}`, () => {
+      assert.equal(Boolean(evaluate(jobIf('s05-fase-a'), ev, fb, ref)), a);
+      assert.equal(Boolean(evaluate(jobIf('s05-fase-b'), ev, fb, ref)), b);
     });
   }
 
@@ -410,6 +430,75 @@ describe('S-05 fase B · solo desde main', () => {
       .filter((x) => x.if && /always\(\)|failure\(\)/.test(x.if) && !/steps\.[\w-]+\.(outcome|conclusion)/.test(x.if))
       .map((x) => `${x.name} (if: ${x.if})`);
     assert.deepEqual(offenders, [], `pasos que contactan producción aunque la guarda de main falle: ${offenders.join('; ')}`);
+  });
+});
+
+describe('S-05 fase B · pasos de ZAP contra Pages (intento 2)', () => {
+  const zap = () => step('s05-fase-b', 'ZAP full scan de Pages (1 hilo, con retardo, duración acotada)');
+  const check = () => step('s05-fase-b', 'Sin alertas de riesgo alto (Pages)');
+  const guardId = () => {
+    const g = step('s05-fase-b', 'Solo desde main');
+    const m = g.lines.join('\n').match(/^ {8}id:\s*([\w-]+)/m);
+    assert.ok(m, 'la guarda «Solo desde main» no tiene id');
+    return m[1];
+  };
+
+  test('ZAP y su verificación dependen del resultado de la guarda de main', () => {
+    const id = guardId();
+    for (const x of [zap(), check()]) {
+      assert.ok(x.if, `${x.name} sin if`);
+      assert.ok(x.if.includes(`steps.${id}.outcome == 'success'`), `${x.name}: if = ${x.if}`);
+      assert.doesNotMatch(x.if, /always\(\)/);
+    }
+  });
+
+  const PAGES = 'https://apivasa.github.io/practica_agente/';
+  const pagesAlert = (riskcode, uri) => ({ ...alert(riskcode), instances: [{ method: 'GET', uri, evidence: '' }] });
+  const runCheck = (alerts) => {
+    const sb = sandbox();
+    writeFileSync(join(sb.temp, 'zap', 'pages-full.json'), report(alerts));
+    const r = runScript(check().run, sb);
+    rmSync(sb.dir, { recursive: true, force: true });
+    return r;
+  };
+
+  test('Pages: medio y bajo dentro de /practica_agente/ → pasa', (t) => {
+    if (!hasJq) return t.skip('sin jq');
+    const r = runCheck([pagesAlert(2, PAGES), pagesAlert(1, `${PAGES}assets/index.js`)]);
+    assert.equal(r.code, 0, r.out);
+  });
+
+  test('Pages: alerta alta → falla', (t) => {
+    if (!hasJq) return t.skip('sin jq');
+    const r = runCheck([pagesAlert(3, PAGES)]);
+    assert.notEqual(r.code, 0, r.out);
+    assert.match(r.out, /1 alertas de riesgo alto en Pages/);
+  });
+
+  for (const uri of ['https://apivasa.github.io/otro_repo/', 'https://apivasa.github.io/', 'https://oehtspdtpwdhfhhhkgao.supabase.co/rest/v1/']) {
+    test(`Pages: URI fuera de alcance (${uri}) → falla (QA-S05-03)`, (t) => {
+      if (!hasJq) return t.skip('sin jq');
+      const r = runCheck([pagesAlert(1, PAGES), pagesAlert(1, uri)]);
+      assert.notEqual(r.code, 0, r.out);
+      assert.match(r.out, /ZAP salió del alcance/);
+    });
+  }
+
+  test('Pages: sin informe de ZAP → falla', () => {
+    const sb = sandbox();
+    const r = runScript(check().run, sb);
+    rmSync(sb.dir, { recursive: true, force: true });
+    assert.notEqual(r.code, 0, r.out);
+  });
+
+  test('la exclusión global de ZAP deja fuera todo lo que no sea /practica_agente/', () => {
+    const m = zap().run.match(/globalexcludeurl\.url_list\.url\(0\)\.regex=(\S+)/);
+    assert.ok(m, 'sin exclusión global');
+    const re = new RegExp(m[1]); // ZAP usa regex de Java; esta sintaxis es común
+    for (const u of [PAGES, `${PAGES}assets/x.js`]) assert.equal(re.test(u), false, `excluye ${u}`);
+    for (const u of ['https://apivasa.github.io/', 'https://apivasa.github.io/otro_repo/', 'https://oehtspdtpwdhfhhhkgao.supabase.co/rest/v1/']) {
+      assert.equal(re.test(u), true, `no excluye ${u}`);
+    }
   });
 });
 

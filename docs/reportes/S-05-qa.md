@@ -1,5 +1,40 @@
 # S-05 — Informe QA
-Veredicto: ROJO
+Veredicto: VERDE (intento 2)
+
+## Intento 2 (commits `f96881b`, `eb33a27`)
+
+Criterio de aceptación: **cumplido**. Los puntos del intento 1 se mantienen y el que estaba en ROJO ya pasa.
+
+| Hallazgo | Estado | Cómo se verificó |
+|---|---|---|
+| QA-S05-01 (medio) | **Corregido** | Ahora hay dos barreras contra lanzar la fase B fuera de `main`. **1)** El `if` del job exige `github.ref == 'refs/heads/main'`. **2)** La guarda tiene `id: main-guard`, y «ZAP full scan de Pages» y «Sin alertas de riesgo alto (Pages)» solo corren con `!cancelled() && steps.main-guard.outcome == 'success'`. Pruebas: el evaluador del `if` con `github.ref` cubre desde `main`, `item/S-05`, `main-falsa` y un tag (solo `main` corre la fase B). La guarda falla con cualquier ref que no sea `main`. Ningún paso que contacta producción usa `always()` |
+| QA-S05-02 (bajo) | Aclarado, no bloquea | En el run 44664594826, «Lecturas base con 200: 10»: las 10 tablas responden 200 con `curl`. Aun así, ZAP solo obtiene 3 × 2xx. El informe ahora dice que el API scan prueba autenticación y ausencia de 5xx, no inyección en las 10 tablas, que queda cubierta por `api/preprod-s05.test.js`. El umbral sigue en `ok ≥ 1`; aceptado |
+| QA-S05-03 (bajo) | Corregido | Exclusión global de ZAP con `^https?://(?!<host>/practica_agente/).*$` en ambas fases. Los pasos de alertas fallan si alguna URI queda fuera del subárbol. Pruebas: la regex excluye otro repo, la raíz de `apivasa.github.io` y `supabase.co`, y no excluye `/practica_agente/`. Los pasos fallan con una URI fuera del subárbol, tanto en la fase A (gateway `:54321`) como en Pages. En la fase A real el full scan pasó de 15 a 6 URL |
+| QA-S05-04 (info) | Corregido | Si el log está vacío o falta Kong, el paso falla con su `::error::` propio. Las pruebas comprueban ahora ese mensaje |
+| H-ARQ: fase A sin `push` | Verificado | La fase A corre en `pull_request`, `schedule` y `workflow_dispatch` con `fase_b = no`, y no en `push`. El PR de S-05 la ejecutará |
+
+**La fase A sigue sin ser un verde vacío.** Run [44664594826](https://github.com/apivasa/practica_agente/actions/runs/44664594826) (`workflow_dispatch`, `f96881b`), job `s05-fase-a` en verde:
+- Full scan del front: `Total of 6 URLs`, `FAIL-NEW: 0 WARN-NEW: 5 PASS: 138`, código 0.
+- API scan: `Total of 80 URLs`, `FAIL-NEW: 0 WARN-NEW: 4 PASS: 116`, código 0.
+- PostgREST: `Peticiones a PostgREST: 43850 · 2xx: 3 · 401: 0 · 5xx: 0`, con los mismos conteos por estado que el intento 1.
+
+Los 71 casos de `tests/workflows/qa-s05.test.js` ejecutan los scripts reales de esa versión del workflow y confirman que cada control falla cuando debe.
+
+**Pruebas (intento 2):** `tests/workflows/qa-s05.test.js` pasa de 57 a 71 casos:
+- Bloque de eventos: 11 casos con `github.ref`, incluidos un `push` y un `dispatch` desde otra rama.
+- 1 caso de URI fuera del subárbol en la fase A.
+- 8 casos de los pasos de ZAP contra Pages: dependencia de `main-guard`, alerta alta, 3 URI fuera de alcance, sin informe y la regex de exclusión.
+- Se recuperan los mensajes de QA-S05-04.
+- Resultado local: 71/71 pasan.
+
+**Hallazgo nuevo:**
+- **QA-S05-05 (bajo, proceso):** `f96881b` borra `docs/reportes/S-05-arquitectura.md`, el informe del arquitecto-SRE (`039b5c2`, 81 líneas). Seguridad no tiene permiso de escritura ahí (CLAUDE.md §1) y el commit no lo menciona. Parece un efecto secundario de que dos worktrees compartan la rama `item/S-05`. El PR necesita los tres informes enlazados: el orquestador o el arquitecto deben restaurarlo (`git checkout 039b5c2 -- docs/reportes/S-05-arquitectura.md`) o volver a emitirlo para el intento 2. QA no lo toca. No afecta al criterio de S-05.
+
+**CI (intento 2):** se completa abajo, en «Resultado CI (intento 2)».
+
+---
+
+## Intento 1 (`a397b1c`): ROJO
 
 Rama `item/S-05`, revisada sobre `363265f` (informe de seguridad) y `039b5c2` (informe de arquitectura). Constructor: seguridad.
 
