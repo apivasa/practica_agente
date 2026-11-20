@@ -2,9 +2,10 @@
 -- que no cubren las pruebas del desarrollador (110):
 --  * Catálogo: los 7 CHECK de M-11 existen, están validados (no NOT VALID) y no dependen de
 --    funciones propias (no hay función nueva expuesta por PostgREST); barrido de regresión:
---    toda columna numeric escribible por la API tiene un CHECK de tope 2^53, salvo el residual
---    documentado (measurements.value, H-M11-02); las columnas JSONB escribibles por la API
---    son exactamente las dos revisadas.
+--    toda columna numeric escribible por la API tiene un CHECK de tope 2^53, sin excepciones
+--    (measurements.value quedó cubierta en M-12 con measurements_value_safe, cierre de H-M11-02);
+--    las columnas JSONB escribibles por la API son exactamente las dos revisadas (su forma la
+--    verifica 050).
 --  * Con el rol que escribe cada columna (gestora, custodio) bajo RLS: notación exponencial
 --    equivalente a 2^53, negativos en el límite, UPDATE calculado (x * 1e20), upsert,
 --    UPDATE parcial del JSONB con `||` y jsonb_set, claves raras (__proto__), cadenas
@@ -42,9 +43,6 @@ select is_empty(
              or has_column_privilege('authenticated', format('public.%I', c.table_name), c.column_name, 'UPDATE')
              or has_column_privilege('anon', format('public.%I', c.table_name), c.column_name, 'INSERT')
              or has_column_privilege('anon', format('public.%I', c.table_name), c.column_name, 'UPDATE'))
-        -- Residual documentado H-M11-02 (docs/seguridad/hallazgos.md): el tope de
-        -- measurements.value vive en el trigger y solo para indicadores con categorías.
-        and (c.table_name, c.column_name) <> ('measurements', 'value')
         and not exists (
           select 1 from pg_constraint k
             join pg_attribute a on a.attrelid = k.conrelid and a.attnum = any (k.conkey)

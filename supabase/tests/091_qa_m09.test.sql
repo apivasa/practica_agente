@@ -5,6 +5,7 @@
 --    gestora y los demás roles siguen sin poder escribir (RLS, CLAUDE.md 4: prueba por rol).
 --  - plan-maestro M-09: "mediciones rechazan NaN, Infinity y enteros no seguros" -> también por
 --    UPDATE (no solo INSERT), -Infinity y decimales por encima de 2^53 - 1 en VULN.
+--  - plan-maestro M-12: "tope en measurements.value" -> un promedio > 2^53 ya no entra (prueba 17).
 begin;
 select plan(18);
 
@@ -105,11 +106,13 @@ reset role;
 select is((select value from public.measurements where id = 'eeeeeeee-0000-4000-8000-000000000912'), 99.9::numeric,
   'el promedio conserva su valor tras los UPDATE rechazados');
 
--- Un promedio (no VULN) no está limitado a enteros seguros: el tope 2^53 es solo de VULN.
-select lives_ok(
+-- M-12 (H-M11-02) cambió el criterio: todo valor tiene tope |v| < 2^53, también en un promedio
+-- (que sigue sin exigir entero; el borde 2^53 - 0,5 aceptado lo cubren 112 y 113).
+select throws_ok(
   $$ insert into public.measurements (unit_id, indicator_id, measured_on, value)
      values ('bbbbbbbb-0000-4000-8000-000000000911', 'cccccccc-0000-4000-8000-000000000912', '2031-03-07', 9007199254740992.25) $$,
-  'backend: un promedio finito mayor que 2^53 no lo bloquea el CHECK (solo VULN exige entero seguro)');
+  '23514', 'new row for relation "measurements" violates check constraint "measurements_value_safe"',
+  'backend: un promedio mayor que 2^53 lo rechaza el tope de M-12');
 select is((select count(*)::int from public.measurements
             where indicator_id = 'cccccccc-0000-4000-8000-000000000911' and measured_on = '2031-03-06'), 0,
   'ninguna medición VULN rechazada quedó guardada');

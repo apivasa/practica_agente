@@ -203,10 +203,12 @@ select throws_ok(
   $$ update public.commitments set package_by_category = '1e400'
       where id = 'dddddddd-0000-4000-8000-000000001111' $$,
   '23514', null, 'custodio: package_by_category escalar 1e400 en la raíz rechazado con 23514');
+-- M-12 (H-M11-03) cambió el criterio: además del tope, cada valor es entero >= 0 (los decimales
+-- y negativos que aquí se aceptaban en M-11 los rechazan 112 y 113). Clave libre "X" sigue valiendo.
 select lives_ok(
-  $$ update public.commitments set package_by_category = '{"P0P1": 9007199254740991.5, "P2P3": -9007199254740991, "X": 0.25}'
+  $$ update public.commitments set package_by_category = '{"P0P1": 9007199254740991, "P2P3": 0, "X": 25}'
       where id = 'dddddddd-0000-4000-8000-000000001111' $$,
-  'custodio: package_by_category con valores bajo el tope (decimales, negativos) aceptado');
+  'custodio: package_by_category con enteros >= 0 bajo el tope y clave libre aceptado');
 select lives_ok(
   $$ update public.commitments set green_override = 9007199254740991, yellow_override = -9007199254740991,
             package_total = 9007199254740991.5, package_by_category = '{"P0P1": 200, "P2P3": 100}'
