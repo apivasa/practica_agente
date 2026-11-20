@@ -12,7 +12,7 @@
 // Corre en seguridad.yml › pentest-api (Supabase local).
 import { describe, test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { skipReason, loginAll, as, admin, adminGet, env, USERS, UNIT, KPI } from './_lib.js';
+import { skipReason, loginAll, admin, adminGet, env, USERS, UNIT, KPI } from './_lib.js';
 
 const skip = skipReason();
 const fmt = (r) => `${r.status} ${r.text.slice(0, 240)}`;
