@@ -92,6 +92,7 @@ Tallas: **S** = 1 ciclo · **M** = 2 ciclos · **L** = 3 ciclos.
 | V-05b | P1 | Despliegue continuo en push a main (ADR 0015 punto 5); `db push --db-url` sin token de cuenta (H-V05-01); contraseña mínima 12 en config.toml (H-S03-02) | S | V-05, S-05b | Merge a main despliega; pruebas de workflow actualizadas |
 | F-07 | P2 | CI: reintento acotado de `supabase start` con diagnóstico `ss -ltnp` (puertos 54322/54324 ocupados, intermitente) | XS | F-02 | Paso intermitente registrado en operacion.md deja de requerir relanzar a mano |
 | M-08 | P1 | Endurecimiento de mediciones VULN: trigger en `measurements` (categoría P0P1/P2P3 y entero ≥ 0 en indicadores con categorías), rechazo de `cumulative_target` + `lower_is_better` en `validateIndicator` y CHECK, descarte movido a `buildPackageInput` (H-M06-01, H-M06-QA-02, A4, A7) | S | M-06 | pgTAP y node:test; verificar antes de producción que no haya filas que violen la regla |
+| M-10 | P2 | Valores finitos en todas las columnas numéricas configurables (H-M09-01): CHECK o dominio `finite_numeric` en targets, commitments e indicators | XS | M-09 | pgTAP con 'NaN' e 'Infinity' por columna; verificación previa a producción |
 | M-09 | P2 | Endurecimiento de hallazgos bajos de M-07/M-08: grant UPDATE por columna (`target_value`) en `targets`; `cumulativeThirds` nunca supera el total; mediciones rechazan NaN, Infinity y enteros no seguros | XS | M-07, M-08 | pgTAP `has_column_privilege` y de valores no finitos; prueba unitaria de `cumulativeThirds(0.5)` |
 
 ---
@@ -131,13 +132,14 @@ El orquestador toma el **primer ítem `Pendiente`** cuyas dependencias estén `H
 | 26b | S-05b | Pendiente | 0 | | Fase B del pentest contra Pages y Supabase real; depende del primer run de V-05; compuerta de P-05 |
 | 26c | M-06 | Hecho | 1 | #28 | Color mensual de VULN por criticidad (96 % P0/P1, 85 % P2/P3); antes de P-05 |
 | 26d | M-07 | Hecho | 0 | #31 | Pantalla de metas mensuales (`targets`) para la gestora |
-| 26e | V-08 | En revisión | 0 | | Candado vigente hoy e inicio autorizado; agrupar con V-09 |
-| 26f | V-09 | En revisión | 0 | | Un solo mapa de etiquetas de alcance de excepciones |
+| 26e | V-08 | Hecho | 0 | #33 | Candado vigente hoy e inicio autorizado; agrupar con V-09 |
+| 26f | V-09 | Hecho | 0 | #33 | Un solo mapa de etiquetas de alcance de excepciones |
 | 26g | V-05b | Pendiente | 0 | | Despliegue en push a main (ADR 0015 punto 5); incluye H-V05-01 (`db push --db-url` sin token de cuenta) y H-S03-02 (contraseña mínima 12 en config.toml) |
 | 26i | M-08 | Hecho | 0 | #32 | Validación en BD de mediciones VULN (trigger), rechazo cumulative_target + lower_is_better, descarte compartido en buildPackageInput |
 | 26j | F-08 | Hecho | 0 | #29 | Alertas CodeQL abiertas en main (4 altas, solo en pruebas: URL por subcadena en tests/scripts/health.test.js:150,256 y qa-v04.test.js:193,213) fusionadas con #22; constructor: tester. Regla nueva: no fusionar con el check CodeQL en rojo |
 | 26h | F-07 | Hecho | 1 | #30 | CI: reintento acotado de `supabase start` por puertos 54322/54324 ocupados (intermitente) |
-| 26k | M-09 | En curso | 0 | | Endurecimiento bajo: UPDATE de `targets` solo en `target_value` (H-M07-01); `cumulativeThirds` acotado al total o CHECK entero en `package_total` (H-M07-QA-01); rechazo de NaN/Infinity y enteros > 2^53 en mediciones (H-M08-01, obs. QA M-08); quitar en docs/operacion.md la instrucción de relanzar pentest-api a mano |
+| 26k | M-09 | En revisión | 0 | #34 | Endurecimiento bajo: UPDATE de `targets` solo en `target_value` (H-M07-01); `cumulativeThirds` acotado al total o CHECK entero en `package_total` (H-M07-QA-01); rechazo de NaN/Infinity y enteros > 2^53 en mediciones (H-M08-01, obs. QA M-08); quitar en docs/operacion.md la instrucción de relanzar pentest-api a mano |
+| 26l | M-10 | Pendiente | 0 | | H-M09-01: CHECK de valor finito (sin NaN/Infinity) en `targets.target_value`, `commitments.package_total`, `green_override`, `yellow_override` y umbrales de `indicators`; pgTAP |
 | 27 | C-05 | Bloqueado | 0 | | Espera Q-04 |
 | 28 | V-07 | Bloqueado | 0 | | Espera Q-02 |
 
