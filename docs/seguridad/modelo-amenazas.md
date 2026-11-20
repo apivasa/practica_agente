@@ -292,7 +292,18 @@ Con el primer despliegue cambian tres cosas: (1) el front deja de ser un build l
 | ID | STRIDE | Amenaza | Riesgo | Control | Prueba |
 |---|---|---|---|---|---|
 | T-M10-01 | Tampering | Columna numeric nueva escribible por la API sin CHECK de finito (regresión de H-M08-01/H-M09-01) | Bajo | Barrido del catálogo | `048` (catálogo) |
-| T-M10-02 | Tampering | Numeric finito en PostgreSQL pero > 1.8e308 (`1e400`) en umbrales, metas, paquete o JSONB: JSON.parse lo vuelve `Infinity` en el front y las Actions | Bajo | El motor (`num`) lo anula (sin meta / paquete inválido); solo roles con escritura; auditoría | `engine-m10.test.js`; H-M10-01 (abierto) |
+| T-M10-02 | Tampering | Numeric finito en PostgreSQL pero > 1.8e308 (`1e400`) en umbrales, metas, paquete o JSONB: JSON.parse lo vuelve `Infinity` en el front y las Actions | Bajo | CHECK `*_safe` de M-11 (\|v\| < 2^53) en las 6 columnas y en `package_by_category`; el motor (`num`) lo anula | `engine-m10.test.js`; `049`, `110`, `api/numeric-safe-cap-m11.test.js` (H-M10-01 parcial: queda H-M11-01) |
+
+## Superficie nueva (M-11)
+
+- Sin superficie nueva: siete CHECK aditivos y validados (tope \|v\| < 2^53) en `indicators` (umbrales), `commitments` (overrides, `package_total`, `package_by_category` por jsonpath) y `targets.target_value`. Sin funciones, grants, policies ni cambios de RLS (verificado por `db-static-m11.test.js` y por catálogo en `049`).
+
+| ID | STRIDE | Amenaza | Riesgo | Control | Prueba |
+|---|---|---|---|---|---|
+| T-M11-01 | Tampering | Columna numeric o JSON nueva escribible por la API sin tope 2^53 (regresión de H-M10-01) | Bajo | Barrido del catálogo (numeric con CHECK `9007199254740992`; lista cerrada de columnas JSON escribibles) | `049` (catálogo) |
+| T-M11-02 | Tampering | Bypass del CHECK por notación exponencial, cadena, UPDATE calculado, upsert, `\|\|`/`jsonb_set`, claves raras o JSON no objeto | Bajo | CHECK sobre el valor almacenado (independiente de la vía); jsonpath `strict` sobre todas las claves | `049`, `api/numeric-safe-cap-m11.test.js` |
+| T-M11-03 | Tampering | `indicators.thresholds_by_category` (JSONB) acepta `{"P0P1":{"green":1e400}}` (gestora) | Bajo | El motor (`num`) lo anula; solo gestora; auditoría | H-M11-01 (abierto) |
+| T-M11-04 | Tampering / DoS lógico | `measurements.value` sin tope 2^53 en indicadores sin categorías (custodio): `1e400` o `1e308` dejan el indicador sin evaluar | Bajo | `measure` descarta no finitos y marca fuera de rango; solo el custodio del KPI; auditoría | H-M11-02 (abierto; residual de H-M01-02) |
 
 ## Trazabilidad: amenazas de riesgo Alto → prueba automática
 
