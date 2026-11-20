@@ -4,6 +4,7 @@ Una línea por ítem, la más reciente arriba.
 
 ## Sin publicar
 
+- 2026-11-20 · F-07 · CI y Seguridad reintentan solos el arranque de Supabase local cuando falla por un puerto ocupado (hasta 3 intentos, con diagnóstico de puertos en el log); si se agotan, el job falla igual.
 - 2026-11-20 · F-08 · Las pruebas de salud y de despliegue comparan las URL por origen exacto en lugar de por subcadena, el patrón que CodeQL marcaba como alerta alta. Sin cambios visibles en la app.
 
 ## Integrados
