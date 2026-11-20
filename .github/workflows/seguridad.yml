@@ -319,9 +319,10 @@ jobs:
   # de la API (tests/security/api/preprod-s05.test.js) corre en pentest-api.
   s05-fase-a:
     name: S-05 fase A (ZAP full scan + API scan, local)
-    if: github.event_name != 'workflow_dispatch' || inputs.fase_b == 'no'
+    # Pesado (~10 min): en PR (todos van a main), semanal y manual; no en cada push.
+    if: github.event_name == 'pull_request' || github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.fase_b == 'no')
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 30
     env:
       ZAP_IMAGE: zaproxy/zap-stable@sha256:9624669db72f54d86c4b46a7064518bd9bf79d8c61a4c31befa9923489f328af
     steps:
@@ -379,7 +380,7 @@ jobs:
           docker run --rm --network host -v "$RUNNER_TEMP/zap:/zap/wrk:rw" "$ZAP_IMAGE" \
             zap-full-scan.py -t http://127.0.0.1:4173/practica_agente/ -j -m 2 \
             -c rules.tsv -J front-full.json -r front-full.html -I \
-            -z "-config scanner.maxScanDurationInMins=15 -config scanner.maxRuleDurationInMins=3" || status=$?
+            -z "-config globalexcludeurl.url_list.url(0).regex=^https?://(?!127\.0\.0\.1:4173/practica_agente/).*$ -config globalexcludeurl.url_list.url(0).description=fuera-de-alcance -config globalexcludeurl.url_list.url(0).enabled=true -config scanner.maxScanDurationInMins=15 -config scanner.maxRuleDurationInMins=3" || status=$?
           echo "zap-full-scan.py terminó con código ${status}"
           [ "$status" -eq 0 ]
       # OpenAPI de PostgREST con todas las tablas (clave secreta LOCAL, solo en
@@ -415,12 +416,28 @@ jobs:
             -d '{"email":"gestora@example.test","password":"Local-Only-Pass-2026"}' \
             "${VITE_SUPABASE_URL}/auth/v1/token?grant_type=password" | jq -r .access_token)"
           if [ -z "$token" ] || [ "$token" = null ]; then echo "::error::login de la gestora local falló"; exit 1; fi
+          # Cobertura (QA-S05-02): la lectura base que ZAP toma de la especificación
+          # debe responder 200 para que sus ataques lleguen a la consulta.
+          base_ok=0
+          for p in $(jq -r '.paths | keys[] | select(. != "/")' "$RUNNER_TEMP/zap/openapi.json"); do
+            q="$(jq -r --arg p "$p" '.parameters as $P
+              | [.paths[$p].get.parameters[]?."$ref" | sub("#/parameters/"; "") | $P[.]
+                 | select(.in == "query") | "\(.name)=\(.default // "")"] | join("&")' "$RUNNER_TEMP/zap/openapi.json")"
+            code="$(curl -s -o "$RUNNER_TEMP/base.out" -w '%{http_code}' -H "apikey: ${VITE_SUPABASE_PUBLISHABLE_KEY}" \
+              -H "Authorization: Bearer ${token}" "${VITE_SUPABASE_URL}/rest/v1${p}?${q}")"
+            echo "lectura base ${p}: ${code} $(head -c 200 "$RUNNER_TEMP/base.out")"
+            if [ "$code" = 200 ]; then base_ok=$((base_ok + 1)); fi
+          done
+          rm -f "$RUNNER_TEMP/base.out"
+          echo "Lecturas base con 200: ${base_ok}"
           umask 077
           printf 'ZAP_AUTH_HEADER_VALUE=Bearer %s\nZAP_AUTH_HEADER=Authorization\nZAP_AUTH_HEADER_SITE=127.0.0.1\n' "$token" > "$RUNNER_TEMP/zap-auth.env"
       - name: ZAP API scan de PostgREST (activo, local, sesión de gestora)
         run: |
           set -euo pipefail
-          kong="$(docker ps --format '{{.Names}}' | grep -E '^supabase_kong_' | head -n1)"
+          # awk en vez de grep: sin coincidencias no corta el paso (pipefail) y
+          # el ::error:: propio llega al log (QA-S05-04).
+          kong="$(docker ps --format '{{.Names}}' | awk '/^supabase_kong_/ {print; exit}')"
           [ -n "$kong" ] || { echo "::error::no se encontró el contenedor Kong de Supabase local"; exit 1; }
           before="$(docker logs "$kong" 2>&1 | wc -l)"
           status=0
@@ -433,9 +450,13 @@ jobs:
           echo "zap-api-scan.py terminó con código ${status}"
           # El escaneo solo vale si ZAP llegó autenticado: códigos de estado que
           # el gateway local registró para /rest/v1 durante el escaneo.
-          docker logs "$kong" 2>&1 | tail -n +"$((before + 1))" \
-            | grep -oE '"(GET|POST|PATCH|PUT|DELETE|HEAD|OPTIONS) /rest/v1/[^"]*" [0-9]{3}' \
-            | awk '{print $1, $NF}' | tr -d '"' | sort | uniq -c | sort -rn | tee "$RUNNER_TEMP/zap/api-status.txt"
+          docker logs "$kong" > "$RUNNER_TEMP/kong.log" 2>&1
+          tail -n +"$((before + 1))" "$RUNNER_TEMP/kong.log" \
+            | awk 'match($0, /"(GET|POST|PATCH|PUT|DELETE|HEAD|OPTIONS) \/rest\/v1\/[^"]*" [0-9][0-9][0-9]/) {
+                s = substr($0, RSTART, RLENGTH); n = split(s, a, " "); m = a[1]; gsub(/"/, "", m); print m, a[n] }' \
+            | sort | uniq -c | sort -rn > "$RUNNER_TEMP/zap/api-status.txt"
+          rm -f "$RUNNER_TEMP/kong.log"
+          cat "$RUNNER_TEMP/zap/api-status.txt"
           # Sin sesión válida todo sería 401 (anon no tiene privilegios). Con la
           # sesión de la gestora: 200 en las lecturas base, 403 en las tablas que
           # no puede escribir y 400 cuando el parser estricto de PostgREST rechaza
@@ -465,6 +486,13 @@ jobs:
             high=$(jq '[.site[].alerts[] | select((.riskcode | tonumber) >= 3)] | length' "$report")
             [ "$high" -eq 0 ] || { echo "::error::${name}: ${high} alertas de riesgo alto"; fail=1; }
           done
+          # La exclusión global de ZAP mantiene el full scan del front en su subárbol
+          # (mismo mecanismo que la fase B usa contra Pages: QA-S05-03).
+          front="$RUNNER_TEMP/zap/front-full.json"
+          if [ -f "$front" ]; then
+            out=$(jq -r '[.site[].alerts[].instances[]?.uri | select(startswith("http://127.0.0.1:4173/practica_agente/") | not)] | unique | .[]' "$front")
+            [ -z "$out" ] || { echo "::error::el full scan del front salió de su subárbol: ${out}"; fail=1; }
+          fi
           [ "$fail" -eq 0 ]
       - name: Guardar informes de ZAP
         if: always()
@@ -490,7 +518,7 @@ jobs:
   # escaneo activo de la API de producción.
   s05-fase-b:
     name: S-05 fase B (producción, no destructiva)
-    if: github.event_name == 'workflow_dispatch' && inputs.fase_b != 'no'
+    if: github.event_name == 'workflow_dispatch' && inputs.fase_b != 'no' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 45
     environment: produccion
@@ -507,7 +535,10 @@ jobs:
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 22
+      # Segunda barrera (la primera es el if del job): todo paso que contacta
+      # producción exige que esta guarda haya pasado (QA-S05-01).
       - name: Solo desde main
+        id: main-guard
         run: |
           set -euo pipefail
           if [ "${GITHUB_REF}" != "refs/heads/main" ]; then echo "::error::la fase B solo corre desde main (${GITHUB_REF})"; exit 1; fi
@@ -529,7 +560,9 @@ jobs:
           S05_TEST_USERS: ${{ secrets.S05_TEST_USERS }}
         run: node --test tests/security/prod/fase-b.test.js
       - name: ZAP full scan de Pages (1 hilo, con retardo, duración acotada)
-        if: always()
+        # Corre aunque falle el pentest (son pruebas independientes), pero nunca
+        # si falló la guarda de main.
+        if: ${{ !cancelled() && steps.main-guard.outcome == 'success' }}
         run: |
           set -euo pipefail
           mkdir -p "$RUNNER_TEMP/zap"
@@ -540,11 +573,11 @@ jobs:
           docker run --rm -v "$RUNNER_TEMP/zap:/zap/wrk:rw" "$ZAP_IMAGE" \
             zap-full-scan.py -t https://apivasa.github.io/practica_agente/ -m 1 \
             -c rules.tsv -J pages-full.json -r pages-full.html -I \
-            -z "-config scanner.threadPerHost=1 -config scanner.delayInMs=300 -config scanner.maxScanDurationInMins=15 -config scanner.maxRuleDurationInMins=2" || status=$?
+            -z "-config globalexcludeurl.url_list.url(0).regex=^https?://(?!apivasa\.github\.io/practica_agente/).*$ -config globalexcludeurl.url_list.url(0).description=fuera-de-alcance -config globalexcludeurl.url_list.url(0).enabled=true -config scanner.threadPerHost=1 -config scanner.delayInMs=300 -config scanner.maxScanDurationInMins=15 -config scanner.maxRuleDurationInMins=2" || status=$?
           echo "zap-full-scan.py terminó con código ${status}"
           [ "$status" -eq 0 ]
       - name: Sin alertas de riesgo alto (Pages)
-        if: always()
+        if: ${{ !cancelled() && steps.main-guard.outcome == 'success' }}
         run: |
           set -euo pipefail
           report="$RUNNER_TEMP/zap/pages-full.json"
@@ -552,6 +585,8 @@ jobs:
           jq -r '.site[].alerts[] | "\(.riskdesc)\t\(.pluginid)\t\(.alert)\t\(.count)"' "$report" | sort -r
           high=$(jq '[.site[].alerts[] | select((.riskcode | tonumber) >= 3)] | length' "$report")
           [ "$high" -eq 0 ] || { echo "::error::ZAP reporta ${high} alertas de riesgo alto en Pages"; exit 1; }
+          out=$(jq -r '[.site[].alerts[].instances[]?.uri | select(startswith("https://apivasa.github.io/practica_agente/") | not)] | unique | .[]' "$report")
+          [ -z "$out" ] || { echo "::error::ZAP salió del alcance (/practica_agente/): ${out}"; exit 1; }
       - name: Guardar informes
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2

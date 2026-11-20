@@ -144,9 +144,18 @@ test('seguridad.yml: job s05-fase-a con ZAP full scan del front y ZAP API scan, 
   // Todo objetivo de ZAP en la fase A es 127.0.0.1.
   // (`case "$url" in http://127.0.0.1:*)` deja `:*)` tras el host: se recorta).
   for (const m of j.matchAll(/https?:\/\/([^/\s"']+)/g)) {
-    assert.match(m[1].replace(/:?[*)]+$/, ''), /^(127\.0\.0\.1|localhost)(:\d+)?$/, `fase A apunta a ${m[1]}`);
+    assert.match(host(m[1]).replace(/:?[*)]+$/, ''), /^(127\.0\.0\.1|localhost)(:\d+)?$/, `fase A apunta a ${m[1]}`);
   }
+  // Arquitectura: pesado, solo en PR, semanal y manual; 30 min como máximo.
+  assert.match(j, /if: github\.event_name == 'pull_request' \|\| github\.event_name == 'schedule' \|\| \(github\.event_name == 'workflow_dispatch' && inputs\.fase_b == 'no'\)/);
+  assert.match(j, /timeout-minutes: 30\b/);
 });
+
+// Una URL dentro de un regex de exclusión de ZAP (`^https?://(?!host/...)`) se
+// compara por su host, sin el `(?!` ni los escapes.
+function host(raw) {
+  return raw.replace(/^\(\?!/, '').replace(/\\/g, '');
+}
 
 test('seguridad.yml: job s05-fase-b manual, no destructivo y acotado a los hosts del proyecto', () => {
   const j = job('s05-fase-b');
@@ -166,8 +175,16 @@ test('seguridad.yml: job s05-fase-b manual, no destructivo y acotado a los hosts
   assert.doesNotMatch(j, /zap-api-scan\.py/, 'sin escaneo activo de la API de producción');
   assert.doesNotMatch(j, /-j\b/, 'sin AJAX spider en producción (seguiría llamadas a Supabase)');
   for (const m of j.matchAll(/https?:\/\/([^/\s"']+)/g)) {
-    assert.match(m[1], /^(apivasa\.github\.io|oehtspdtpwdhfhhhkgao\.supabase\.co)$/, `fase B apunta a ${m[1]}`);
+    assert.match(host(m[1]), /^(apivasa\.github\.io|oehtspdtpwdhfhhhkgao\.supabase\.co)$/, `fase B apunta a ${m[1]}`);
   }
+  // QA-S05-01: dos barreras de main (if del job y guarda con id) y ningún paso
+  // que contacta producción con always() sin depender de la guarda.
+  assert.match(j, /if:\s*github\.event_name == 'workflow_dispatch' && inputs\.fase_b != 'no' && github\.ref == 'refs\/heads\/main'\s*$/m);
+  assert.match(j, /id:\s*main-guard/);
+  assert.match(j, /ZAP full scan de Pages[^\n]*\n(\s+#[^\n]*\n)*\s+if: \$\{\{ !cancelled\(\) && steps\.main-guard\.outcome == 'success' \}\}/);
+  // QA-S05-03: ZAP excluye todo lo que no esté bajo /practica_agente/ y el job lo verifica.
+  assert.match(j, /globalexcludeurl\.url_list\.url\(0\)\.regex=\^https\?:\/\/\(\?!apivasa\\\.github\\\.io\/practica_agente\/\)\.\*\$/);
+  assert.match(j, /startswith\("https:\/\/apivasa\.github\.io\/practica_agente\/"\) \| not/);
   assert.match(j, /S05_REQUIRE:\s*'1'/);
   assert.match(j, /node --test tests\/security\/prod\/fase-b\.test\.js/);
 });
