@@ -1,5 +1,5 @@
 # M-06 — Informe QA
-Veredicto: VERDE (pendiente de confirmar con el CI de la rama; ver "Resultado CI")
+Veredicto: VERDE
 
 Revisado: rama `item/M-06` sobre `a833462` (código) + `228e63a` (arquitectura) + `453bed1` (seguridad).
 Reglas de referencia: `docs/diseno.md` "Caso: vulnerabilidades" (96 % P0/P1, 85 % P2/P3; meta parcial ≈ 1/3 por mes; P0/P1 nuevas de los meses 1 y 2 entran al paquete, las del mes 3 pasan al siguiente) y el criterio de M-06 en `docs/plan-maestro.md`.
@@ -36,7 +36,10 @@ Cada cambio se verificó contra el cálculo de arriba; ninguno se ajustó solo p
 - Local: `node --test 'tests/**/*.test.js'` → 1268 pass, 0 fail, 1 todo (H-C04-QA-01, previo).
 
 ## Resultado CI
-Ver runs de `item/M-06` tras el push de este commit (se reporta al orquestador).
+Commit `41e7e51` (incluye este informe `0073b84` y la corrección de lint de seguridad):
+- CI https://github.com/apivasa/practica_agente/actions/runs/44674396907 → success (db pgTAP, build lint+unit, integración evaluate.js contra Supabase local con `targets` de VULN borrados, e2e Playwright).
+- Seguridad https://github.com/apivasa/practica_agente/actions/runs/44674396828 → success.
+- El run de `0073b84` falló solo por `no-loss-of-precision` en `tests/security/engine-m06.test.js:109` (prueba de seguridad), corregido en `41e7e51`.
 
 ## Cobertura engine/
 Líneas 99,95 % (todo `engine/`); `engine/rows.js` 100 %, `engine/vulnerabilities.js` 100 % (ramas 97,4 % y 97,7 %).
