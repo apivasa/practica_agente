@@ -2,7 +2,7 @@
 
 Workflow: `.github/workflows/deploy.yml` (nombre en Actions: **Despliegue**).
 Destino: Supabase del proyecto de P-02 (migraciones) y GitHub Pages (`https://apivasa.github.io/practica_agente/`).
-Decisiones: ADR 0014 (manual primero, orden de jobs, Auth fuera de `db push`).
+Decisiones: ADR 0015 (manual primero, orden de jobs, Auth fuera de `db push`).
 
 El primer despliegue a producción es **compuerta del usuario** (CLAUDE.md §3). El workflow solo se dispara a mano y exige escribir `desplegar`.
 
@@ -56,11 +56,11 @@ Los jobs están encadenados: si falla uno, los siguientes no corren. El grupo de
 - Supabase → Authentication → Users: **sin** las cuentas de `seed.sql`.
 - Registro cerrado: `verify` lo comprobó; a mano, `GET https://<ref>.supabase.co/auth/v1/settings` con la clave publicable devuelve `"disable_signup": true`.
 - En el navegador (DevTools → Network): las peticiones van solo a `https://<ref>.supabase.co`.
-- Después de validar (y con S-05 fase B en VERDE, ADR 0014), activar los workflows programados: variable de repositorio `EVALUATION_ENABLED = true`.
+- Después de validar (y con S-05 fase B en VERDE, ADR 0015), activar los workflows programados: variable de repositorio `EVALUATION_ENABLED = true`.
 
 ## Despliegue continuo (después de la primera publicación aprobada)
 
-En `deploy.yml`, descomentar `push: branches: [main]` y permitir `github.event_name == 'push'` en la comprobación de `confirm`. Condiciones previas en ADR 0014 punto 5. `deploy.yml` ya no lee `SUPABASE_SECRET_KEY`, así que la regla de `tests/security/workflows.test.js` que limita esa clave a workflows `schedule` / `workflow_dispatch` no se ve afectada.
+En `deploy.yml`, descomentar `push: branches: [main]` y permitir `github.event_name == 'push'` en la comprobación de `confirm`. Condiciones previas en ADR 0015 punto 5. `deploy.yml` ya no lee `SUPABASE_SECRET_KEY`, así que la regla de `tests/security/workflows.test.js` que limita esa clave a workflows `schedule` / `workflow_dispatch` no se ve afectada.
 
 ## Cómo revertir
 

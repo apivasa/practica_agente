@@ -12,6 +12,9 @@ El orquestador solo escribe aquí cuando algo **de verdad** te necesita (ver reg
 - **P-05 · Activar la evaluación en producción (después de publicar, V-05).** Los workflows `evaluacion-mensual.yml` y `ritmo-diario.yml` solo corren contra Supabase real si existe la variable de repositorio `EVALUATION_ENABLED = true` (GitHub → Settings → Secrets and variables → Actions → pestaña *Variables*). Créala solo cuando el orquestador avise que el esquema está desplegado.
   Respuesta:
 
+- **P-06 · Primer despliegue a producción (V-05).** Respuesta del usuario (2026-11-19, en conversación con la sesión interactiva): **APROBADO**. Lanzar `deploy.yml` con `confirm=desplegar` en cuanto QA, seguridad y arquitectura de V-05 estén en VERDE. El usuario está creando el environment `produccion` (regla de rama `main`, sin revisores obligatorios, con los 6 secretos) y en Supabase desactivando "Allow new users to sign up" y poniendo Site URL `https://apivasa.github.io/practica_agente/`; confirmará con "listo". Si `verify` falla porque el environment o el registro cerrado aún no están, esperar su "listo" y no notificar de nuevo.
+  Respuesta: Aprobado.
+
 ### Decisiones de negocio (no bloquean el avance; el sistema usa el valor por defecto indicado)
 
 - **Q-01 · Lógica de disponibilidad, tiempo de ciclo, MTTR, continuidad y observabilidad.** Por defecto: disponibilidad y MTTR y tiempo de ciclo = promedio en ventana de 30 días; continuidad y observabilidad = cobertura (% de aplicaciones que cumplen). Umbrales de ejemplo en semillas.

@@ -1,7 +1,7 @@
 # Operación — runbook
 
 Dueño: arquitecto-SRE. Zona horaria de negocio: America/Guayaquil (UTC-5, sin horario de verano).
-Producción aún no existe (P-02/P-03 pendientes): la salud se prueba en CI contra Supabase local (job `integration` de `ci.yml`). `evaluacion-mensual` y `ritmo-diario` existen desde C-03/C-04 (ADR 0008), pero no hacen nada hasta que haya secretos y `vars.EVALUATION_ENABLED='true'`. `salud.yml` lo construye V-04.
+Producción aún no existe (P-02/P-03 pendientes): la salud se prueba en CI contra Supabase local (job `integration` de `ci.yml`). `evaluacion-mensual` y `ritmo-diario` existen desde C-03/C-04 (ADR 0008), pero no hacen nada hasta que haya secretos y `vars.EVALUATION_ENABLED='true'`. `salud.yml` (V-04) vigila disponibilidad y workflows programados cada 6 h; ver «Salud del sistema».
 
 Consultas útiles (solo REST, ver CLAUDE.md §5):
 - Runs de una rama: `gh api 'repos/apivasa/practica_agente/actions/runs?branch=<rama>&per_page=6' --jq '.workflow_runs[]|{id,name,event,conclusion}'`
@@ -34,6 +34,8 @@ Medidos en `item/S-01` y actualizados en `item/S-02-S-03` e `item/C-03-C-04` (20
 | | | **total de pared** | **~3 min** (desde S-04 lo marca dast; antes ~75–95 s por pentest-api) | > 7 min |
 | `evaluacion-mensual.yml` | cron `7 11 1 * *` (día 1, 06:07 Guayaquil); manual con `as_of` | evaluate (mensual) | sin base (aún sin producción); < 10 s si se omite | > 5 min (timeout 15 min) |
 | `ritmo-diario.yml` | cron `23 11 * * *` (06:23 Guayaquil); manual con `as_of` | evaluate (diario) | sin base; < 10 s si se omite | > 5 min (timeout 15 min) |
+| `salud.yml` | cron `41 */6 * * *` (00:41, 06:41, 12:41, 18:41 UTC); manual | check (disponibilidad + API de Actions) | sin base aún; < 30 s esperado (sin `npm ci`) | > 3 min (timeout 10 min) |
+| | | alert (solo si check falla) | < 20 s esperado | > 2 min (timeout 5 min) |
 | `lockfile.yml` | push a `item/**`, `fix/**` que cambie `package.json`; manual (nunca en `main`) | lockfile | < 30 s | > 2 min |
 
 Fuentes: CI run 44597648985, Seguridad run 44597649643 (S-01); CI run 44605484960 y Seguridad run 44605484997 (S-02+S-03, ambos `success`); referencia previa CI run 44594674729.
@@ -51,6 +53,7 @@ Tasa de fallos observada: en `main`, los fallos/cancelaciones del 2026-11-19 vie
 
 S-04 (2026-11-19, rama `item/S-04`): job dast medido en Seguridad runs 44610609487 (162 s), 44611568177 (185 s) y 44612384789 (177 s), todos `success`. En el último, pentest-api tardó 169 s (base 74–93 s): primera vez sobre el doble de la base; si se repite en el siguiente run se registra como ítem (regla de abajo). Probable causa: dast y pentest-api levantan cada uno su Supabase local en paralelo y compiten por la descarga de imágenes. Los fallos de los dos primeros commits de la rama (runs 44609093018, 44609853829) fueron defectos reales de las pruebas de anti-framing, corregidos; no intermitencia.
 
+V-04 (2026-11-19, rama `item/V-04`): **primer paso intermitente confirmado.** `pentest-api` falló en Seguridad run 44638730859 en `supabase start` con `failed to bind host port 0.0.0.0:54322/tcp: address already in use` y pasó al relanzarlo sin cambios. Por la regla de abajo se propone como ítem de plan (ver informe `docs/reportes/V-04-arquitectura.md`): fijar puertos propios por job en `supabase/config.toml` no es posible (un solo archivo), así que la propuesta es un paso previo que verifique el puerto libre con reintento, o `supabase start` con un reintento acotado y log de quién ocupa el puerto (`ss -ltnp`). CI run 44638730844: integration 87 s con el paso nuevo `scripts/ci/health.sh` (base 69–77 s; el paso añade ~12 s por el reintento de 10 s de la caída simulada).
 Posible intermitencia (2026-11-19): Seguridad run 44634155934 en `main` falló en pentest-api, paso «Levantar Supabase local», con `failed to bind host port 0.0.0.0:54324/tcp: address already in use` (contenedor inbucket). Es del runner, no del código; relanzar el run. Si se repite, ítem: fijar puertos distintos por job o desactivar `inbucket` en los jobs que no usan correo.
 
 Regla: un job que supera dos veces seguidas el doble de su base, o que falla y pasa al relanzarlo sin cambios, se registra como ítem de plan (paso intermitente).
@@ -79,6 +82,7 @@ Primero identifica el job fallido (consulta de jobs arriba) y lee su log. Nunca 
    - Una prueba de `workflows.test.js` falla: un workflow incumple la política (acción sin SHA, `latest`, permisos, `--ignore-scripts`...). Corregir el workflow, no la prueba.
    - `static-secrets.test.js` falla en `dist/`: un secreto se coló en el bundle (p. ej. una variable `VITE_*` con la clave secreta). Tratar como gitleaks real.
 6. **pentest-api** (`tests/security/api/`, Supabase local)
+   - Falla `supabase start` con `address already in use` (puerto 54322): intermitente conocido (V-04). Relanzar solo el job (`rerun-failed-jobs`); no es un defecto del ítem.
    - Falla `supabase start` o `supabase status` (sin `not ok` en el log): problema de la CLI o de Docker en el runner. Relanzar una vez; si se repite, revisar si cambió la imagen del runner o la versión fija de la CLI (debe ser la misma que en `ci.yml`).
    - `PENTEST_REQUIRE=1 pero faltan ...`: el paso "Obtener URL y claves locales" no encontró `API_URL`, `PUBLISHABLE_KEY` o `SECRET_KEY` en `supabase status -o env` (la CLI cambió los nombres). Ajustar el paso; nunca quitar `PENTEST_REQUIRE`.
    - `catálogo › toda tabla de public tiene fila en la matriz`: una migración añadió una tabla o vista. Añadir su fila en `tests/security/api/matrix.js` (seguridad) en la misma rama, con lo que diga ADR 0005; no es un falso positivo.
@@ -101,20 +105,16 @@ Primero identifica el job fallido (consulta de jobs arriba) y lee su log. Nunca 
 Ver ADR 0008. Ambos usan `node scripts/evaluate.js --mode=monthly|daily --as-of=YYYY-MM-DD` con `SUPABASE_SECRET_KEY`. Comparten `concurrency: evaluacion-produccion`, así que nunca corren a la vez. Actor de auditoría: `system:evaluate`.
 
 ### Activación (compuerta del usuario, V-05)
-1. Secretos `SUPABASE_URL` y `SUPABASE_SECRET_KEY` (`sb_secret_...`) en el repositorio. Cuando se muevan al environment `produccion` (H-C03-02, ADR 0014), estos workflows deben declarar `environment: produccion` **antes** de quitar los secretos del repositorio. Si no, se quedan sin clave y saltan la evaluación con un warning.
+1. Secretos `SUPABASE_URL` y `SUPABASE_SECRET_KEY` (`sb_secret_...`) en el repositorio o en el environment `produccion`. Desde V-05 ambos jobs declaran `environment: produccion` (H-C03-02, ADR 0015), así que leen los secretos de cualquiera de los dos sitios. Cuando el usuario mueva los secretos al environment (con regla de ramas = `main` y **sin revisor requerido**), hay que comprobar con una corrida manual que el paso "Evaluar" se ejecuta antes de borrar los de repositorio.
 2. Variable de repositorio `EVALUATION_ENABLED=true` (*Settings → Secrets and variables → Actions → Variables*).
 3. Primera corrida manual de `ritmo-diario` sin `as_of`. Verificar en el log la línea JSON final con `errors: 0`.
 Mientras falte algo, el job termina en verde con `::warning::... se omite la evaluación`. Desde la activación, un warning así en un cron significa que alguien borró un secreto o la variable: es una incidencia.
 
-### Cómo vigilarlos (hasta que V-04 construya `salud.yml`)
+### Cómo vigilarlos
+Desde V-04 lo hace `salud.yml` (ver «Salud del sistema»). A mano:
 - Último run de cada uno: `gh api 'repos/apivasa/practica_agente/actions/workflows/ritmo-diario.yml/runs?per_page=3' --jq '.workflow_runs[]|{id,event,created_at,conclusion}'` (igual con `evaluacion-mensual.yml`).
-- Criterios que `salud.yml` (V-04) debe automatizar, abriendo un issue con etiqueta `salud` **sin datos de unidades** (el repo es público):
-  - `ritmo-diario`: hay un run `schedule` con `conclusion=success` en las últimas 26 h.
-  - `evaluacion-mensual`: si hoy es día ≥ 2 del mes, hay un run `success` con `created_at` en el mes actual.
-  - Ningún run en `failure`, ni un `success` cuyo paso "Evaluar" fue omitido estando `EVALUATION_ENABLED=true`.
-  - Duración del job por debajo de 5 min.
-  - En BD (consulta liviana con la clave secreta): hay `audit_log` de `system:evaluate` con `created_at` en las últimas 26 h. Si no hubo cambios, puede no haber filas: usar `pace_snapshot` del día solo si hay compromisos trimestrales con paquete.
-- GitHub **desactiva los cron de un repo público tras 60 días sin actividad**. Si pasa, reactivar con `gh api -X PUT repos/apivasa/practica_agente/actions/workflows/ritmo-diario.yml/enable` (igual el mensual). V-04 debe alertar si `state != active`.
+- Los criterios automatizados están en `WORKFLOW_RULES` de `scripts/health/lib.js` (tabla en «Salud del sistema»). La comprobación en BD de `audit_log` de `system:evaluate` **no** se automatizó: exigiría la clave secreta en `salud.yml`, y el paso "Evaluar" omitido o fallido ya se detecta por la API de Actions. Consulta manual: `select action, count(*) from audit_log where actor = 'system:evaluate' and created_at > now() - interval '26 hours' group by 1;`
+- GitHub **desactiva los cron de un repo público tras 60 días sin actividad**. Si pasa, reactivar con `gh api -X PUT repos/apivasa/practica_agente/actions/workflows/ritmo-diario.yml/enable` (igual el mensual). `salud.yml` alerta si `state != active`.
 - GitHub puede retrasar los cron varios minutos o descartar alguno en horas de carga. Un día sin run no es un fallo del código: relanzar manualmente con el `as_of` de ese día.
 
 ### Qué hacer si fallan
@@ -144,17 +144,75 @@ Mientras falte algo, el job termina en verde con `::warning::... se omite la eva
 
 ### Restaurar
 - Las evaluaciones son derivables: se recalculan desde `measurements`, `commitments`, `targets` y `exceptions` reprocesando los meses del trimestre en orden.
-- Las alertas y `audit_log` no se regeneran, porque son historial.
-- **Respaldos en el plan gratuito.** No hay PITR y no hay que contar con restaurar desde el panel. Antes de cada despliegue que traiga migraciones nuevas, el usuario saca un volcado lógico **en su equipo**: `supabase db dump -f esquema.sql` y `supabase db dump --data-only -f datos.sql`. Nunca se guarda como artefacto de Actions ni en el repo, porque el repo es público.
-- **Restaurar tras una migración dañina.** Primero se escribe una migración correctiva en un PR revisado y se despliega (ver `docs/despliegue.md`). Si hay que borrar tablas o columnas con datos, o recargar `datos.sql`, es compuerta del usuario (CLAUDE.md §3).
+- Las alertas y `audit_log` no se regeneran, porque son historial: hay que restaurarlas de un respaldo.
+- **Respaldo (plan gratuito: sin PITR ni descarga garantizada de respaldos diarios).** Paso del dueño (necesita la contraseña de la BD, que no vive en el repo ni en Actions), al menos antes de cada migración y una vez al mes tras el cierre del día 1:
+  ```
+  supabase link --project-ref <ref>
+  supabase db dump --linked -f respaldo-esquema-AAAA-MM-DD.sql
+  supabase db dump --linked --data-only --use-copy -f respaldo-datos-AAAA-MM-DD.sql
+  ```
+  Los archivos contienen datos de unidades: se guardan **fuera del repositorio** (el repo es público), cifrados o en un almacenamiento privado del dueño. Nunca se suben a artefactos de Actions.
+- **Restaurar a un proyecto nuevo o limpio:** crear el proyecto, aplicar las migraciones del repo (`supabase db push`), y cargar los datos con `psql "<cadena de conexión>" -v ON_ERROR_STOP=1 -f respaldo-datos-AAAA-MM-DD.sql`. Los triggers append-only de `audit_log` (`audit_log_append_only`) no impiden INSERT, así que el historial se recarga tal cual. Antes de cargar, comprobar que el archivo de datos fija `SET session_replication_role = replica;` (así lo genera la CLI): sin eso, los triggers de auditoría de las demás tablas añadirían filas duplicadas a `audit_log` durante la carga. Es un procedimiento aún no ensayado: se ensaya en V-05. Luego actualizar los secretos `SUPABASE_URL` y claves si cambió el proyecto (compuerta del usuario) y lanzar `salud.yml` a mano.
+- Restauración parcial (solo evaluaciones de un mes): no hace falta respaldo, basta reprocesar (ver arriba).
 
-## Despliegue (`deploy.yml`, V-05)
-Procedimiento completo en `docs/despliegue.md`. Decisiones en ADR 0014.
-- **Falla `verify`**: falta un secreto, el prefijo de clave es incorrecto, la rama no es `main`, `confirm` no vale `desplegar` o Auth tiene el registro abierto. Corregir la configuración. Crear o rotar secretos y cambiar Auth es tarea del usuario.
-- **Falla `build-pages`**: si la verificación de `dist/` detecta un secreto u origen local, tratarlo como el fallo de gitleaks (ver arriba). Si el build falla por la CSP, `SUPABASE_URL` no coincide con `PRODUCTION_SUPABASE_ORIGIN` (ADR 0011).
-- **Falla `migrate`**: la BD puede quedar a medias, porque `db push` aplica cada archivo en su propia transacción. Revisar `supabase migration list` y corregir con una migración nueva. Nunca se edita una migración ya aplicada.
-- **Falla `smoke`**: comprobar Settings → Pages (fuente = GitHub Actions) y relanzar solo `smoke`. Si la URL responde pero la app no carga, revisar `base` en `vite.config.js`.
+- **Restaurar tras una migración dañina.** Primero se escribe una migración correctiva en un PR revisado y se despliega (ver `docs/despliegue.md`). Si hay que borrar tablas o columnas con datos, o recargar el respaldo de datos, es compuerta del usuario (CLAUDE.md §3).
+
+## Despliegue (`deploy.yml`, V-05, ADR 0015)
+Procedimiento completo en `docs/despliegue.md`. Orden de jobs: `verify` → `build-pages` → `migrate-plan` → `migrate` → `deploy-pages` → `smoke`. Ningún job lee `SUPABASE_SECRET_KEY`.
+- **Falla `verify`**, paso «Confirmación, rama y secretos»: falta un secreto, el prefijo de la clave publicable es incorrecto, `SUPABASE_URL` no corresponde a `SUPABASE_PROJECT_REF`, la rama no es `main` o `confirm` no vale `desplegar`. Corregir la configuración. Crear o rotar secretos es compuerta del usuario.
+- **Falla `verify`**, paso «Origen de producción»: `SUPABASE_URL` no es `PRODUCTION_SUPABASE_ORIGIN` de `src/security/csp.js` (ADR 0011). Los secretos apuntan a otro proyecto, y el job se detiene antes de tocar una base equivocada. Si se cambió de proyecto a propósito, cambiar a la vez los secretos (usuario) y la constante, en un PR revisado por seguridad. Si el paso dice «No se encontró PRODUCTION_SUPABASE_ORIGIN», alguien cambió el formato de la línea en `csp.js`: el `sed` del paso espera `export const PRODUCTION_SUPABASE_ORIGIN = '<origen>';`.
+- **Falla `verify`**, paso «Registro cerrado en Auth»:
+  - `disable_signup` no es `true`: desactivar *Allow new users to sign up* en el panel de Supabase (tarea del usuario) y relanzar.
+  - «No se pudo leer /auth/v1/settings»: el proyecto está pausado (reanudarlo desde el panel) o la clave publicable no es válida.
+- **Falla `build-pages`**: si la verificación de `dist/` detecta un secreto u origen local, tratarlo como el fallo de gitleaks (ver arriba). Si el build falla por la CSP, `SUPABASE_URL` no coincide con `PRODUCTION_SUPABASE_ORIGIN`. La base no se tocó.
+- **Falla `migrate-plan`** (solo dry-run, no cambia nada): `supabase link` falló por `SUPABASE_ACCESS_TOKEN` o `SUPABASE_DB_PASSWORD` inválidos o por el proyecto pausado. Si el dry-run lista migraciones que no se esperaban, no aprobar ni relanzar `migrate`: revisar `supabase/migrations/` contra `supabase migration list`.
+- **Falla `migrate`**: la BD puede quedar a medias, porque `db push` aplica cada archivo en su propia transacción. Leer `supabase migration list` en el log (o lanzarlo a mano) y corregir con una migración nueva. Nunca se edita una migración ya aplicada. El front no se publicó: `deploy-pages` necesita `migrate`.
+- **Falla `smoke`**: comprobar Settings → Pages (fuente = GitHub Actions) y relanzar solo `smoke`. Si el HTML da 200 pero el JS principal no, la `base` de `vite.config.js` no coincide con la ruta de Pages.
+- **Revisor requerido**: no se pone en `produccion`. `evaluacion-mensual` y `ritmo-diario` usan ese environment, y con revisor cada cron quedaría en `waiting` (ADR 0015 punto 6). Si `salud.yml` alerta `último run hace N h` y el run está en `waiting`, quitar el revisor del environment y aprobar o relanzar el run.
 - **Cuidado con la concurrencia con las evaluaciones**: `despliegue-produccion` y `evaluacion-produccion` son grupos distintos. No hay que desplegar migraciones de `evaluations`, `alerts` o `audit_log` el día 1 a la hora del cron mensual.
 
+## Salud del sistema (`salud.yml`, V-04, ADR 0014)
+
+Código: `scripts/health/check.js` y `scripts/health/lib.js` (Node puro, sin dependencias npm), pruebas en `tests/scripts/health.test.js` y prueba contra Supabase local en `scripts/ci/health.sh` (job `integration` de `ci.yml`), que incluye la **simulación de caída de Pages** (puerto cerrado → `failures=pages`, código 1).
+
+Permisos: workflow `contents: read`; job `check` añade `actions: read`; solo el job `alert` tiene `issues: write`. No usa la clave secreta: solo `SUPABASE_URL` y `SUPABASE_PUBLISHABLE_KEY` (secreto o variable).
+
+| Check | Qué mira | Cuándo se exige |
+|---|---|---|
+| `pages` | GET a `vars.PAGES_URL` (por defecto `https://apivasa.github.io/practica_agente/`) responde 200; 2 intentos con 10 s | `EVALUATION_ENABLED=true` |
+| `supabase` | GET `<SUPABASE_URL>/auth/v1/health` con la clave publicable responde 200; evita la pausa por inactividad | `EVALUATION_ENABLED=true` |
+| `ritmo-diario` | workflow `active`; último run completado (no cancelado) en `main` hace ≤ 30 h, `success`, ≤ 5 min y con el paso "Evaluar" ejecutado | estado siempre; resto con producción |
+| `evaluacion-mensual` | workflow `active`; desde el día 2 (Guayaquil) hay un run del mes actual, el último `success`, ≤ 5 min y "Evaluar" ejecutado | estado siempre; resto con producción |
+| `seguridad-semanal` | workflow `active`; último run `schedule` hace ≤ 8 días y `success` | siempre (gracia de 8 días si el workflow es nuevo) |
+| `ci-main` | último run `push` de CI en `main` en `success` | siempre |
+| `actions-api` | hay `GITHUB_TOKEN` y la API responde | siempre |
+
+Si algún check falla, el job `check` queda en rojo y el job `alert` abre un issue «Salud del sistema: comprobación fallida» con la etiqueta `salud` (la crea si no existe), o **comenta el issue abierto** si ya hay uno (sin duplicados). El cuerpo solo lleva los nombres de los checks, la hora de Guayaquil y el enlace al run; el detalle está en el log y en el resumen del run. Sin producción activa, `pages`, `supabase` y la ejecución de las evaluaciones salen como `omitido` (warning) y el run queda verde.
+
+### Qué hacer ante cada alerta
+Primero abrir el run enlazado en el issue y leer el resumen (tabla Check/Estado/Detalle). Al resolver, lanzar `salud.yml` a mano (`gh api -X POST repos/apivasa/practica_agente/actions/workflows/salud.yml/dispatches -f ref=main`) y cerrar el issue cuando salga verde.
+- **`pages`**
+  - `HTTP 404`: Pages despublicado o la ruta cambió. Revisar *Settings → Pages* y el último run del workflow de despliegue; relanzarlo. Si se cambió el nombre del repo, actualizar `vars.PAGES_URL`.
+  - `HTTP 5xx` o `sin respuesta`: incidente de GitHub Pages (ver githubstatus.com). Nada que hacer en el repo; el siguiente run confirma la recuperación.
+  - `PAGES_URL no es https`: la variable tiene un valor inválido.
+- **`supabase`**
+  - `HTTP 503`/`540` o `sin respuesta`: proyecto **pausado** (plan gratuito) o caído. Reanudarlo desde el panel de Supabase (paso del dueño). Si se pausó pese a `salud.yml`, revisar que el cron de salud esté `active` (`gh api repos/apivasa/practica_agente/actions/workflows/salud.yml --jq .state`).
+  - `HTTP 401`: la clave publicable fue rotada o borrada; actualizar `SUPABASE_PUBLISHABLE_KEY` (compuerta del usuario).
+  - `falta SUPABASE_URL ...` / `falta SUPABASE_PUBLISHABLE_KEY`: con `EVALUATION_ENABLED=true` faltan secretos: incidencia de configuración (compuerta del usuario).
+- **`ritmo-diario` / `evaluacion-mensual`**
+  - `deshabilitado (disabled_inactivity)`: 60 días sin actividad en el repo. Reactivar con `gh api -X PUT repos/apivasa/practica_agente/actions/workflows/<archivo>/enable` y relanzar con el `as_of` de los días perdidos (diario) o el cierre (mensual, ver «Reprocesar un mes»). Lo mismo para `disabled_manually`, confirmando antes que nadie lo apagó a propósito.
+  - `último run hace N h` / `sin run del cierre mensual`: GitHub descartó el cron o se retrasó. Lanzar a mano con el `as_of` correspondiente.
+  - `último run terminó en failure`: seguir «Qué hacer si fallan» (arriba).
+  - `paso "Evaluar" omitido con EVALUATION_ENABLED=true`: falta `SUPABASE_URL` o `SUPABASE_SECRET_KEY`. Compuerta del usuario; luego relanzar. Tras activar producción la primera vez, la alerta puede salir una vez si el último run es anterior a la activación: basta relanzar el workflow.
+  - `duró N min`: comparar con la base de la tabla de tiempos; si se repite, aplicar la regla de paso intermitente.
+- **`seguridad-semanal`**: run semanal fallido o ausente. Si falló, seguir «Qué hacer si falla seguridad.yml» punto 7. Si no corrió, relanzar `seguridad.yml` manual en `main` y revisar su `state`.
+- **`ci-main`**: `main` está en rojo. El orquestador abre `fix/main-<fecha>` (paso 3 del ciclo).
+- **`actions-api` o `no se pudo consultar la API de Actions`**: incidente de la API de GitHub o falta de permiso `actions: read`. Relanzar; si persiste, revisar el bloque `permissions` de `salud.yml`.
+- **El issue dice «el job de comprobación falló sin resumen»**: `check.js` se cayó antes de escribir la salida (error de Node, checkout o timeout). Leer el log del job `check`.
+- **`salud.yml` no corre**: también se deshabilita a los 60 días sin actividad y no puede vigilarse a sí mismo. El orquestador lo comprueba en el paso 3 del ciclo (`.../workflows/salud.yml --jq .state`) y lo reactiva con `.../enable`.
+
+### Auditoría de acciones automáticas (CLAUDE.md §4)
+Verificado en V-04: las acciones con efecto en la BD quedan en `audit_log` con actor `system:evaluate` (`scripts/lib/run.js`): `evaluation_upsert`, `escalation_applied` (candado), `alert_sent`, `exception_expired`, `evaluation_reprocess` y `pace_snapshot`; las escrituras de usuarios las registran los triggers de `20261119120200_audit_triggers.sql`, y `audit_log` es append-only. La única acción automática de `salud.yml` con efecto es abrir o comentar un issue: queda registrada en el propio issue (autor `github-actions[bot]`, fecha y enlace al run) y no toca la BD, por eso no se escribe en `audit_log` (haría falta la clave secreta en un workflow que no la necesita).
+
 ## Pendiente de completar
-- Disponibilidad de Pages y Supabase y vigilancia automática de los cron (`salud.yml`, V-04). Una vez publicado (V-05), el plan gratuito pausa el proyecto tras unos 7 días sin actividad: V-04 debe llegar antes de esa ventana o, mientras tanto, `ritmo-diario` (activado con P-05) mantiene la actividad.
+- Restauración probada contra el Supabase de producción y medición de tiempos base de `salud.yml` y `deploy.yml` (V-05, tras el primer despliegue y la activación).
