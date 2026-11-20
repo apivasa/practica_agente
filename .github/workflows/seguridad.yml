@@ -436,13 +436,18 @@ jobs:
           docker logs "$kong" 2>&1 | tail -n +"$((before + 1))" \
             | grep -oE '"(GET|POST|PATCH|PUT|DELETE|HEAD|OPTIONS) /rest/v1/[^"]*" [0-9]{3}' \
             | awk '{print $1, $NF}' | tr -d '"' | sort | uniq -c | sort -rn | tee "$RUNNER_TEMP/zap/api-status.txt"
-          echo "Muestra de peticiones rechazadas (solo método, ruta y estado):"
-          docker logs "$kong" 2>&1 | tail -n +"$((before + 1))" \
-            | grep -oE '"(GET|PATCH|POST) /rest/v1/[^"]*" 4[0-9]{2}' | cut -c1-220 | sort -u | head -n 15 \
-            || echo "(sin muestra)"
+          # Sin sesión válida todo sería 401 (anon no tiene privilegios). Con la
+          # sesión de la gestora: 200 en las lecturas base, 403 en las tablas que
+          # no puede escribir y 400 cuando el parser estricto de PostgREST rechaza
+          # el payload (los payloads genéricos de ZAP no llevan operador).
+          total="$(awk '{n += $1} END {print n + 0}' "$RUNNER_TEMP/zap/api-status.txt")"
+          unauth="$(awk '$3 == "401" {n += $1} END {print n + 0}' "$RUNNER_TEMP/zap/api-status.txt")"
           ok="$(awk '$3 ~ /^2/ {n += $1} END {print n + 0}' "$RUNNER_TEMP/zap/api-status.txt")"
-          echo "Respuestas 2xx de PostgREST durante el escaneo: ${ok}"
-          [ "$ok" -ge 20 ] || { echo "::error::ZAP no llegó autenticado a PostgREST (solo ${ok} respuestas 2xx)"; exit 1; }
+          srv="$(awk '$3 ~ /^5/ {n += $1} END {print n + 0}' "$RUNNER_TEMP/zap/api-status.txt")"
+          echo "Peticiones a PostgREST: ${total} · 2xx: ${ok} · 401: ${unauth} · 5xx: ${srv}"
+          [ "$total" -ge 1000 ] || { echo "::error::ZAP apenas atacó la API (${total} peticiones)"; exit 1; }
+          [ "$unauth" -eq 0 ] && [ "$ok" -ge 1 ] || { echo "::error::ZAP no llegó autenticado a PostgREST"; exit 1; }
+          [ "$srv" -eq 0 ] || { echo "::error::PostgREST respondió ${srv} errores 5xx a payloads de ZAP"; exit 1; }
           [ "$status" -eq 0 ]
       - name: Sin alertas de riesgo alto (front y API)
         if: always()
