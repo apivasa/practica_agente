@@ -129,13 +129,13 @@ El orquestador toma el **primer ítem `Pendiente`** cuyas dependencias estén `H
 | 26 | V-05 | En curso | 1 | #27 | Workflow fusionado. Falta el primer run de `deploy.yml` (P-06): la sesión programada no pudo lanzarlo (bloqueo de permisos), lo lanza el usuario |
 | 26b | S-05b | Pendiente | 0 | | Fase B del pentest contra Pages y Supabase real; depende del primer run de V-05; compuerta de P-05 |
 | 26c | M-06 | Hecho | 1 | #28 | Color mensual de VULN por criticidad (96 % P0/P1, 85 % P2/P3); antes de P-05 |
-| 26d | M-07 | Pendiente | 0 | | Pantalla de metas mensuales (`targets`) para la gestora |
+| 26d | M-07 | En revisión | 0 | #31 | Pantalla de metas mensuales (`targets`) para la gestora |
 | 26e | V-08 | Pendiente | 0 | | Candado vigente hoy e inicio autorizado; agrupar con V-09 |
 | 26f | V-09 | Pendiente | 0 | | Un solo mapa de etiquetas de alcance de excepciones |
 | 26g | V-05b | Pendiente | 0 | | Despliegue en push a main (ADR 0015 punto 5); incluye H-V05-01 (`db push --db-url` sin token de cuenta) y H-S03-02 (contraseña mínima 12 en config.toml) |
-| 26i | M-08 | Pendiente | 0 | | Validación en BD de mediciones VULN (trigger), rechazo cumulative_target + lower_is_better, descarte compartido en buildPackageInput |
-| 26j | F-08 | Pendiente | 0 | | Alertas CodeQL abiertas en main (4 altas, solo en pruebas: URL por subcadena en tests/scripts/health.test.js:150,256 y qa-v04.test.js:193,213) fusionadas con #22; constructor: tester. Regla nueva: no fusionar con el check CodeQL en rojo |
-| 26h | F-07 | Pendiente | 0 | | CI: reintento acotado de `supabase start` por puertos 54322/54324 ocupados (intermitente) |
+| 26i | M-08 | En revisión | 0 | #32 | Validación en BD de mediciones VULN (trigger), rechazo cumulative_target + lower_is_better, descarte compartido en buildPackageInput |
+| 26j | F-08 | Hecho | 0 | #29 | Alertas CodeQL abiertas en main (4 altas, solo en pruebas: URL por subcadena en tests/scripts/health.test.js:150,256 y qa-v04.test.js:193,213) fusionadas con #22; constructor: tester. Regla nueva: no fusionar con el check CodeQL en rojo |
+| 26h | F-07 | En revisión | 1 | #30 | CI: reintento acotado de `supabase start` por puertos 54322/54324 ocupados (intermitente) |
 | 27 | C-05 | Bloqueado | 0 | | Espera Q-04 |
 | 28 | V-07 | Bloqueado | 0 | | Espera Q-02 |
 

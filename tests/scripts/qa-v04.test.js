@@ -28,6 +28,8 @@ const NOW = new Date('2027-03-10T15:00:00Z');
 const PUB = 'sb_publishable_ficticia_qa';
 const SUPA = 'https://qa-ficticio.supabase.co';
 const PAGES = 'https://apivasa.github.io/practica_agente/';
+// Compara por origen exacto (esquema + host + puerto), no por subcadena de la URL.
+const isSupabase = (u) => new URL(String(u)).origin === new URL(SUPA).origin;
 const noSleep = async () => {};
 const ago = (ms) => new Date(NOW.getTime() - ms).toISOString();
 const H = 3_600_000;
@@ -190,7 +192,7 @@ describe('[B] disponibilidad: bordes', () => {
   const env = { EVALUATION_ENABLED: 'true', PAGES_URL: PAGES, SUPABASE_URL: SUPA, SUPABASE_PUBLISHABLE_KEY: PUB };
 
   test('Supabase pausado (540) en los dos intentos: falla con el código HTTP', async () => {
-    const f = async (url) => ({ status: String(url).startsWith(SUPA) ? 540 : 200 });
+    const f = async (url) => ({ status: isSupabase(url) ? 540 : 200 });
     const [, s] = await checkAvailability({ env, fetchImpl: f, sleep: noSleep });
     assert.deepEqual([s.check, s.status], ['supabase', 'fail']);
     assert.match(s.detail, /HTTP 540 tras 2 intentos/);
@@ -210,7 +212,7 @@ describe('[B] disponibilidad: bordes', () => {
     const r = await checkHttp({ check: 'pages', url: PAGES, fetchImpl: f, sleep: noSleep });
     assert.equal(r.status, 'fail');
     assert.match(r.detail, /timeout/);
-    assert.ok(!r.detail.includes('github.io'));
+    assert.doesNotMatch(r.detail, /https?:\/\/|apivasa\.github\.io/);
   });
 
   test('PAGES_URL http hacia un host externo se rechaza (falla visible, no se consulta)', async () => {

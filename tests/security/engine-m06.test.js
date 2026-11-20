@@ -223,7 +223,7 @@ test('cat 6: el código nuevo del motor no usa eval, red ni asignación dinámic
 
 test('cat 5: integration.sh borra targets solo tras exigir Supabase en loopback', () => {
   const sh = read('../../scripts/ci/integration.sh');
-  const guard = sh.indexOf('http://127.0.0.1:*|http://localhost:*');
+  const guard = sh.search(/http:\/\/127\.0\.0\.1:\*\|http:\/\/localhost:\*/);
   const del = sh.indexOf('delete from public.targets');
   assert.ok(guard > 0 && del > guard, 'la guarda de loopback debe ir antes del delete');
   assert.doesNotMatch(sh, /sb_secret_[A-Za-z0-9]|supabase\.co|SUPABASE_DB_PASSWORD/);

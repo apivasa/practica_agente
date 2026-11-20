@@ -117,6 +117,8 @@ Las pruebas de `tests/security/api/` se omiten en `test:unit` a propósito. En C
 | `deploy.yml` | Solo manual, desde `main`, con `confirm` = `desplegar` | `verify`, `build-pages`, `migrate-plan`, `migrate`, `deploy-pages` y `smoke`. Ver [`docs/despliegue.md`](docs/despliegue.md). |
 | `lockfile.yml` | Push a `item/**` o `fix/**` que cambie `package.json`; manual (nunca en `main`) | Regenera y sube `package-lock.json` y relanza CI y Seguridad. |
 
+Los jobs que levantan Supabase local (tres en `ci.yml` y tres en `seguridad.yml`) usan `scripts/ci/supabase-start.sh`: si el arranque falla (por ejemplo, puerto ocupado), detiene Supabase, espera 10 s y reintenta, hasta 3 intentos en total. Si se agotan, el job falla con el código del último intento. Detalle en [`docs/operacion.md`](docs/operacion.md).
+
 Los dos workflows de evaluación solo actúan si existen los secretos `SUPABASE_URL` y `SUPABASE_SECRET_KEY` y la variable de repositorio `EVALUATION_ENABLED=true`. Si falta algo, terminan en verde con un aviso y no escriben nada. Detalle, reprocesos y qué hacer si fallan: [`docs/operacion.md`](docs/operacion.md).
 
 ## Estructura del repo
@@ -145,7 +147,7 @@ supabase/
 scripts/
   evaluate.js           Evaluación mensual o diaria (Actions)
   lib/                  Lectura de BD, armado de entradas, alertas y escritura
-  ci/                   integration.sh, seed-evaluations.sh, verify-evaluate.sql
+  ci/                   integration.sh, seed-evaluations.sh, verify-evaluate.sql y supabase-start.sh (arranque de Supabase local con reintento acotado, F-07)
 tests/                  node:test: engine/, front/, scripts/, security/ (y security/api/)
 e2e/                    Playwright por pantalla; e2e/security/
 .github/workflows/      ci, seguridad, evaluacion-mensual, ritmo-diario, salud, deploy, lockfile
