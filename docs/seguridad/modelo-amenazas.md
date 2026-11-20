@@ -350,3 +350,12 @@ M-12 no abre superficie: solo añade tres CHECK (jsonpath y `abs`, sin funciones
 | T-M12-01 | Tampering | Saltar el CHECK de forma con escrituras parciales del JSONB (jsonb_set, jsonb_insert, `\|\|`, `#-`), upsert, claves duplicadas, tipos raros (cadena, null, arreglo, objeto) o notación exponencial | Bajo | CHECK sobre la fila resultante: `indicators_thresholds_by_category_safe`, `commitments_package_by_category_whole`, `measurements_value_safe` | `supabase/tests/security/050`, `tests/security/api/json-shape-m12.test.js` |
 | T-M12-02 | DoS lógico (menor) | Números de escala enorme (`1e-16000`) en `measurements.value` o umbrales hinchan respuestas (~16 KB/valor; `JSON.parse` da 0) | Muy bajo | Solo roles que ya escriben la columna; auditoría | H-M12-01 (Info) |
 
+
+## Superficie nueva (M-14)
+
+M-14 no abre superficie: reemplaza los 9 CHECK `*_safe` de M-11/M-12 por el borde más estricto |v| < 2^53 − 0,5 (9007199254740991.5), con el mismo nombre, mediante DROP + ADD dentro de un único `ALTER TABLE` por tabla (atómico: no hay instante sin restricción). Sin funciones, grants, policies, DML ni `NOT VALID`. Cierra H-ARQ-M13-01 y actualiza el control de T-M10-02 y T-M11-01: lo que la BD acepta, `JSON.parse` + `engine/numeric.js` lo aceptan.
+
+| ID | STRIDE | Amenaza | Riesgo | Control | Prueba |
+|---|---|---|---|---|---|
+| T-M14-01 | Tampering / DoS lógico | Valor en [2^53 − 0,5, 2^53) que la BD aceptaba y `JSON.parse` redondea a 2^53: un umbral así hacía fallar la evaluación mensual (`normalizeIndicator`) | Bajo | CHECK `*_safe` con `abs(v) < 9007199254740991.5` en las 7 columnas y en los 2 JSONB | `supabase/tests/security/051`, `tests/security/api/safe-cap-m14.test.js` (incluye BD == motor sobre lo que devuelve la API) |
+| T-M14-02 | Tampering | Una migración de reemplazo deja la tabla sin CHECK (DROP sin ADD, `drop ... if exists`, sentencias separadas, `NOT VALID`) o con un tope > 2^53 | Bajo | Reemplazo atómico en un `ALTER TABLE`; revisión estática de todas las migraciones | `tests/security/db-static-m14.test.js`, `tests/security/engine-m13.test.js` › barrera; catálogo en `049` y `051` (cada CHECK una sola vez, validado, ninguno con el borde viejo) |

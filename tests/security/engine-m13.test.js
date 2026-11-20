@@ -102,21 +102,59 @@ test('parseMeasurementsCsv: filas enormes o con fórmula, mensajes sin reflejo p
   }
 });
 
-test('la BD sigue siendo la barrera: CHECK de M-11/M-12 presentes y sin drop posterior', () => {
+// M-14 reemplaza los CHECK con el mismo nombre (DROP + ADD). La intención se mantiene: la
+// barrera nunca desaparece. Se exige que todo DROP de un CHECK `_safe` vaya, en la MISMA
+// sentencia ALTER TABLE (atómica), seguido del ADD del mismo nombre; sin `if exists`, sin
+// NOT VALID y con la última definición con tope <= 2^53 (estricto).
+const SAFE_CHECKS = [
+  'indicators_green_threshold_safe', 'indicators_yellow_threshold_safe',
+  'commitments_green_override_safe', 'commitments_yellow_override_safe',
+  'commitments_package_total_safe', 'commitments_package_by_category_safe',
+  'targets_target_value_safe', 'indicators_thresholds_by_category_safe', 'measurements_value_safe',
+];
+// Comparación decimal exacta (Number() redondearía 9007199254740992.4 a 2^53).
+const decimalAtMost2p53 = (txt) => {
+  const [ip, fp = ''] = txt.split('.');
+  const n = BigInt(ip);
+  return n < 2n ** 53n || (n === 2n ** 53n && /^0*$/.test(fp));
+};
+const stripComments = (sql) => sql.split('\n').map((l) => l.replace(/--.*$/, '')).join('\n');
+
+test('la BD sigue siendo la barrera: CHECK de M-11/M-12 presentes y nunca sin reemplazo atómico', () => {
   const dir = join(ROOT, 'supabase', 'migrations');
-  const all = readdirSync(dir).filter((f) => f.endsWith('.sql')).sort().map((f) => read(join('supabase/migrations', f))).join('\n');
-  const checks = [
-    'indicators_green_threshold_safe', 'indicators_yellow_threshold_safe',
-    'commitments_green_override_safe', 'commitments_yellow_override_safe',
-    'commitments_package_total_safe', 'commitments_package_by_category_safe',
-    'targets_target_value_safe', 'indicators_thresholds_by_category_safe', 'measurements_value_safe',
-  ];
-  for (const c of checks) {
+  const files = readdirSync(dir).filter((f) => f.endsWith('.sql')).sort();
+  const all = files.map((f) => stripComments(read(join('supabase/migrations', f)))).join('\n');
+  // Sentencias SQL (ninguna migración usa $$ con ';' dentro de un ALTER TABLE de estos CHECK).
+  const stmts = all.split(';');
+  for (const c of SAFE_CHECKS) {
     assert.match(all, new RegExp(`add constraint ${c}\\b`), c);
-    assert.doesNotMatch(all, new RegExp(`drop constraint (if exists )?${c}\\b`, 'i'), c);
+    assert.doesNotMatch(all, new RegExp(`drop constraint if exists ${c}\\b`, 'i'), `${c}: sin drop if exists`);
     assert.doesNotMatch(all, new RegExp(`${c}[^;]*not valid`, 'i'), `${c} debe quedar validado`);
+    let lastDef = null;
+    for (const st of stmts) {
+      const drops = st.match(new RegExp(`drop\\s+constraint\\s+${c}\\b`, 'gi')) ?? [];
+      const adds = st.match(new RegExp(`add\\s+constraint\\s+${c}\\b`, 'gi')) ?? [];
+      if (drops.length) {
+        assert.match(st, /^\s*alter\s+table\s/i, `${c}: el DROP debe ir dentro de un ALTER TABLE`);
+        assert.equal(adds.length, drops.length, `${c}: cada DROP lleva su ADD en la misma sentencia`);
+        assert.ok(st.search(new RegExp(`drop\\s+constraint\\s+${c}\\b`, 'i'))
+          < st.search(new RegExp(`add\\s+constraint\\s+${c}\\b`, 'i')), `${c}: el ADD va después del DROP`);
+      }
+      if (adds.length) {
+        const i = st.search(new RegExp(`add\\s+constraint\\s+${c}\\b`, 'i'));
+        const rest = st.slice(i);
+        const next = rest.slice(1).search(/,\s*(add|drop|alter)\s+constraint\s/i);
+        lastDef = next === -1 ? rest : rest.slice(0, next + 1);
+      }
+    }
+    assert.ok(lastDef, `${c}: hay definición final`);
+    const caps = lastDef.match(/\d{12,}(\.\d+)?/g) ?? [];
+    assert.ok(caps.length >= 1, `${c}: la definición final tiene tope`);
+    for (const cap of caps) assert.ok(decimalAtMost2p53(cap), `${c}: tope ${cap} > 2^53`);
+    assert.doesNotMatch(lastDef, /<=\s*9007199254740992\b/, `${c}: no admite 2^53`);
   }
-  for (const f of ['tests/security/api/numeric-safe-cap-m11.test.js', 'tests/security/api/json-shape-m12.test.js']) {
+  for (const f of ['tests/security/api/numeric-safe-cap-m11.test.js', 'tests/security/api/json-shape-m12.test.js',
+    'tests/security/api/safe-cap-m14.test.js']) {
     assert.doesNotMatch(read(f), /\.(skip|todo)\(|\{\s*skip\s*:/, `${f} no debe tener pruebas omitidas`);
   }
 });
