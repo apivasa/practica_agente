@@ -95,6 +95,7 @@ Tallas: **S** = 1 ciclo · **M** = 2 ciclos · **L** = 3 ciclos.
 | M-12 | P3 | Forma y tope de `thresholds_by_category`, tope en `measurements.value`, enteros ≥ 0 en `package_by_category` (claves libres) (H-M11-01..03) | XS | M-11 | pgTAP por clave y por columna; verificación previa a producción |
 | M-13 | P3 | Tope 2^53 validado en front/motor antes de guardar (H-QA-M12-01) | XS | M-12 | Unitarias: umbral 1e20 y medición 2^53 rechazados con mensaje |
 | M-14 | P3 | Alinear el borde de los CHECK `_safe` con el redondeo de JS (H-ARQ-M13-01) | XS | M-13 | pgTAP: 9007199254740991.4 pasa, 9007199254740991.5 se rechaza, en cada columna y clave JSONB; verificación previa |
+| F-09 | P3 | Cerrar alertas CodeQL de pruebas de API de seguridad (code-scanning #14–#16) | XS | — | 0 alertas abiertas de CodeQL en main sin debilitar las pruebas |
 | M-11 | P3 | Tope de entero seguro en columnas numéricas configurables y en `package_by_category` (H-M10-01) | XS | M-10 | pgTAP con '1e400' por columna y por clave JSONB |
 | M-10 | P2 | Valores finitos en todas las columnas numéricas configurables (H-M09-01): CHECK o dominio `finite_numeric` en targets, commitments e indicators | XS | M-09 | pgTAP con 'NaN' e 'Infinity' por columna; verificación previa a producción |
 | M-09 | P2 | Endurecimiento de hallazgos bajos de M-07/M-08: grant UPDATE por columna (`target_value`) en `targets`; `cumulativeThirds` nunca supera el total; mediciones rechazan NaN, Infinity y enteros no seguros | XS | M-07, M-08 | pgTAP `has_column_privilege` y de valores no finitos; prueba unitaria de `cumulativeThirds(0.5)` |
@@ -148,6 +149,7 @@ El orquestador toma el **primer ítem `Pendiente`** cuyas dependencias estén `H
 | 26n | M-12 | Hecho | 0 | #37 | Residuales de M-11 (H-M11-01..03). Claves de `package_by_category` libres (categorías del indicador o `total`), no P0P1/P2P3 |
 | 26o | M-13 | Hecho | 0 | #38 | H-QA-M12-01: tope 2^53 en `engine/numeric.js`, usado por indicador, compromiso y mediciones |
 | 26p | M-14 | Hecho | 0 | #39 | H-ARQ-M13-01: CHECK `_safe` a abs(v) < 9007199254740991.5 para que BD y motor rechacen lo mismo (hoy [2^53 − 0,5, 2^53) pasa la BD y hace fallar la evaluación mensual) |
+| 26q | F-09 | Pendiente | 0 | | Alertas CodeQL abiertas en main (code-scanning #14, #15, #16, "File data in outbound network request", solo en pruebas): tests/security/api/numeric-safe-cap-m11.test.js:30, json-shape-m12.test.js:26, safe-cap-m14.test.js:24; origen: token cacheado por `readFileSync` en tests/security/api/_lib.js:144. Constructor: seguridad (validar el caché o no cachear tokens) |
 | 27 | C-05 | Bloqueado | 0 | | Espera Q-04 |
 | 28 | V-07 | Bloqueado | 0 | | Espera Q-02 |
 
