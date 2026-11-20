@@ -67,3 +67,5 @@ Ver la sección "CI del intento 2" al final del informe.
 - **H-V05-QA-04 (Info): sin cambios.** El criterio final queda pendiente del primer run manual.
 
 ## CI del intento 2
+
+Commit `9ca94c5` (pruebas del intento 2): CI `success` (https://github.com/apivasa/practica_agente/actions/runs/44665883486) y Seguridad `success` (https://github.com/apivasa/practica_agente/actions/runs/44665883409). El CI rojo en `c6db2bf` se esperaba: eran las 5 pruebas del intento 1 que dejó obsoletas el cambio pedido, ya actualizadas.
