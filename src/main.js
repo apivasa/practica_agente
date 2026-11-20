@@ -18,6 +18,7 @@ import { renderCommitments } from './views/custodian/commitments.js';
 import { renderMeasurements } from './views/custodian/measurements.js';
 import { renderCommitteeExceptions } from './views/committee/exceptions.js';
 import { renderCompleteness } from './views/kpi_manager/completeness.js';
+import { renderTargets } from './views/kpi_manager/targets.js';
 import { renderCommitteeHome } from './views/committee/home.js';
 import { renderLeaderHome } from './views/unit_leader/home.js';
 
@@ -71,6 +72,7 @@ const VIEWS = Object.freeze({
   unit_leader: (ctx) => renderLeaderHome(ctx),
   'kpi-indicators': (ctx) => renderIndicators(ctx),
   'kpi-completeness': (ctx) => renderCompleteness(ctx),
+  'kpi-targets': (ctx) => renderTargets(ctx),
   'custodian-commitments': (ctx) => renderCommitments(ctx),
   'custodian-measurements': (ctx) => renderMeasurements(ctx),
   'committee-exceptions': (ctx) => renderCommitteeExceptions(ctx),
