@@ -200,6 +200,8 @@ jobs:
           SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
           SUPABASE_PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
         run: supabase link --project-ref "$SUPABASE_PROJECT_REF"
+      # CLI 3.x: sin --remote el destino por defecto es el stack local
+      # (127.0.0.1:54322). La contraseña llega por env SUPABASE_DB_PASSWORD.
       # H-F03-07: nunca la opción de incluir la semilla. Sin --debug: podría
       # volcar la cadena de conexión.
       - name: Migraciones pendientes (dry-run)
@@ -211,7 +213,7 @@ jobs:
           echo "Migraciones en el repositorio:"
           ls -1 supabase/migrations
           echo "Migraciones que se aplicarán:"
-          supabase db push --dry-run
+          supabase db push --remote --dry-run
 
   migrate:
     name: migraciones (Supabase)
@@ -245,18 +247,18 @@ jobs:
         run: |
           set -euo pipefail
           echo "Migraciones que se aplicarán:"
-          supabase db push --dry-run
+          supabase db push --remote --dry-run
       - name: Aplicar migraciones
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
           SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
-        run: supabase db push
+        run: supabase db push --remote
       # Evidencia en el log de las migraciones aplicadas (criterio de V-05).
       - name: Migraciones aplicadas
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
           SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
-        run: supabase migration list
+        run: supabase migration list --remote
 
   deploy-pages:
     name: publicar en Pages
