@@ -3,6 +3,8 @@ name: Seguridad
 # Pipeline de seguridad (S-01): secretos, SAST, dependencias, CodeQL y pruebas
 # de seguridad propias. Corre en cada PR, en push a main y a ramas de trabajo
 # (validación antes del PR, igual que ci.yml), y una vez por semana.
+# S-05 añade el pentest previo a producción: fase A (local, en cada ejecución)
+# y fase B (manual con fase_b != no, contra producción, no destructiva).
 on:
   pull_request:
   push:
@@ -10,6 +12,14 @@ on:
   schedule:
     - cron: '17 6 * * 1' # lunes 06:17 UTC
   workflow_dispatch:
+    inputs:
+      fase_b:
+        # S-05 fase B: solo tras el primer despliegue (V-05) y desde main.
+        description: 'S-05 fase B contra producción (Pages + Supabase real): no | anonimo | roles'
+        required: false
+        default: 'no'
+        type: choice
+        options: ['no', 'anonimo', 'roles']
 
 permissions:
   contents: read
@@ -300,3 +310,222 @@ jobs:
       - name: Detener Supabase
         if: always()
         run: supabase stop --no-backup
+
+  # S-05 fase A: pentest previo a producción contra un build de PRODUCCIÓN
+  # (vite build + vite preview) conectado a Supabase local con las migraciones de
+  # la rama y la semilla. Dos escaneos ZAP activos, solo contra 127.0.0.1 del
+  # runner: full scan del front (con AJAX spider) y API scan de PostgREST con la
+  # sesión de la gestora (la de más superficie de escritura). El pentest por rol
+  # de la API (tests/security/api/preprod-s05.test.js) corre en pentest-api.
+  s05-fase-a:
+    name: S-05 fase A (ZAP full scan + API scan, local)
+    if: github.event_name != 'workflow_dispatch' || inputs.fase_b == 'no'
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      ZAP_IMAGE: zaproxy/zap-stable@sha256:9624669db72f54d86c4b46a7064518bd9bf79d8c61a4c31befa9923489f328af
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+      - name: Instalar sin scripts
+        run: |
+          npm ci --ignore-scripts
+          npm rebuild esbuild
+      - uses: supabase/setup-cli@689adcfb80d947100a1eab127289b97d1fb07b13 # v3.2.0
+        with:
+          version: 3.2.0
+      - name: Levantar Supabase local (migraciones + seed)
+        run: supabase start -x studio,imgproxy,realtime,storage-api,edge-runtime,logflare,vector
+      - name: Exportar URL y clave publicable para el build
+        run: |
+          set -euo pipefail
+          supabase status -o env > "$RUNNER_TEMP/sb.env"
+          get() { grep -E "^$1=" "$RUNNER_TEMP/sb.env" | head -n1 | cut -d= -f2- | tr -d '"'; }
+          url="$(get API_URL)"
+          key="$(get PUBLISHABLE_KEY)"
+          rm -f "$RUNNER_TEMP/sb.env"
+          case "$key" in sb_publishable_*) ;; *) echo "::error::sin clave sb_publishable_"; exit 1 ;; esac
+          case "$url" in http://127.0.0.1:*) ;; *) echo "::error::la fase A solo corre contra Supabase local"; exit 1 ;; esac
+          echo "VITE_SUPABASE_URL=$url" >> "$GITHUB_ENV"
+          echo "VITE_SUPABASE_PUBLISHABLE_KEY=$key" >> "$GITHUB_ENV"
+      - name: Evaluar la semilla (candados y alertas reales en la BD)
+        run: bash scripts/ci/seed-evaluations.sh
+      - name: Build de producción y servidor de vista previa
+        run: |
+          set -euo pipefail
+          npm run build
+          nohup npx vite preview --host 127.0.0.1 --port 4173 --strictPort > "$RUNNER_TEMP/preview.log" 2>&1 &
+          for _ in $(seq 1 30); do
+            curl -sf http://127.0.0.1:4173/practica_agente/ > /dev/null && exit 0
+            sleep 1
+          done
+          cat "$RUNNER_TEMP/preview.log"; exit 1
+      - name: Preparar ZAP
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/zap"
+          cp .zap/rules.tsv "$RUNNER_TEMP/zap/rules.tsv"
+          chmod -R 777 "$RUNNER_TEMP/zap"
+          docker pull -q "$ZAP_IMAGE"
+          docker image inspect --format 'Imagen ZAP: {{index .RepoDigests 0}}' "$ZAP_IMAGE"
+      - name: ZAP full scan del front (activo, local)
+        run: |
+          set -euo pipefail
+          status=0
+          docker run --rm --network host -v "$RUNNER_TEMP/zap:/zap/wrk:rw" "$ZAP_IMAGE" \
+            zap-full-scan.py -t http://127.0.0.1:4173/practica_agente/ -j -m 2 \
+            -c rules.tsv -J front-full.json -r front-full.html -I \
+            -z "-config scanner.maxScanDurationInMins=15 -config scanner.maxRuleDurationInMins=3" || status=$?
+          echo "zap-full-scan.py terminó con código ${status}"
+          [ "$status" -eq 0 ]
+      # OpenAPI de PostgREST con todas las tablas (clave secreta LOCAL, solo en
+      # este paso) reescrito para apuntar al gateway local. La sesión de la
+      # gestora (seed, contraseña local pública) llega a ZAP por --env-file
+      # (ZAP_AUTH_HEADER_VALUE), no por la línea de comandos.
+      - name: Especificación OpenAPI y sesión de la gestora (locales)
+        run: |
+          set -euo pipefail
+          supabase status -o env > "$RUNNER_TEMP/sb.env"
+          get() { grep -E "^$1=" "$RUNNER_TEMP/sb.env" | head -n1 | cut -d= -f2- | tr -d '"'; }
+          secret="$(get SECRET_KEY)"
+          rm -f "$RUNNER_TEMP/sb.env"
+          echo "::add-mask::${secret}"
+          curl -sSf -H "apikey: ${secret}" -H 'Accept: application/openapi+json' \
+            "${VITE_SUPABASE_URL}/rest/v1/" \
+            | jq '.host = "127.0.0.1:54321" | .basePath = "/rest/v1" | .schemes = ["http"]' \
+            > "$RUNNER_TEMP/zap/openapi.json"
+          chmod 644 "$RUNNER_TEMP/zap/openapi.json"
+          jq -r '.paths | keys[]' "$RUNNER_TEMP/zap/openapi.json"
+          token="$(curl -sSf -H "apikey: ${VITE_SUPABASE_PUBLISHABLE_KEY}" -H 'Content-Type: application/json' \
+            -d '{"email":"gestora@example.test","password":"Local-Only-Pass-2026"}' \
+            "${VITE_SUPABASE_URL}/auth/v1/token?grant_type=password" | jq -r .access_token)"
+          if [ -z "$token" ] || [ "$token" = null ]; then echo "::error::login de la gestora local falló"; exit 1; fi
+          echo "::add-mask::${token}"
+          umask 077
+          printf 'ZAP_AUTH_HEADER_VALUE=Bearer %s\nZAP_AUTH_HEADER=Authorization\nZAP_AUTH_HEADER_SITE=127.0.0.1\n' "$token" > "$RUNNER_TEMP/zap-auth.env"
+      - name: ZAP API scan de PostgREST (activo, local, sesión de gestora)
+        run: |
+          set -euo pipefail
+          status=0
+          docker run --rm --network host --env-file "$RUNNER_TEMP/zap-auth.env" \
+            -v "$RUNNER_TEMP/zap:/zap/wrk:rw" "$ZAP_IMAGE" \
+            zap-api-scan.py -t /zap/wrk/openapi.json -f openapi \
+            -J api-scan.json -r api-scan.html -I \
+            -z "-config replacer.full_list(0).description=apikey -config replacer.full_list(0).enabled=true -config replacer.full_list(0).matchtype=REQ_HEADER -config replacer.full_list(0).matchstr=apikey -config replacer.full_list(0).regex=false -config replacer.full_list(0).replacement=${VITE_SUPABASE_PUBLISHABLE_KEY} -config scanner.maxScanDurationInMins=20 -config scanner.maxRuleDurationInMins=3" || status=$?
+          rm -f "$RUNNER_TEMP/zap-auth.env"
+          echo "zap-api-scan.py terminó con código ${status}"
+          [ "$status" -eq 0 ]
+      - name: Sin alertas de riesgo alto (front y API)
+        if: always()
+        run: |
+          set -euo pipefail
+          fail=0
+          for name in front-full api-scan; do
+            report="$RUNNER_TEMP/zap/${name}.json"
+            if [ ! -f "$report" ]; then echo "::error::ZAP no generó ${name}.json"; fail=1; continue; fi
+            echo "== ${name}"
+            jq -r '.site[].alerts[] | "\(.riskdesc)\t\(.pluginid)\t\(.alert)\t\(.count)"' "$report" | sort -r
+            high=$(jq '[.site[].alerts[] | select((.riskcode | tonumber) >= 3)] | length' "$report")
+            [ "$high" -eq 0 ] || { echo "::error::${name}: ${high} alertas de riesgo alto"; fail=1; }
+          done
+          [ "$fail" -eq 0 ]
+      - name: Guardar informes de ZAP
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: s05-fase-a-zap
+          path: |
+            ${{ runner.temp }}/zap/front-full.json
+            ${{ runner.temp }}/zap/front-full.html
+            ${{ runner.temp }}/zap/api-scan.json
+            ${{ runner.temp }}/zap/api-scan.html
+          if-no-files-found: ignore
+          retention-days: 30
+      - name: Detener Supabase
+        if: always()
+        run: supabase stop --no-backup
+
+  # S-05 fase B: contra PRODUCCIÓN (Pages del repo y el proyecto Supabase del
+  # repo). Solo a mano, tras el primer despliegue y desde main (environment
+  # produccion). No destructiva: sin clave secreta (la URL y la clave publicable
+  # se sacan del front publicado), lecturas y sondas que la BD debe rechazar,
+  # ZAP full scan con 1 hilo, retardo y duración acotada, sin AJAX spider ni
+  # escaneo activo de la API de producción.
+  s05-fase-b:
+    name: S-05 fase B (producción, no destructiva)
+    if: github.event_name == 'workflow_dispatch' && inputs.fase_b != 'no'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    environment: produccion
+    permissions:
+      contents: read
+    env:
+      ZAP_IMAGE: zaproxy/zap-stable@sha256:9624669db72f54d86c4b46a7064518bd9bf79d8c61a4c31befa9923489f328af
+      S05_PAGES_URL: https://apivasa.github.io/practica_agente/
+      S05_PROJECT_REF: oehtspdtpwdhfhhhkgao
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+      - name: Solo desde main
+        run: |
+          set -euo pipefail
+          if [ "${GITHUB_REF}" != "refs/heads/main" ]; then echo "::error::la fase B solo corre desde main (${GITHUB_REF})"; exit 1; fi
+      - name: Configuración del repositorio (informativo)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -uo pipefail
+          env_json="$(gh api "repos/${GITHUB_REPOSITORY}/environments/produccion" 2>/dev/null)"
+          policy="$(printf '%s' "${env_json:-null}" | jq -c '.deployment_branch_policy // null' 2>/dev/null)"
+          echo "environment produccion · deployment_branch_policy: ${policy:-desconocido}"
+          if [ "${policy:-null}" = "null" ]; then echo "::warning::environment produccion sin regla de ramas (H-C03-02)"; fi
+          gh api "repos/${GITHUB_REPOSITORY}" --jq '.security_and_analysis' 2>/dev/null
+          exit 0
+      - name: Pentest no destructivo (front publicado, Auth y API)
+        env:
+          S05_REQUIRE: '1'
+          S05_MODE: ${{ inputs.fase_b }}
+          S05_TEST_USERS: ${{ secrets.S05_TEST_USERS }}
+        run: node --test tests/security/prod/fase-b.test.js
+      - name: ZAP full scan de Pages (1 hilo, con retardo, duración acotada)
+        if: always()
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/zap"
+          cp .zap/rules.tsv "$RUNNER_TEMP/zap/rules.tsv"
+          chmod -R 777 "$RUNNER_TEMP/zap"
+          docker pull -q "$ZAP_IMAGE"
+          status=0
+          docker run --rm -v "$RUNNER_TEMP/zap:/zap/wrk:rw" "$ZAP_IMAGE" \
+            zap-full-scan.py -t https://apivasa.github.io/practica_agente/ -m 1 \
+            -c rules.tsv -J pages-full.json -r pages-full.html -I \
+            -z "-config scanner.threadPerHost=1 -config scanner.delayInMs=300 -config scanner.maxScanDurationInMins=15 -config scanner.maxRuleDurationInMins=2" || status=$?
+          echo "zap-full-scan.py terminó con código ${status}"
+          [ "$status" -eq 0 ]
+      - name: Sin alertas de riesgo alto (Pages)
+        if: always()
+        run: |
+          set -euo pipefail
+          report="$RUNNER_TEMP/zap/pages-full.json"
+          [ -f "$report" ] || { echo "::error::ZAP no generó informe"; exit 1; }
+          jq -r '.site[].alerts[] | "\(.riskdesc)\t\(.pluginid)\t\(.alert)\t\(.count)"' "$report" | sort -r
+          high=$(jq '[.site[].alerts[] | select((.riskcode | tonumber) >= 3)] | length' "$report")
+          [ "$high" -eq 0 ] || { echo "::error::ZAP reporta ${high} alertas de riesgo alto en Pages"; exit 1; }
+      - name: Guardar informes
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: s05-fase-b-zap
+          path: |
+            ${{ runner.temp }}/zap/pages-full.json
+            ${{ runner.temp }}/zap/pages-full.html
+          if-no-files-found: ignore
+          retention-days: 90
