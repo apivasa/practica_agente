@@ -7,8 +7,10 @@ import { packageStatus, categoryMonthColor } from './vulnerabilities.js';
 
 /** Número finito o null (PostgREST devuelve numeric como número; se tolera texto). */
 export const num = (v) => {
-  if (v === null || v === undefined || v === '') return null;
-  const n = typeof v === 'number' ? v : Number(v);
+  let n;
+  if (typeof v === 'number') n = v;
+  else if (typeof v === 'string' && v.trim() !== '') n = Number(v);
+  else return null; // null, undefined, '', '  ', arreglos, booleanos u objetos (H-M06-02)
   return Number.isFinite(n) ? n : null;
 };
 
@@ -84,6 +86,12 @@ export function buildPackageInput({ indicator, commitment, measurements, asOf })
   if (!pkg || typeof pkg !== 'object') {
     return { ok: false, reason: `Sin paquete por criticidad (package_by_category) para ${quarter}` };
   }
+  // H-M06-02: una clave presente con valor no numérico ([], false, ' ') no se toma como 0.
+  for (const k of ['P0P1', 'P2P3']) {
+    if (Object.hasOwn(pkg, k) && pkg[k] !== null && num(pkg[k]) === null) {
+      return { ok: false, reason: `Paquete por criticidad inválido para ${quarter}: ${k} no es un número` };
+    }
+  }
   const rows = measurements.filter((r) => r.measured_on >= start && r.measured_on <= asOf && r.measured_on <= end);
   const newCritical = rows
     .filter((r) => r.kind === 'detected' && r.category === 'P0P1')
@@ -107,6 +115,36 @@ export function buildPackageInput({ indicator, commitment, measurements, asOf })
       thresholds,
     },
   };
+}
+
+const CATEGORY_KEYS = Object.freeze(['P0P1', 'P2P3']);
+
+/**
+ * H-M06-01: separa las mediciones que el cálculo por criticidad no puede usar: resueltas con
+ * categoría distinta de P0P1/P2P3 o valor no entero >= 0, y detectadas P0/P1 con valor no
+ * entero >= 0. Solo cuenta como descartadas las del trimestre hasta asOf (las demás ya las
+ * ignora buildPackageInput). Las resueltas sin valor se siguen ignorando sin contarlas.
+ * @param {any[]} measurements
+ * @param {string} asOf
+ */
+function splitMalformed(measurements, asOf) {
+  const { start, end } = quarterBounds(asOf.slice(0, 7));
+  const kept = [];
+  let discarded = 0;
+  for (const r of measurements) {
+    const inScope = r.measured_on >= start && r.measured_on <= asOf && r.measured_on <= end;
+    const n = num(r.value);
+    const okCount = Number.isSafeInteger(n) && n >= 0;
+    let bad = false;
+    if (r.kind === 'detected') bad = r.category === 'P0P1' && !okCount;
+    else if (isResolved(r) && r.value !== null && r.value !== undefined) {
+      bad = !CATEGORY_KEYS.includes(r.category) || !okCount;
+    }
+    if (bad) {
+      if (inScope) discarded += 1;
+    } else kept.push(r);
+  }
+  return { kept, discarded };
 }
 
 /**
@@ -134,7 +172,10 @@ export function hasCategoryEvaluation(indicator) {
 export function evaluateCategoryMonth({ indicator, commitment, measurements, month }) {
   const asOf = monthEnd(month);
   const notEvaluated = (reason) => ({ color: 'not_evaluated', value: null, sampleSize: 0, reason, month, byCategory: {} });
-  const built = buildPackageInput({ indicator, commitment, measurements, asOf });
+  // H-M06-01: una fila malformada (cargada por API) se descarta sola y se cuenta en el motivo;
+  // no anula el mes (un "sin evaluar" reiniciaría la racha de escalada).
+  const { kept, discarded } = splitMalformed(measurements ?? [], asOf);
+  const built = buildPackageInput({ indicator, commitment, measurements: kept, asOf });
   if (!built.ok) return notEvaluated(built.reason);
   const pkg = commitment.package_by_category;
   const packageCategories = Object.keys(pkg).filter((k) => num(pkg[k]) !== null);
@@ -144,7 +185,10 @@ export function evaluateCategoryMonth({ indicator, commitment, measurements, mon
   try {
     const status = packageStatus(built.input);
     const { cfg } = indicatorConfig(indicator, commitment);
-    return categoryMonthColor(cfg, status, { packageCategories, sampleSizes });
+    const r = categoryMonthColor(cfg, status, { packageCategories, sampleSizes });
+    if (discarded === 0) return r;
+    const note = `${discarded} medición(es) descartada(s) por categoría o valor inválido`;
+    return { ...r, reason: `${r.reason}; ${note}`, discarded };
   } catch (err) {
     return notEvaluated(`No se pudo calcular el cumplimiento por criticidad: ${err.message}`);
   }

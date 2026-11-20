@@ -203,9 +203,11 @@ export function leaderIndicatorRows({ unitId, indicators, evaluations, targets, 
     const target = (targets ?? []).find((t) => t.unit_id === unitId && t.indicator_id === indicator.id && t.month === month);
     const commitment = pickCommitment(commitments ?? [], unitId, indicator.id, month);
     const rows = (measurements ?? []).filter((m) => m.unit_id === unitId && m.indicator_id === indicator.id);
+    // Paquete, ritmo y meta por criticidad salen del compromiso trimestral, igual que en las
+    // Actions (M-06, A1); el compromiso mensual solo aporta umbrales.
+    const pkg = quarterCommitment(commitments ?? [], unitId, indicator.id, month);
     let goal;
     if (hasCategoryEvaluation(indicator)) {
-      const pkg = quarterCommitment(commitments ?? [], unitId, indicator.id, month);
       goal = categoryGoal({ indicator, commitment: pkg, measurements: rows, month });
     } else if (indicator.measurement_type === 'cumulative_target') {
       goal = target ? `Meta acumulada de ${month}: ${formatNumber(target.target_value)}` : `Sin meta mensual para ${month}`;
@@ -218,7 +220,7 @@ export function leaderIndicatorRows({ unitId, indicators, evaluations, targets, 
       value: ev?.value ?? null,
       reason: ev?.reason ?? 'Sin evaluación para este mes',
       goal,
-      pace: packagePace({ indicator, commitment, measurements: rows, asOf }),
+      pace: packagePace({ indicator, commitment: pkg, measurements: rows, asOf }),
     };
   });
 }

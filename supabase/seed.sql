@@ -147,7 +147,7 @@ where c.period = '2027-Q1';
 --          febrero P0/P1 1050/1134 = 92,6 % (amarillo), P2/P3 350/334 → amarillo
 --   Beta   enero  P0/P1 300/334 = 89,8 % → rojo
 --   Gamma  enero  P0/P1 280/200, P2/P3 80/100 = 80 % (amarillo) → amarillo
---          febrero P0/P1 280/400 = 70 % → rojo
+--          febrero P0/P1 280/400 = 70 % y P2/P3 80/200 = 40 %: los dos rojos → rojo (valor 40)
 insert into public.measurements (unit_id, indicator_id, measured_on, value, category, kind, source, created_by) values
   ('22222222-2222-4222-8222-000000000001', '33333333-3333-4333-8333-000000000001', '2027-01-31', 500, 'P0P1', 'resolved', 'manual', '11111111-1111-4111-8111-000000000002'),
   ('22222222-2222-4222-8222-000000000001', '33333333-3333-4333-8333-000000000001', '2027-01-31', 250, 'P2P3', 'resolved', 'manual', '11111111-1111-4111-8111-000000000002'),

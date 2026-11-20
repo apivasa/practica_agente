@@ -178,8 +178,9 @@ describe('evaluateCategoryMonth (filas de la BD)', () => {
       indicator: VULN, commitment: PKG, month: '2027-01',
       measurements: [{ measured_on: '2027-01-02', value: 1, category: null, kind: 'resolved' }],
     });
-    assert.equal(bad.color, 'not_evaluated');
-    assert.match(bad.reason, /No se pudo calcular/);
+    // H-M06-01: la fila sin categoría se descarta; el mes se evalúa con lo demás (0 resueltas → rojo).
+    assert.equal(bad.color, 'red');
+    assert.match(bad.reason, /1 medición\(es\) descartada\(s\)/);
   });
 
   test('quarterCommitment ignora el compromiso mensual', () => {

@@ -295,9 +295,8 @@ export async function runDaily(db, { asOf, log = () => {} }) {
 
   for (const unit of units) {
     for (const ind of indicators) {
-      const commitment = commitments.find(
-        (c) => c.unit_id === unit.id && c.indicator_id === ind.id && c.period === quarter,
-      );
+      // Mismo compromiso que la vista del líder y la mensual (M-06, A1): el trimestral.
+      const commitment = quarterCommitment(commitments, unit.id, ind.id, asOf.slice(0, 7));
       if (!commitment) continue;
       try {
         const built = buildPackageInput({
