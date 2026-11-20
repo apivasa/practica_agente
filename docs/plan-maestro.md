@@ -138,8 +138,8 @@ El orquestador toma el **primer ítem `Pendiente`** cuyas dependencias estén `H
 | 26i | M-08 | Hecho | 0 | #32 | Validación en BD de mediciones VULN (trigger), rechazo cumulative_target + lower_is_better, descarte compartido en buildPackageInput |
 | 26j | F-08 | Hecho | 0 | #29 | Alertas CodeQL abiertas en main (4 altas, solo en pruebas: URL por subcadena en tests/scripts/health.test.js:150,256 y qa-v04.test.js:193,213) fusionadas con #22; constructor: tester. Regla nueva: no fusionar con el check CodeQL en rojo |
 | 26h | F-07 | Hecho | 1 | #30 | CI: reintento acotado de `supabase start` por puertos 54322/54324 ocupados (intermitente) |
-| 26k | M-09 | En revisión | 0 | #34 | Endurecimiento bajo: UPDATE de `targets` solo en `target_value` (H-M07-01); `cumulativeThirds` acotado al total o CHECK entero en `package_total` (H-M07-QA-01); rechazo de NaN/Infinity y enteros > 2^53 en mediciones (H-M08-01, obs. QA M-08); quitar en docs/operacion.md la instrucción de relanzar pentest-api a mano |
-| 26l | M-10 | Pendiente | 0 | | H-M09-01: CHECK de valor finito (sin NaN/Infinity) en `targets.target_value`, `commitments.package_total`, `green_override`, `yellow_override` y umbrales de `indicators`; pgTAP |
+| 26k | M-09 | Hecho | 0 | #34 | Endurecimiento bajo: UPDATE de `targets` solo en `target_value` (H-M07-01); `cumulativeThirds` acotado al total o CHECK entero en `package_total` (H-M07-QA-01); rechazo de NaN/Infinity y enteros > 2^53 en mediciones (H-M08-01, obs. QA M-08); quitar en docs/operacion.md la instrucción de relanzar pentest-api a mano |
+| 26l | M-10 | En curso | 0 | | H-M09-01: CHECK de valor finito (sin NaN/Infinity) en `targets.target_value`, `commitments.package_total`, `green_override`, `yellow_override` y umbrales de `indicators`; pgTAP |
 | 27 | C-05 | Bloqueado | 0 | | Espera Q-04 |
 | 28 | V-07 | Bloqueado | 0 | | Espera Q-02 |
 
