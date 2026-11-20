@@ -147,7 +147,7 @@ El orquestador toma el **primer ítem `Pendiente`** cuyas dependencias estén `H
 | 26m | M-11 | Hecho | 0 | #36 | H-M10-01: tope < 2^53 en los CHECK numéricos de M-10 y CHECK de valores en `commitments.package_by_category` (JSON.parse vuelve Infinity valores como 1e400) |
 | 26n | M-12 | Hecho | 0 | #37 | Residuales de M-11 (H-M11-01..03). Claves de `package_by_category` libres (categorías del indicador o `total`), no P0P1/P2P3 |
 | 26o | M-13 | Hecho | 0 | #38 | H-QA-M12-01: tope 2^53 en `engine/numeric.js`, usado por indicador, compromiso y mediciones |
-| 26p | M-14 | En curso | 0 | | H-ARQ-M13-01: CHECK `_safe` a abs(v) < 9007199254740991.5 para que BD y motor rechacen lo mismo (hoy [2^53 − 0,5, 2^53) pasa la BD y hace fallar la evaluación mensual) |
+| 26p | M-14 | Hecho | 0 | #39 | H-ARQ-M13-01: CHECK `_safe` a abs(v) < 9007199254740991.5 para que BD y motor rechacen lo mismo (hoy [2^53 − 0,5, 2^53) pasa la BD y hace fallar la evaluación mensual) |
 | 27 | C-05 | Bloqueado | 0 | | Espera Q-04 |
 | 28 | V-07 | Bloqueado | 0 | | Espera Q-02 |
 
