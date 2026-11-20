@@ -35,13 +35,15 @@ Los tres quedan en `docs/seguridad/hallazgos.md` (sección M-06) y se proponen c
 
 ## Runs
 
-Seguridad sobre `0073b84`: https://github.com/apivasa/practica_agente/actions/runs/44674038234
-- gitleaks (historial completo): verde
-- semgrep (JS, secretos, Actions, SQL): verde
-- npm audit (producción): verde
-- CodeQL (javascript-typescript y actions): verde
-- pentest API (PostgREST/Auth, Supabase local): verde
-- pruebas de seguridad (`tests/security`): verde
-- DAST (e2e de seguridad + ZAP baseline): en curso cuando se escribió el informe
+Pipeline de seguridad sobre `41e7e51`: https://github.com/apivasa/practica_agente/actions/runs/44674396828. Todos los jobs en verde:
+- gitleaks (historial completo)
+- semgrep (JS, secretos, Actions, SQL)
+- npm audit (producción)
+- CodeQL (javascript-typescript y actions)
+- pentest API (PostgREST/Auth, Supabase local)
+- pruebas de seguridad (`tests/security`)
+- DAST (e2e de seguridad + ZAP baseline)
 
-CI sobre `0073b84` (https://github.com/apivasa/practica_agente/actions/runs/44674038192): pgTAP verde, integración verde. El build falló por un error de lint en esta misma prueba: el literal `1e400` dispara `no-loss-of-precision`. Lo corrige el commit siguiente, que lo cambia por `Infinity`, y eso no altera lo que se prueba.
+CI sobre `41e7e51`, en verde: https://github.com/apivasa/practica_agente/actions/runs/44674396907
+
+Antes, el CI sobre `0073b84` falló por un error de lint en esta misma prueba: el literal `1e400` disparaba `no-loss-of-precision`. Lo corrigió `41e7e51`, que lo cambia por `Infinity` sin alterar lo que se prueba.
