@@ -200,8 +200,9 @@ test('V-01: líder con varias unidades — cada unidad muestra solo sus datos', 
   const common = { indicators: [VULN], evaluations, targets, commitments, measurements, month: '2027-02', today: '2027-02-15' };
   const [a] = leaderIndicatorRows({ unitId: A, ...common });
   const [b] = leaderIndicatorRows({ unitId: B, ...common });
-  assert.deepEqual([a.color, a.value, a.goal], ['yellow', 10, 'Meta acumulada de 2027-02: 100']);
-  assert.deepEqual([b.color, b.value, b.goal], ['red', 99, 'Meta acumulada de 2027-02: 777']);
+  assert.deepEqual([a.color, a.value, a.goal], ['yellow', 10, 'Meta acumulada de 2027-02: P0/P1 200 · P2/P3 0']);
+  // M-06: la meta sale del paquete de cada unidad (B: 900 → 2/3 = 600), no de targets ni de la otra unidad.
+  assert.deepEqual([b.color, b.value, b.goal], ['red', 99, 'Meta acumulada de 2027-02: P0/P1 600 · P2/P3 0']);
   assert.equal(a.pace.resolved, 20);
   assert.equal(a.pace.effectiveTotal, 300);
   assert.equal(b.pace.resolved, 500);
