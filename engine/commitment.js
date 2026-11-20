@@ -1,6 +1,7 @@
 // Compromisos por unidad, indicador y periodo (M-03): validación y umbrales
 // efectivos (override negociado sobre el umbral general). Funciones puras.
 import { DIRECTIONS } from './indicator.js';
+import { isSafeMagnitude, SAFE_ABS_LIMIT_TEXT } from './numeric.js';
 
 /** Periodo trimestral (YYYY-Qn) o mensual (YYYY-MM). Mismo patrón que la BD. */
 export const PERIOD_RE = /^[0-9]{4}-(Q[1-4]|0[1-9]|1[0-2])$/;
@@ -65,7 +66,14 @@ export function validateCommitment(indicator, commitment) {
   } else if (present(green)) {
     if (!isFiniteNumber(green)) errors.push('Umbral verde negociado: debe ser un número');
     if (!isFiniteNumber(yellow)) errors.push('Umbral amarillo negociado: debe ser un número');
-    if (isFiniteNumber(green) && isFiniteNumber(yellow) && DIRECTIONS.includes(direction)
+    // M-13: mismo tope que la BD (|v| < 2^53).
+    if (isFiniteNumber(green) && !isSafeMagnitude(green)) {
+      errors.push(`Umbral verde negociado: fuera de rango, debe ser ${SAFE_ABS_LIMIT_TEXT}`);
+    }
+    if (isFiniteNumber(yellow) && !isSafeMagnitude(yellow)) {
+      errors.push(`Umbral amarillo negociado: fuera de rango, debe ser ${SAFE_ABS_LIMIT_TEXT}`);
+    }
+    if (isSafeMagnitude(green) && isSafeMagnitude(yellow) && DIRECTIONS.includes(direction)
       && !coherent(direction, green, yellow)) {
       errors.push(direction === 'higher_is_better'
         ? 'Umbral negociado: con "más es mejor" el verde debe ser mayor o igual que el amarillo'
@@ -80,12 +88,22 @@ export function validateCommitment(indicator, commitment) {
     } else if (!isPlainObject(pkg)) {
       errors.push('Paquete por categoría: debe ser un objeto { categoría: cantidad }');
     } else {
+      let allValid = true;
       for (const [cat, n] of Object.entries(pkg)) {
         if (cat === '__proto__' || !cat.trim()) {
           errors.push('Paquete por categoría: nombre de categoría inválido');
+          allValid = false;
         } else if (!(Number.isInteger(n) && n >= 0)) {
           errors.push(`Paquete de ${cat}: debe ser un entero mayor o igual que 0`);
+          allValid = false;
+        } else if (!isSafeMagnitude(n)) {
+          errors.push(`Paquete de ${cat}: fuera de rango, debe ser ${SAFE_ABS_LIMIT_TEXT}`);
+          allValid = false;
         }
+      }
+      // M-13: package_total (la suma) también tiene el tope de la BD.
+      if (allValid && !isSafeMagnitude(packageTotal(pkg) ?? 0)) {
+        errors.push(`Paquete total: fuera de rango, la suma debe ser ${SAFE_ABS_LIMIT_TEXT}`);
       }
     }
   }

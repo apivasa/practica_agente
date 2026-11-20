@@ -11,6 +11,7 @@
 // fecha); el motor suma las mediciones de la ventana.
 import { MEASUREMENT_TYPES } from './indicator.js';
 import { parseDay } from './measure.js';
+import { isSafeMagnitude, SAFE_ABS_LIMIT_TEXT } from './numeric.js';
 
 export const CSV_MAX_BYTES = 1024 * 1024;
 export const CSV_MAX_ROWS = 5000;
@@ -184,8 +185,10 @@ export function validateMeasurementInput(indicator, fields, ctx = {}) {
       else if (!integer && !NUMBER_RE.test(raw.valor)) err('valor', `valor: "${raw.valor}" debe ser un número mayor o igual que 0`);
       else {
         const n = Number(raw.valor.replace(',', '.'));
-        if (!Number.isFinite(n) || (integer && !Number.isSafeInteger(n))) err('valor', 'valor: fuera de rango');
-        else row.value = n;
+        // M-13: mismo tope que la BD (|v| < 2^53) para todas las mediciones.
+        if (!isSafeMagnitude(n) || (integer && !Number.isSafeInteger(n))) {
+          err('valor', `valor: fuera de rango, debe ser ${SAFE_ABS_LIMIT_TEXT}`);
+        } else row.value = n;
       }
     }
   }

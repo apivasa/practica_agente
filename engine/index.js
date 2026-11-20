@@ -8,6 +8,7 @@ export {
   SOURCES,
   DEFAULTS,
 } from './indicator.js';
+export { SAFE_ABS_LIMIT, SAFE_ABS_LIMIT_TEXT, isSafeMagnitude } from './numeric.js';
 export { measure, parseDay, REASON_MISSING_TARGET, REASON_OUT_OF_RANGE } from './measure.js';
 export { evaluateColor, tolerance } from './color.js';
 export * from './escalation.js';
