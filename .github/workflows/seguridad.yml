@@ -171,8 +171,7 @@ jobs:
           # Misma versión fija que ci.yml (H-002).
           version: 3.2.0
       - name: Levantar Supabase local (migraciones + seed)
-        # Reintento acotado ante puerto ocupado; falla con código ≠ 0 al agotarlo (F-07).
-        run: bash scripts/ci/supabase-start.sh supabase start -x studio,imgproxy,realtime,storage-api,edge-runtime,logflare,vector
+        run: supabase start -x studio,imgproxy,realtime,storage-api,edge-runtime,logflare,vector
       # Las claves locales las genera la CLI para este runner efímero. Se pasan
       # por un archivo (no por GITHUB_ENV) para que no aparezcan en la cabecera
       # de env de los pasos siguientes; solo se imprimen los nombres.
@@ -231,8 +230,7 @@ jobs:
         with:
           version: 3.2.0
       - name: Levantar Supabase local (migraciones + seed)
-        # Reintento acotado ante puerto ocupado; falla con código ≠ 0 al agotarlo (F-07).
-        run: bash scripts/ci/supabase-start.sh supabase start -x studio,imgproxy,realtime,storage-api,edge-runtime,logflare,vector
+        run: supabase start -x studio,imgproxy,realtime,storage-api,edge-runtime,logflare,vector
       - name: Exportar URL y clave publicable para el build
         # Solo la clave publicable llega al front; nunca la secreta.
         run: |
@@ -342,8 +340,7 @@ jobs:
         with:
           version: 3.2.0
       - name: Levantar Supabase local (migraciones + seed)
-        # Reintento acotado ante puerto ocupado; falla con código ≠ 0 al agotarlo (F-07).
-        run: bash scripts/ci/supabase-start.sh supabase start -x studio,imgproxy,realtime,storage-api,edge-runtime,logflare,vector
+        run: supabase start -x studio,imgproxy,realtime,storage-api,edge-runtime,logflare,vector
       - name: Exportar URL y clave publicable para el build
         run: |
           set -euo pipefail
