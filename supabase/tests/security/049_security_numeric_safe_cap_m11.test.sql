@@ -42,9 +42,6 @@ select is_empty(
              or has_column_privilege('authenticated', format('public.%I', c.table_name), c.column_name, 'UPDATE')
              or has_column_privilege('anon', format('public.%I', c.table_name), c.column_name, 'INSERT')
              or has_column_privilege('anon', format('public.%I', c.table_name), c.column_name, 'UPDATE'))
-        -- Residual documentado H-M11-02 (docs/seguridad/hallazgos.md): el tope de
-        -- measurements.value vive en el trigger y solo para indicadores con categorías.
-        and (c.table_name, c.column_name) <> ('measurements', 'value')
         and not exists (
           select 1 from pg_constraint k
             join pg_attribute a on a.attrelid = k.conrelid and a.attnum = any (k.conkey)
