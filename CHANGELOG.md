@@ -2,6 +2,9 @@
 
 Una línea por ítem, la más reciente arriba.
 
+- 2026-11-20 · V-05 · Workflow de despliegue manual (`deploy.yml`): verifica secretos, Auth y `dist/`, aplica migraciones a Supabase y publica en GitHub Pages solo cuando el usuario lo dispara. La app todavía no está publicada.
+- 2026-11-20 · S-05 (fase A) · Pentest previo a producción contra el build de producción y Supabase local. La fase B (contra Pages y la API real) queda lista para correr tras el primer despliegue.
+- 2026-11-20 · V-04 (#22) · Salud del sistema (`salud.yml`, cada 6 h): revisa la web, Supabase y los workflows programados, y abre o actualiza un issue si algo falla.
 - 2026-11-19 · V-06 · Manual por rol (gestora, custodio, comité y líder), guía para configurar indicadores, compromisos, mediciones CSV y el caso de vulnerabilidades, y modelo de datos con RLS por rol.
 - 2026-11-19 · V-01 + V-02 + V-03 (#21) · El líder ve sus indicadores, color, meta, ritmo, restricciones, excepciones y alertas; el comité ve la matriz unidad × indicador, excepciones vigentes y alertas; la gestora ve la completitud por custodio y KPI.
 - 2026-11-19 · C-02 (#20) · El comité aprueba excepciones (inicio puntual de change o suspensión total) con motivo y vencimiento de hasta 90 días, y revoca las propias.

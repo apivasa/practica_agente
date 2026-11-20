@@ -105,7 +105,7 @@ Primero identifica el job fallido (consulta de jobs arriba) y lee su log. Nunca 
 Ver ADR 0008. Ambos usan `node scripts/evaluate.js --mode=monthly|daily --as-of=YYYY-MM-DD` con `SUPABASE_SECRET_KEY`. Comparten `concurrency: evaluacion-produccion`, así que nunca corren a la vez. Actor de auditoría: `system:evaluate`.
 
 ### Activación (compuerta del usuario, V-05)
-1. Secretos `SUPABASE_URL` y `SUPABASE_SECRET_KEY` (`sb_secret_...`) en el repositorio.
+1. Secretos `SUPABASE_URL` y `SUPABASE_SECRET_KEY` (`sb_secret_...`) en el repositorio o en el environment `produccion`. Desde V-05 ambos jobs declaran `environment: produccion` (H-C03-02, ADR 0015), así que leen los secretos de cualquiera de los dos sitios. Cuando el usuario mueva los secretos al environment (con regla de ramas = `main` y **sin revisor requerido**), hay que comprobar con una corrida manual que el paso "Evaluar" se ejecuta antes de borrar los de repositorio.
 2. Variable de repositorio `EVALUATION_ENABLED=true` (*Settings → Secrets and variables → Actions → Variables*).
 3. Primera corrida manual de `ritmo-diario` sin `as_of`. Verificar en el log la línea JSON final con `errors: 0`.
 Mientras falte algo, el job termina en verde con `::warning::... se omite la evaluación`. Desde la activación, un warning así en un cron significa que alguien borró un secreto o la variable: es una incidencia.
@@ -155,6 +155,22 @@ Desde V-04 lo hace `salud.yml` (ver «Salud del sistema»). A mano:
 - **Restaurar a un proyecto nuevo o limpio:** crear el proyecto, aplicar las migraciones del repo (`supabase db push`), y cargar los datos con `psql "<cadena de conexión>" -v ON_ERROR_STOP=1 -f respaldo-datos-AAAA-MM-DD.sql`. Los triggers append-only de `audit_log` (`audit_log_append_only`) no impiden INSERT, así que el historial se recarga tal cual. Antes de cargar, comprobar que el archivo de datos fija `SET session_replication_role = replica;` (así lo genera la CLI): sin eso, los triggers de auditoría de las demás tablas añadirían filas duplicadas a `audit_log` durante la carga. Es un procedimiento aún no ensayado: se ensaya en V-05. Luego actualizar los secretos `SUPABASE_URL` y claves si cambió el proyecto (compuerta del usuario) y lanzar `salud.yml` a mano.
 - Restauración parcial (solo evaluaciones de un mes): no hace falta respaldo, basta reprocesar (ver arriba).
 
+- **Restaurar tras una migración dañina.** Primero se escribe una migración correctiva en un PR revisado y se despliega (ver `docs/despliegue.md`). Si hay que borrar tablas o columnas con datos, o recargar el respaldo de datos, es compuerta del usuario (CLAUDE.md §3).
+
+## Despliegue (`deploy.yml`, V-05, ADR 0015)
+Procedimiento completo en `docs/despliegue.md`. Orden de jobs: `verify` → `build-pages` → `migrate-plan` → `migrate` → `deploy-pages` → `smoke`. Ningún job lee `SUPABASE_SECRET_KEY`.
+- **Falla `verify`**, paso «Confirmación, rama y secretos»: falta un secreto, el prefijo de la clave publicable es incorrecto, `SUPABASE_URL` no corresponde a `SUPABASE_PROJECT_REF`, la rama no es `main` o `confirm` no vale `desplegar`. Corregir la configuración. Crear o rotar secretos es compuerta del usuario.
+- **Falla `verify`**, paso «Origen de producción»: `SUPABASE_URL` no es `PRODUCTION_SUPABASE_ORIGIN` de `src/security/csp.js` (ADR 0011). Los secretos apuntan a otro proyecto, y el job se detiene antes de tocar una base equivocada. Si se cambió de proyecto a propósito, cambiar a la vez los secretos (usuario) y la constante, en un PR revisado por seguridad. Si el paso dice «No se encontró PRODUCTION_SUPABASE_ORIGIN», alguien cambió el formato de la línea en `csp.js`: el `sed` del paso espera `export const PRODUCTION_SUPABASE_ORIGIN = '<origen>';`.
+- **Falla `verify`**, paso «Registro cerrado en Auth»:
+  - `disable_signup` no es `true`: desactivar *Allow new users to sign up* en el panel de Supabase (tarea del usuario) y relanzar.
+  - «No se pudo leer /auth/v1/settings»: el proyecto está pausado (reanudarlo desde el panel) o la clave publicable no es válida.
+- **Falla `build-pages`**: si la verificación de `dist/` detecta un secreto u origen local, tratarlo como el fallo de gitleaks (ver arriba). Si el build falla por la CSP, `SUPABASE_URL` no coincide con `PRODUCTION_SUPABASE_ORIGIN`. La base no se tocó.
+- **Falla `migrate-plan`** (solo dry-run, no cambia nada): `supabase link` falló por `SUPABASE_ACCESS_TOKEN` o `SUPABASE_DB_PASSWORD` inválidos o por el proyecto pausado. Si el dry-run lista migraciones que no se esperaban, no aprobar ni relanzar `migrate`: revisar `supabase/migrations/` contra `supabase migration list`.
+- **Falla `migrate`**: la BD puede quedar a medias, porque `db push` aplica cada archivo en su propia transacción. Leer `supabase migration list` en el log (o lanzarlo a mano) y corregir con una migración nueva. Nunca se edita una migración ya aplicada. El front no se publicó: `deploy-pages` necesita `migrate`.
+- **Falla `smoke`**: comprobar Settings → Pages (fuente = GitHub Actions) y relanzar solo `smoke`. Si el HTML da 200 pero el JS principal no, la `base` de `vite.config.js` no coincide con la ruta de Pages.
+- **Revisor requerido**: no se pone en `produccion`. `evaluacion-mensual` y `ritmo-diario` usan ese environment, y con revisor cada cron quedaría en `waiting` (ADR 0015 punto 6). Si `salud.yml` alerta `último run hace N h` y el run está en `waiting`, quitar el revisor del environment y aprobar o relanzar el run.
+- **Cuidado con la concurrencia con las evaluaciones**: `despliegue-produccion` y `evaluacion-produccion` son grupos distintos. No hay que desplegar migraciones de `evaluations`, `alerts` o `audit_log` el día 1 a la hora del cron mensual.
+
 ## Salud del sistema (`salud.yml`, V-04, ADR 0014)
 
 Código: `scripts/health/check.js` y `scripts/health/lib.js` (Node puro, sin dependencias npm), pruebas en `tests/scripts/health.test.js` y prueba contra Supabase local en `scripts/ci/health.sh` (job `integration` de `ci.yml`), que incluye la **simulación de caída de Pages** (puerto cerrado → `failures=pages`, código 1).
@@ -199,4 +215,4 @@ Primero abrir el run enlazado en el issue y leer el resumen (tabla Check/Estado/
 Verificado en V-04: las acciones con efecto en la BD quedan en `audit_log` con actor `system:evaluate` (`scripts/lib/run.js`): `evaluation_upsert`, `escalation_applied` (candado), `alert_sent`, `exception_expired`, `evaluation_reprocess` y `pace_snapshot`; las escrituras de usuarios las registran los triggers de `20261119120200_audit_triggers.sql`, y `audit_log` es append-only. La única acción automática de `salud.yml` con efecto es abrir o comentar un issue: queda registrada en el propio issue (autor `github-actions[bot]`, fecha y enlace al run) y no toca la BD, por eso no se escribe en `audit_log` (haría falta la clave secreta en un workflow que no la necesita).
 
 ## Pendiente de completar
-- Restauración probada contra el Supabase de producción y medición de tiempos base de `salud.yml` (V-05, tras la activación).
+- Restauración probada contra el Supabase de producción y medición de tiempos base de `salud.yml` y `deploy.yml` (V-05, tras el primer despliegue y la activación).
