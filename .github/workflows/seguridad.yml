@@ -393,7 +393,7 @@ jobs:
           get() { grep -E "^$1=" "$RUNNER_TEMP/sb.env" | head -n1 | cut -d= -f2- | tr -d '"'; }
           secret="$(get SECRET_KEY)"
           rm -f "$RUNNER_TEMP/sb.env"
-          echo "::add-mask::${secret}"
+          # Clave y sesión locales y efímeras: nunca se imprimen (sin echo ni set -x).
           curl -sSf -H "apikey: ${secret}" -H 'Accept: application/openapi+json' \
             "${VITE_SUPABASE_URL}/rest/v1/" \
             | jq '.host = "127.0.0.1:54321" | .basePath = "/rest/v1" | .schemes = ["http"]' \
@@ -404,12 +404,14 @@ jobs:
             -d '{"email":"gestora@example.test","password":"Local-Only-Pass-2026"}' \
             "${VITE_SUPABASE_URL}/auth/v1/token?grant_type=password" | jq -r .access_token)"
           if [ -z "$token" ] || [ "$token" = null ]; then echo "::error::login de la gestora local falló"; exit 1; fi
-          echo "::add-mask::${token}"
           umask 077
           printf 'ZAP_AUTH_HEADER_VALUE=Bearer %s\nZAP_AUTH_HEADER=Authorization\nZAP_AUTH_HEADER_SITE=127.0.0.1\n' "$token" > "$RUNNER_TEMP/zap-auth.env"
       - name: ZAP API scan de PostgREST (activo, local, sesión de gestora)
         run: |
           set -euo pipefail
+          kong="$(docker ps --format '{{.Names}}' | grep -E '^supabase_kong_' | head -n1)"
+          [ -n "$kong" ] || { echo "::error::no se encontró el contenedor Kong de Supabase local"; exit 1; }
+          before="$(docker logs "$kong" 2>&1 | wc -l)"
           status=0
           docker run --rm --network host --env-file "$RUNNER_TEMP/zap-auth.env" \
             -v "$RUNNER_TEMP/zap:/zap/wrk:rw" "$ZAP_IMAGE" \
@@ -418,6 +420,14 @@ jobs:
             -z "-config replacer.full_list(0).description=apikey -config replacer.full_list(0).enabled=true -config replacer.full_list(0).matchtype=REQ_HEADER -config replacer.full_list(0).matchstr=apikey -config replacer.full_list(0).regex=false -config replacer.full_list(0).replacement=${VITE_SUPABASE_PUBLISHABLE_KEY} -config scanner.maxScanDurationInMins=20 -config scanner.maxRuleDurationInMins=3" || status=$?
           rm -f "$RUNNER_TEMP/zap-auth.env"
           echo "zap-api-scan.py terminó con código ${status}"
+          # El escaneo solo vale si ZAP llegó autenticado: códigos de estado que
+          # el gateway local registró para /rest/v1 durante el escaneo.
+          docker logs "$kong" 2>&1 | tail -n +"$((before + 1))" \
+            | grep -oE '"(GET|POST|PATCH|PUT|DELETE|HEAD|OPTIONS) /rest/v1/[^"]*" [0-9]{3}' \
+            | awk '{print $1, $NF}' | tr -d '"' | sort | uniq -c | sort -rn | tee "$RUNNER_TEMP/zap/api-status.txt"
+          ok="$(awk '$3 ~ /^2/ {n += $1} END {print n + 0}' "$RUNNER_TEMP/zap/api-status.txt")"
+          echo "Respuestas 2xx de PostgREST durante el escaneo: ${ok}"
+          [ "$ok" -ge 20 ] || { echo "::error::ZAP no llegó autenticado a PostgREST (solo ${ok} respuestas 2xx)"; exit 1; }
           [ "$status" -eq 0 ]
       - name: Sin alertas de riesgo alto (front y API)
         if: always()
