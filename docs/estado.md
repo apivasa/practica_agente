@@ -1,10 +1,10 @@
 # Estado del modo autónomo
 
 ## Candado de ciclo
-Estado: LIBRE
-Desde: 
-Latido: 2026-11-20 09:15
-Sesión: 
+Estado: EN CURSO
+Desde: 2026-11-20 18:07
+Latido: 2026-11-20 18:07
+Sesión: interactiva (lanzar deploy V-05)
 
 ## Log de ciclos (más reciente arriba)
 
