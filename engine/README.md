@@ -4,7 +4,7 @@ Funciones puras en JavaScript ESM, sin dependencias ni acceso a red. Las usan el
 
 ## API
 
-- `validateIndicator(cfg)` → `{ ok, errors[] }` (mensajes en español).
+- `validateIndicator(cfg)` → `{ ok, errors[] }` (mensajes en español). Rechaza `cumulative_target` con `lower_is_better` (M-08; la BD lo impide con el CHECK `indicators_cumulative_direction`).
 - `normalizeIndicator(cfg)` → copia con valores por defecto (`windowDays: 30`, `frequency: 'monthly'`, `minSample: 0`, `source: 'manual'`, `thresholdsByCategory` vacío). Lanza `Error` si la configuración no es válida. `thresholdsByCategory` se devuelve como objeto sin prototipo; la clave `__proto__` se descarta y nunca se usa como categoría.
 - `measure(cfg, measurements, { asOf, target?, category? })` → `{ value, sampleSize, reason? }`. Ventana inclusiva `[asOf - windowDays + 1, asOf]`, fechas `YYYY-MM-DD` en UTC. Ventana vacía → `{ value: null, sampleSize: 0 }`. Con `category`, solo cuentan las mediciones de esa categoría.
   - `window_average`: promedio de `value`.
@@ -34,7 +34,7 @@ Lo comparten `scripts/lib/build.js` (Actions, que lo reexporta) y `src/lib/dashb
 - `pickCommitment(commitments, unitId, indicatorId, month)` → compromiso del mes (`YYYY-MM`) o, si no hay, el del trimestre (`YYYY-Qn`); `null` si ninguno.
 - `indicatorConfig(row, commitment?)` → `{ cfg, thresholdSource: 'commitment' | 'indicator', note? }`: configuración del motor desde una fila de `indicators`, con los umbrales efectivos de `effectiveThresholds`.
 - `isResolved(row)` → `true` si `kind` es `resolved` o nulo (filas anteriores a M-05).
-- `buildPackageInput({ indicator, commitment, measurements, asOf })` → `{ ok: true, input }` para `packageStatus`, o `{ ok: false, reason }` si el compromiso no trae `package_by_category`. Filtra las mediciones fuera del trimestre de `asOf` o posteriores a `asOf`.
+- `buildPackageInput({ indicator, commitment, measurements, asOf })` → `{ ok: true, input }` para `packageStatus`, o `{ ok: false, reason }` si el compromiso no trae `package_by_category`. Filtra las mediciones fuera del trimestre de `asOf` o posteriores a `asOf`. Descarta las filas malformadas (resueltas con categoría distinta de `P0P1`/`P2P3` o valor no entero ≥ 0; detectadas P0/P1 con valor no entero ≥ 0) y las cuenta en `discarded`: la evaluación mensual, el ritmo diario y el ritmo del front comparten el filtro (M-08). `discardedNote(n)` da el texto del motivo.
 
 ### Calendario (V-01) — `calendar.js`
 

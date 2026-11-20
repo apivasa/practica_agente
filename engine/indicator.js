@@ -86,6 +86,10 @@ export function validateIndicator(cfg) {
   if (c.windowDays !== undefined && !(Number.isInteger(c.windowDays) && c.windowDays > 0)) {
     errors.push('windowDays: debe ser un entero mayor que 0');
   }
+  // M-08 (A4): una meta acumulada mide avance hacia un paquete; "menos es mejor" no tiene regla.
+  if (c.measurementType === 'cumulative_target' && c.direction === 'lower_is_better') {
+    errors.push('direction: una meta acumulada (cumulative_target) solo admite higher_is_better (más es mejor)');
+  }
   checkThresholds(c.thresholds, 'thresholds', directionOk ? c.direction : undefined, errors);
 
   if (c.thresholdsByCategory !== undefined) {

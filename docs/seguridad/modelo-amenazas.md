@@ -249,6 +249,18 @@ Con el primer despliegue cambian tres cosas: (1) el front deja de ser un build l
 | T-M07-04 | XSS almacenado | Nombre de unidad o indicador con marcado en la tabla o el selector de metas | Medio | `el()`/`textContent` | `e2e/security/xss.spec.js` (`#/gestora/metas`); `front-v01-v03.test.js` › sumideros M-07 |
 | T-M07-05 | Tampering / Repudiation | La gestora reasigna una meta existente a otra unidad, indicador o mes con un UPDATE de `unit_id`/`indicator_id`/`month` (el front no lo hace) | Bajo | Solo la gestora; `audit_targets` guarda old/new | H-M07-01 (abierto: grant de columna `update (target_value)`) |
 
+## Superficie nueva (M-08)
+
+- **Trigger `measurements_category_guard`** (AFTER ROW, INSERT/UPDATE en `measurements`) con la función `private.check_measurement_category()` `security definer`, `search_path = ''`, sin EXECUTE para los roles de la API. Lee `indicators` saltando RLS para decidir si la medición necesita categoría.
+- **CHECK `indicators_cumulative_direction`**: meta acumulada solo con "más es mejor".
+
+| ID | STRIDE | Amenaza | Riesgo | Control | Prueba |
+|---|---|---|---|---|---|
+| T-M08-01 | Elevation | Función security definer abusable (search_path, EXECUTE directo, reemplazo) | Medio | `search_path = ''`, nombres calificados, `revoke all`, dueño no API, sin CREATE en `private` | `supabase/tests/security/046_security_measurements_guard_m08.test.sql` |
+| T-M08-02 | Information disclosure | El trigger como oráculo: un rol sin permiso distingue fila válida/ inválida | Bajo | Trigger AFTER: RLS (WITH CHECK) responde 42501 antes | 046 (custodio de otro KPI, líder, comité) |
+| T-M08-03 | Tampering / DoS | Medición malformada por API apaga la escalada (H-M06-01) | Medio | Trigger en BD + descarte por fila en el motor | 046 (minúsculas, espacios, UPDATE a nulo/decimal); `080_*` (desarrollador); H-M08-01 (NaN/Infinity pasan la BD, los descarta el motor) |
+| T-M08-04 | Tampering | Desactivar el trigger o quitar las categorías del indicador para saltarse la regla | Medio | Solo el dueño de la tabla altera triggers; `indicators` solo lo escribe la gestora | 046 |
+
 ## Trazabilidad: amenazas de riesgo Alto → prueba automática
 
 | Amenaza | Prueba (archivo › caso) | Estado |

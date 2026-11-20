@@ -78,9 +78,10 @@ export const isResolved = (r) => r.kind === 'resolved' || r.kind === null || r.k
 
 /**
  * Entrada de packageStatus (M-05) para una unidad desde el compromiso del trimestre y las
- * mediciones. Filtra fechas fuera del trimestre o posteriores a asOf (el motor las rechaza).
+ * mediciones. Filtra fechas fuera del trimestre o posteriores a asOf (el motor las rechaza) y
+ * descarta las filas malformadas (H-M06-01), que cuenta en `discarded` (M-08, A7).
  * @param {{ indicator: any, commitment: any, measurements: any[], asOf: string }} input
- * @returns {{ ok: true, input: any } | { ok: false, reason: string }}
+ * @returns {{ ok: true, input: any, discarded: number } | { ok: false, reason: string }}
  */
 export function buildPackageInput({ indicator, commitment, measurements, asOf }) {
   const { quarter, start, end } = quarterBounds(asOf.slice(0, 7));
@@ -94,7 +95,10 @@ export function buildPackageInput({ indicator, commitment, measurements, asOf })
       return { ok: false, reason: `Paquete por criticidad inválido para ${quarter}: ${k} no es un número` };
     }
   }
-  const rows = measurements.filter((r) => r.measured_on >= start && r.measured_on <= asOf && r.measured_on <= end);
+  // M-08 (A7): el descarte por fila (H-M06-01) vive aquí para que la evaluación mensual, el
+  // ritmo diario y el ritmo del front compartan el mismo filtro.
+  const { kept, discarded } = splitMalformed(measurements ?? [], asOf);
+  const rows = kept.filter((r) => r.measured_on >= start && r.measured_on <= asOf && r.measured_on <= end);
   const newCritical = rows
     .filter((r) => r.kind === 'detected' && r.category === 'P0P1')
     .map((r) => ({ detectedOn: r.measured_on, count: num(r.value) }));
@@ -116,7 +120,13 @@ export function buildPackageInput({ indicator, commitment, measurements, asOf })
       resolved,
       thresholds,
     },
+    discarded,
   };
+}
+
+/** Nota del motivo cuando buildPackageInput descartó filas malformadas. */
+export function discardedNote(discarded) {
+  return `${discarded} medición(es) descartada(s) por categoría o valor inválido`;
 }
 
 const CATEGORY_KEYS = Object.freeze(['P0P1', 'P2P3']);
@@ -174,11 +184,11 @@ export function hasCategoryEvaluation(indicator) {
 export function evaluateCategoryMonth({ indicator, commitment, measurements, month }) {
   const asOf = monthEnd(month);
   const notEvaluated = (reason) => ({ color: 'not_evaluated', value: null, sampleSize: 0, reason, month, byCategory: {} });
-  // H-M06-01: una fila malformada (cargada por API) se descarta sola y se cuenta en el motivo;
-  // no anula el mes (un "sin evaluar" reiniciaría la racha de escalada).
-  const { kept, discarded } = splitMalformed(measurements ?? [], asOf);
-  const built = buildPackageInput({ indicator, commitment, measurements: kept, asOf });
+  // H-M06-01: una fila malformada (cargada por API) se descarta sola en buildPackageInput y se
+  // cuenta en el motivo; no anula el mes (un "sin evaluar" reiniciaría la racha de escalada).
+  const built = buildPackageInput({ indicator, commitment, measurements: measurements ?? [], asOf });
   if (!built.ok) return notEvaluated(built.reason);
+  const { discarded } = built;
   const pkg = commitment.package_by_category;
   const packageCategories = Object.keys(pkg).filter((k) => num(pkg[k]) !== null);
   /** @type {Record<string, number>} */
@@ -189,8 +199,7 @@ export function evaluateCategoryMonth({ indicator, commitment, measurements, mon
     const { cfg } = indicatorConfig(indicator, commitment);
     const r = categoryMonthColor(cfg, status, { packageCategories, sampleSizes });
     if (discarded === 0) return r;
-    const note = `${discarded} medición(es) descartada(s) por categoría o valor inválido`;
-    return { ...r, reason: `${r.reason}; ${note}`, discarded };
+    return { ...r, reason: `${r.reason}; ${discardedNote(discarded)}`, discarded };
   } catch (err) {
     return notEvaluated(`No se pudo calcular el cumplimiento por criticidad: ${err.message}`);
   }

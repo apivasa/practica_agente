@@ -37,7 +37,8 @@ Funciones de apoyo (esquema `private`, no expuesto por la API, `security definer
 ### `indicators` — modelo genérico de indicador
 `id`, `code` (único; letras, números, `_` y `-`), `name`, `description`, `measurement_type` (`cumulative_target`, `window_average`, `coverage`), `direction` (`higher_is_better`, `lower_is_better`), `window_days` (> 0, por defecto 30), `green_threshold`, `yellow_threshold`, `thresholds_by_category` (objeto JSON), `frequency` (`monthly`, `weekly`, `quarterly`), `min_sample` (≥ 0), `source` (`manual`, `automatic`), `custodian_user_id` (informativa), `active`, `created_at`.
 
-Check `indicators_thresholds_coherent`: con "más es mejor", verde ≥ amarillo; con "menos es mejor", verde ≤ amarillo.
+- Check `indicators_thresholds_coherent`: con "más es mejor", verde ≥ amarillo; con "menos es mejor", verde ≤ amarillo.
+- Check `indicators_cumulative_direction` (M-08): un indicador `cumulative_target` no puede ser `lower_is_better`. El motor (`validateIndicator`) aplica la misma regla en el formulario.
 
 ### `commitments` — compromisos por unidad, indicador y periodo
 `id`, `unit_id`, `indicator_id`, `period` (`AAAA-Qn` o `AAAA-MM`), `green_override`, `yellow_override`, `package_total` (≥ 0), `package_by_category` (objeto JSON, ej. `{"P0P1": 1500, "P2P3": 500}`), `notes`, `created_by`, `created_at`, `updated_at` (lo pone un trigger).
@@ -53,6 +54,11 @@ Check `indicators_thresholds_coherent`: con "más es mejor", verde ≥ amarillo;
 - El usuario solo inserta con `source = 'manual'`. `automatic` lo pone el backend.
 - Editables: `value`, `measured_on`, `app_id`, `compliant`, `category`, `kind`. No se pueden cambiar `unit_id`, `indicator_id`, `created_by` ni `source`.
 - En meta acumulada `value` es **incremental**: lo resuelto o detectado ese día. El motor suma.
+- Trigger `measurements_category_guard` (M-08, `AFTER INSERT OR UPDATE`, función `private.check_measurement_category`). Si el indicador es `cumulative_target` y tiene `thresholds_by_category`, cada medición (resuelta, detectada o sin `kind`) debe cumplir:
+  - `category` es `P0P1` o `P2P3` (exacto, con mayúsculas);
+  - `value` es un entero ≥ 0 y no nulo.
+  
+  Si no, la BD rechaza la fila con el código 23514. Aplica a todos, también al backend. Como el trigger corre después de RLS, un rol sin permiso sigue recibiendo 42501 aunque la fila esté mal. Solo valida filas nuevas o editadas: las anteriores a M-08, o las de un indicador que recibe categorías después, no se revalidan; el motor las descarta y lo dice en el motivo (ver [docs/indicadores.md](indicadores.md#color-mensual)).
 
 ### `targets` — metas parciales mensuales
 `id`, `unit_id`, `indicator_id`, `month` (`AAAA-MM`), `target_value` (≥ 0, acumulada a ese mes), `created_at`. Única por (`unit_id`, `indicator_id`, `month`).
