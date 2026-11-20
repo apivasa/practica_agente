@@ -31,7 +31,15 @@ Requiere cambiar alcance: no
 `node --test 'tests/security/*.test.js' 'tests/workflows/*.test.js'` da 726 casos superados, 0 fallos y 2 omitidos. Los 2 omitidos ya lo estaban antes y dependen de `dist/`. Las pruebas de `tests/security/api` se omiten en local porque no hay Supabase. En CI se ejecutan con `PENTEST_REQUIRE=1`.
 
 ## Resultados del pipeline
-Ver la sección «Runs» al final, que se completa tras el push.
+Resultados sobre `a582efa`:
+
+- **Seguridad**, [run 44739380017](https://github.com/apivasa/practica_agente/actions/runs/44739380017): verde en el intento 2.
+  - En el intento 1, `pentest-api` no llegó a correr ninguna prueba: Supabase no arrancó porque el puerto 54322 estaba ocupado en el runner. Es un fallo de infraestructura que F-07 ya conoce, no del cambio.
+  - En el intento 2, `pentest-api` superó los 559 casos, con 0 fallos y 0 omitidos, y el log no contiene ningún JWT (`eyJhbGci` aparece 0 veces).
+  - `CodeQL (javascript-typescript)` y `CodeQL (actions)` dan success, igual que gitleaks, semgrep, npm audit, `security-tests` (incluye F-09) y DAST.
+- **CI**, [run 44739380024](https://github.com/apivasa/practica_agente/actions/runs/44739380024): verde en el intento 2.
+  - En el intento 1, `e2e/qa-v08.spec.js:107` falló de forma intermitente al iniciar sesión en el front: no apareció el botón «Cerrar sesión». Ese spec no usa `tests/security/api/_lib.js`, y `main` está en verde con el mismo spec.
+- **Límite de verificación:** la sesión recibe 403 en la API de code scanning. El orquestador debe confirmar en el PR que el check «CodeQL» indica que no hay alertas nuevas. Después del merge, las alertas #14, #15 y #16 deben pasar a *fixed*.
 
 ## Hallazgos
 Ninguno nuevo.
