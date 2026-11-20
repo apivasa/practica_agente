@@ -199,10 +199,74 @@ describe('QA M-06: meta 0, sin paquete y categoría desconocida', () => {
     assert.equal(r.color, 'red');
   });
 
-  test('medición con categoría fuera de P0P1/P2P3: sin evaluar con motivo, no lanza', () => {
+  test('medición con categoría fuera de P0P1/P2P3: se descarta (no cuenta), el mes se evalúa y el motivo la menciona', () => {
+    // Intento 2 (H-M06-01): una fila inválida ya no anula el mes; 0 de 100 → rojo.
     const r = evalMonth(pkg(300, 300), [res('2027-01-10', 'P9', 10)]);
-    assert.equal(r.color, 'not_evaluated');
-    assert.match(r.reason, /No se pudo calcular/);
+    assert.equal(r.color, 'red');
+    assert.match(r.reason, /1 medición\(es\) descartada\(s\) por categoría o valor inválido/);
+  });
+});
+
+describe('QA M-06 intento 2: descarte por fila de mediciones malformadas (H-M06-01)', () => {
+  const ok = [res('2027-01-10', 'P0P1', 95), res('2027-01-10', 'P2P3', 100)]; // P0/P1 95 % → amarillo
+  test('filas resueltas malformadas no suman: no pueden convertir un amarillo en verde', () => {
+    for (const bad of [
+      res('2027-01-11', 'P0P1', 1.5), res('2027-01-11', 'P0P1', -1), res('2027-01-11', 'p0p1', 5),
+      res('2027-01-11', null, 5), res('2027-01-11', '__proto__', 5), res('2027-01-11', 'P0P1', 'abc'),
+      res('2027-01-11', 'P0P1', [1]), res('2027-01-11', 'P0P1', true),
+    ]) {
+      const r = evalMonth(pkg(300, 300), [...ok, bad]);
+      assert.equal(r.color, 'yellow', JSON.stringify(bad));
+      assert.equal(r.byCategory.P0P1.resolved, 95, JSON.stringify(bad));
+      assert.match(r.reason, /1 medición\(es\) descartada\(s\)/, JSON.stringify(bad));
+    }
+  });
+
+  test('varias filas malformadas: el motivo da el conteo exacto', () => {
+    const bads = [res('2027-01-11', 'P9', 1), res('2027-01-12', 'P0P1', 0.5), res('2027-01-13', 'P2P3', -4)];
+    const r = evalMonth(pkg(300, 300), [...ok, ...bads]);
+    assert.equal(r.color, 'yellow');
+    assert.match(r.reason, /3 medición\(es\) descartada\(s\)/);
+  });
+
+  test('solo se cuentan las del trimestre hasta el cierre del mes evaluado', () => {
+    const r = evalMonth(pkg(300, 300), [...ok, res('2026-12-31', 'P9', 1), res('2027-02-01', 'P9', 1)]);
+    assert.doesNotMatch(r.reason, /descartada/);
+    const feb = evalMonth(pkg(300, 300), [...ok, res('2027-02-01', 'P9', 1)], '2027-02');
+    assert.match(feb.reason, /1 medición\(es\) descartada\(s\)/);
+  });
+
+  test('filas válidas no se descartan: texto numérico entero y resuelta sin valor', () => {
+    const r = evalMonth(pkg(300, 300), [res('2027-01-10', 'P0P1', '96'), res('2027-01-10', 'P2P3', 100), res('2027-01-11', 'P0P1', null)]);
+    assert.equal(r.color, 'green');
+    assert.equal(r.byCategory.P0P1.resolved, 96);
+    assert.doesNotMatch(r.reason, /descartada/);
+  });
+
+  test('una fila malformada nunca deja el mes en verde si las válidas no lo dan', () => {
+    // Rojo con datos válidos; con una resuelta enorme pero decimal sigue rojo.
+    const r = evalMonth(pkg(300, 300), [res('2027-01-10', 'P0P1', 10), res('2027-01-10', 'P2P3', 100), res('2027-01-11', 'P0P1', 1000.5)]);
+    assert.equal(r.color, 'red');
+  });
+
+  test('detectada P0/P1 malformada: se descarta (no sube la meta) y el motivo la menciona', () => {
+    // Observación del informe: con la fila descartada la meta queda en 100 y el mes puede ser
+    // verde; el aviso queda en el motivo. Una detectada válida sí sube la meta (110 → amarillo).
+    const base = [res('2027-01-31', 'P0P1', 100), res('2027-01-31', 'P2P3', 100)];
+    const bad = evalMonth(pkg(300, 300), [...base, det('2027-01-05', 30.5)]);
+    assert.equal(bad.byCategory.P0P1.target, 100);
+    assert.match(bad.reason, /1 medición\(es\) descartada\(s\)/);
+    const good = evalMonth(pkg(300, 300), [...base, det('2027-01-05', 30)]);
+    assert.equal(good.byCategory.P0P1.target, 110);
+    assert.equal(good.color, 'yellow');
+  });
+
+  test('la evaluación mensual (build.js) conserva el color y la nota del descarte', () => {
+    const r = evaluateIndicatorMonth({
+      indicator: VULN, commitment: pkg(300, 300), measurements: [...ok, res('2027-01-11', 'P9', 5)], evalMonth: '2027-01',
+    });
+    assert.equal(r.color, 'yellow');
+    assert.match(r.reason, /descartada/);
   });
 });
 

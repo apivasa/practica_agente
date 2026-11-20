@@ -1,5 +1,16 @@
 # M-06 — Informe QA
-Veredicto: VERDE
+Veredicto: VERDE (intento 2, commit `3541637`; pendiente de confirmar con el CI de la rama)
+
+## Intento 2 (`3541637`: H-M06-01, H-M06-02, A1, guarda DB_URL)
+- Comportamiento nuevo verificado: una medición VULN malformada (categoría fuera de P0P1/P2P3, valor no entero o negativo, texto no numérico, arreglo o booleano) se descarta por fila. El mes se evalúa con las válidas y el motivo dice "N medición(es) descartada(s) por categoría o valor inválido".
+- Una resuelta descartada nunca suma: no puede pasar un amarillo o rojo a verde (probado con 8 formas de fila inválida y con una resuelta de 1000,5).
+- Solo se cuentan las del trimestre hasta el cierre del mes; un entero en texto (`'96'`) y una resuelta sin valor no se descartan.
+- Ajustado `tests/engine/qa-m06.test.js:202`: antes esperaba "sin evaluar"; ahora espera rojo (0 de 100) con la nota del descarte, conforme a H-M06-01.
+- Añadidos 7 casos de borde del descarte (bloque "QA M-06 intento 2").
+- Local: 1284 pass, 0 fail, 1 todo (previo). Cobertura de `engine/`: 99,95 % de líneas; `rows.js` y `vulnerabilities.js` al 100 %.
+- **Observación H-M06-QA-02 (baja):** una P0/P1 *detectada* malformada (p. ej. 30,5) también se descarta. Entonces no sube la meta y el mes puede quedar verde; el único aviso es la nota del motivo. Es coherente con la aceptación de seguridad (el custodio podría simplemente no cargarla), pero conviene la validación en BD propuesta en H-M06-01.
+
+## Intento 1
 
 Revisado: rama `item/M-06` sobre `a833462` (código) + `228e63a` (arquitectura) + `453bed1` (seguridad).
 Reglas de referencia: `docs/diseno.md` "Caso: vulnerabilidades" (96 % P0/P1, 85 % P2/P3; meta parcial ≈ 1/3 por mes; P0/P1 nuevas de los meses 1 y 2 entran al paquete, las del mes 3 pasan al siguiente) y el criterio de M-06 en `docs/plan-maestro.md`.
