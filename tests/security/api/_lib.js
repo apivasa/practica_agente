@@ -10,9 +10,6 @@
 //   PENTEST_DB_URL           cadena de conexión de Postgres local (catálogo)
 //   PENTEST_REQUIRE=1        en CI: sin variables la prueba FALLA, no se omite
 import { createHmac } from 'node:crypto';
-import { readFileSync, writeFileSync, existsSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
 import { execFileSync } from 'node:child_process';
 
 export const env = {
@@ -127,24 +124,66 @@ export async function adminGet(path) {
 }
 
 // ---------------------------------------------------------------------------
-// Sesiones: /auth/v1/token?grant_type=password. Se cachean en un archivo
-// temporal para no superar el límite de inicios de sesión de GoTrue cuando
-// corren varios archivos de prueba seguidos.
+// Sesiones: /auth/v1/token?grant_type=password.
+//
+// F-09: los tokens NO se guardan en disco (antes se cacheaban en un archivo de
+// tmpdir; CodeQL js/file-access-to-http lo marcaba y un archivo con JWT
+// válidos en /tmp es superficie innecesaria). Orden de obtención:
+//   1. caché en memoria del proceso;
+//   2. PENTEST_TOKENS (JSON {rol: access_token}) que el job pentest-api genera
+//      una sola vez con login-all.mjs y pasa por entorno, sin archivo, para no
+//      superar el límite de inicios de sesión de GoTrue entre archivos;
+//   3. inicio de sesión real, con reintento acotado ante 429.
 // ---------------------------------------------------------------------------
-export async function login(email, password = PASSWORD) {
-  return request('/auth/v1/token?grant_type=password', {
-    method: 'POST',
-    body: { email, password },
-  });
+export const LOGIN_RETRY = { attempts: 6, baseMs: 2_000, maxMs: 60_000 };
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+export async function login(email, password = PASSWORD, { retry = LOGIN_RETRY, wait = sleep } = {}) {
+  for (let i = 1; ; i++) {
+    const r = await request('/auth/v1/token?grant_type=password', {
+      method: 'POST',
+      body: { email, password },
+    });
+    if (r.status !== 429 || i >= retry.attempts) return r;
+    const after = Number(r.headers?.get?.('retry-after'));
+    const ms = Number.isFinite(after) && after > 0 ? after * 1000 : retry.baseMs * 2 ** (i - 1);
+    await wait(Math.min(ms, retry.maxMs));
+  }
+}
+
+const MIN_TTL_MS = 5 * 60_000;
+let memo = null;
+
+/** Devuelve el mapa de tokens si es válido para todos los roles y no vence pronto. */
+export function validTokens(candidate, now = Date.now()) {
+  if (!candidate || typeof candidate !== 'object' || Array.isArray(candidate)) return null;
+  for (const role of ROLES) {
+    const t = candidate[role];
+    if (typeof t !== 'string' || t.split('.').length !== 3) return null;
+    let exp;
+    try {
+      exp = decode(t).payload.exp;
+    } catch {
+      return null;
+    }
+    if (!Number.isFinite(exp) || exp * 1000 <= now + MIN_TTL_MS) return null;
+  }
+  return Object.fromEntries(ROLES.map((r) => [r, candidate[r]]));
+}
+
+function fromEnv() {
+  const raw = process.env.PENTEST_TOKENS;
+  if (!raw) return null;
+  try {
+    return validTokens(JSON.parse(raw));
+  } catch {
+    return null;
+  }
 }
 
 export async function loginAll() {
-  const cacheFile = join(tmpdir(), `pentest-tokens-${Buffer.from(env.url).toString('hex').slice(-24)}.json`);
-  if (existsSync(cacheFile)) {
-    const cached = JSON.parse(readFileSync(cacheFile, 'utf8'));
-    const exp = Math.min(...Object.values(cached).map((t) => decode(t).payload.exp));
-    if (exp * 1000 > Date.now() + 5 * 60_000) return cached;
-  }
+  const cached = validTokens(memo) ?? fromEnv();
+  if (cached) return (memo = cached);
   const tokens = {};
   for (const role of ROLES) {
     const r = await login(USERS[role].email);
@@ -153,7 +192,7 @@ export async function loginAll() {
     }
     tokens[role] = r.json.access_token;
   }
-  writeFileSync(cacheFile, JSON.stringify(tokens), { mode: 0o600 });
+  memo = tokens;
   return tokens;
 }
 
