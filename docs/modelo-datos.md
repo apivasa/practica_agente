@@ -40,6 +40,7 @@ Funciones de apoyo (esquema `private`, no expuesto por la API, `security definer
 - Check `indicators_thresholds_coherent`: con "más es mejor", verde ≥ amarillo; con "menos es mejor", verde ≤ amarillo.
 - Check `indicators_cumulative_direction` (M-08): un indicador `cumulative_target` no puede ser `lower_is_better`. El motor (`validateIndicator`) aplica la misma regla en el formulario.
 - Checks `indicators_green_threshold_finite` e `indicators_yellow_threshold_finite` (M-10): los umbrales no pueden ser `NaN`, `Infinity` ni `-Infinity`. En PostgreSQL `NaN` cuenta como mayor que cualquier número, así que el check de coherencia solo no lo frenaba.
+- Checks `indicators_green_threshold_safe` e `indicators_yellow_threshold_safe` (M-11): |umbral| < 2^53 (9.007.199.254.740.992). Un valor como `1e400` es finito en PostgreSQL, pero el front y el motor lo leerían como `Infinity`. `thresholds_by_category` todavía no tiene tope ni forma más allá de ser un objeto JSON.
 
 ### `commitments` — compromisos por unidad, indicador y periodo
 `id`, `unit_id`, `indicator_id`, `period` (`AAAA-Qn` o `AAAA-MM`), `green_override`, `yellow_override`, `package_total` (≥ 0), `package_by_category` (objeto JSON, ej. `{"P0P1": 1500, "P2P3": 500}`), `notes`, `created_by`, `created_at`, `updated_at` (lo pone un trigger).
@@ -47,6 +48,8 @@ Funciones de apoyo (esquema `private`, no expuesto por la API, `security definer
 - Único por (`unit_id`, `indicator_id`, `period`).
 - Check `commitments_override_pair`: verde y amarillo negociados van juntos o ninguno.
 - Checks `commitments_green_override_finite`, `commitments_yellow_override_finite` y `commitments_package_total_finite` (M-10): si tienen valor, no puede ser `NaN`, `Infinity` ni `-Infinity`. Siguen admitiendo nulo.
+- Checks `commitments_green_override_safe`, `commitments_yellow_override_safe` y `commitments_package_total_safe` (M-11): si tienen valor, |v| < 2^53.
+- Check `commitments_package_by_category_safe` (M-11): si hay objeto, cada valor de primer nivel debe ser un número JSON (no texto, `null`, booleano, arreglo ni objeto) con |v| < 2^53. No limita las claves ni exige enteros ≥ 0: eso lo validan la pantalla y el motor.
 - Editables por el custodio: `period`, los dos overrides, `package_total`, `package_by_category`, `notes`. No se pueden cambiar `unit_id`, `indicator_id` ni `created_by`.
 
 ### `measurements` — mediciones
@@ -67,6 +70,7 @@ Funciones de apoyo (esquema `private`, no expuesto por la API, `security definer
 `id`, `unit_id`, `indicator_id`, `month` (`AAAA-MM`), `target_value` (≥ 0, acumulada a ese mes), `created_at`. Única por (`unit_id`, `indicator_id`, `month`).
 
 - Check `targets_target_value_finite` (M-10): `target_value` no puede ser `NaN`, `Infinity` ni `-Infinity`.
+- Check `targets_target_value_safe` (M-11): |`target_value`| < 2^53.
 
 La gestora las crea y edita en **Metas** (`#/gestora/metas`, M-07). La pantalla solo cambia `target_value` de una meta existente y no borra metas. Desde M-09 la BD solo permite UPDATE de la columna `target_value` (privilegio por columna); cambiar `unit_id`, `indicator_id`, `month` o `id`, también por upsert, da 42501. Para otra unidad, indicador o mes se crea una meta nueva. La semilla trae metas para 2027-Q1 (un tercio, dos tercios y el total del paquete). Solo las usan los indicadores de meta acumulada sin categorías; VULN no.
 
