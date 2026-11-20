@@ -1,6 +1,6 @@
 # Manual de la gestora de KPIs
 
-Qué ve y qué puede hacer la gestora de KPIs en la app. Solo describe lo que está construido (2026-11-19).
+Qué ve y qué puede hacer la gestora de KPIs en la app. Solo describe lo que está construido (2026-11-20).
 
 > La app todavía no está publicada en GitHub Pages (V-05). Hoy se usa en local; ver [README](../README.md#correr-en-local). En local entra con `gestora@example.test`.
 
@@ -45,7 +45,7 @@ Muestra el nombre del rol y un texto con lo que haces en la app. No tiene datos:
 6. Marca o desmarca **Activo**.
 7. Pulsa **Guardar indicador**. **Cancelar** cierra el formulario sin guardar.
 
-Si algo no cuadra, ves la lista de errores arriba del formulario. Por ejemplo: "Umbral verde: obligatorio" o umbrales incoherentes con el sentido.
+Si algo no cuadra, ves la lista de errores arriba del formulario. Por ejemplo: "Umbral verde: obligatorio" o umbrales incoherentes con el sentido. Una meta acumulada con "Menos es mejor" se rechaza: "Sentido: una meta acumulada (cumulative_target) solo admite higher_is_better (más es mejor)".
 
 **Editar.** Pulsa **Editar** en la fila. El formulario se abre con los valores actuales.
 

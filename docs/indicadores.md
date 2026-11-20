@@ -26,7 +26,8 @@ Notas:
   - Con "más es mejor", verde debe ser mayor o igual que amarillo.
   - Con "menos es mejor", verde debe ser menor o igual que amarillo.
   - Si no se cumple, la pantalla rechaza el indicador con un mensaje en español. La BD también lo impide.
-- **Umbrales por categoría** (opcional): nombre de categoría, verde y amarillo. Para vulnerabilidades usa exactamente `P0P1` y `P2P3` (ver sección 6).
+- **Meta acumulada solo admite "más es mejor"** (M-08). Con "menos es mejor" la pantalla muestra "Sentido: una meta acumulada (cumulative_target) solo admite higher_is_better (más es mejor)". La BD también lo impide (check `indicators_cumulative_direction`).
+- **Umbrales por categoría** (opcional): nombre de categoría, verde y amarillo. Para vulnerabilidades usa exactamente `P0P1` y `P2P3` (ver sección 6). En un indicador de meta acumulada con categorías, la BD solo acepta mediciones con categoría `P0P1` o `P2P3` y valor entero ≥ 0 (M-08): otras categorías no sirven para ese tipo.
 - **Frecuencia y fuente** hoy solo se guardan. La evaluación programada corre igual para todos (mensual). Las fuentes automáticas no existen todavía (V-07, espera Q-02).
 - **Activo.** Solo los indicadores activos entran en la evaluación y en el tablero de completitud. Desactivar no borra nada.
 
@@ -231,7 +232,9 @@ Desde M-06 ([ADR 0016](adr/0016-color-mensual-por-criticidad.md)), el color mens
 3. **Color** por categoría, con sus propios umbrales (`P0P1` 96 / 90 y `P2P3` 85 / 75 en la semilla) y su mínimo de muestra.
 4. **Color del indicador:** el **peor** de sus categorías. El valor guardado es el de la categoría con peor color. El motivo detalla todas, por ejemplo `P0/P1 92.59 % (1050 de 1134, meta acumulada de 2027-02): ...`.
 5. **Categoría que no se puede evaluar** (sin paquete en el compromiso, categoría no reconocida o muestra insuficiente): el indicador nunca sale verde. Si las demás son verdes, queda **sin evaluar**; si alguna es amarilla o roja, conserva ese color.
-6. **Mediciones malformadas** (categoría distinta de `P0P1`/`P2P3` o valor no entero ≥ 0, cargadas por API): se descartan una por una y el motivo lo dice: "N medición(es) descartada(s) por categoría o valor inválido". El mes no se anula. El ritmo diario, en cambio, no se calcula hasta que se corrija la fila (ver [`docs/operacion.md`](operacion.md)).
+6. **Mediciones malformadas** (categoría distinta de `P0P1`/`P2P3` o valor no entero ≥ 0):
+   - Desde M-08 la BD no deja cargarlas: el trigger `measurements_category_guard` rechaza la fila (ver [modelo de datos](modelo-datos.md#measurements--mediciones)).
+   - Las que ya estaban antes, o las de un indicador que recibió categorías después, se descartan una por una con la misma regla en la evaluación mensual, en el ritmo diario y en el ritmo que ve el líder. El motivo lo dice: "N medición(es) descartada(s) por categoría o valor inválido". El mes no se anula y el ritmo se sigue calculando; el estado diario guarda el conteo en `details.discarded` (ver [`docs/operacion.md`](operacion.md)).
 7. **Umbral negociado:** el verde y el amarillo negociados en un compromiso **no** se aplican a las categorías.
 
 Ejemplo de la semilla (Unidad Alfa, febrero de 2027). Paquete P0/P1 1500 + 200 detectadas en febrero = 1700 → meta de febrero 1134. P2/P3 500 → meta 334. Resueltas: P0/P1 1050 (92,6 %, amarillo) y P2/P3 350 (verde). Color del indicador: **amarillo**.
