@@ -175,8 +175,9 @@ describe('pentest-api S-05: inyección, esquemas, GraphQL y Auth', { skip }, () 
         body: { query },
       });
 
-    test('anónimo: la introspección no publica tablas ni mutaciones', async () => {
+    test('anónimo: la introspección no publica tablas ni mutaciones', async (ctx) => {
       const r = await gql('anon', '{ __schema { queryType { fields { name } } mutationType { fields { name } } } }');
+      ctx.diagnostic(`graphql anon: ${r.status} ${r.text.slice(0, 200)}`);
       assert.ok(r.status < 500, fmt(r));
       if (r.status !== 200 || !r.json?.data?.__schema) return; // endpoint cerrado o sin esquema: correcto
       const names = [
@@ -207,8 +208,9 @@ describe('pentest-api S-05: inyección, esquemas, GraphQL y Auth', { skip }, () 
       ['audit_logCollection', 'id', () => false],
     ];
     for (const [coll, fields, ok] of LEADER_GQL) {
-      test(`líder: GraphQL ${coll} respeta RLS`, async () => {
+      test(`líder: GraphQL ${coll} respeta RLS`, async (ctx) => {
         const r = await gql('lider1', `{ ${coll} { edges { node { ${fields} } } } }`);
+        ctx.diagnostic(`graphql lider1 ${coll}: ${r.status} ${r.text.slice(0, 160)}`);
         assert.ok(r.status < 500, fmt(r));
         const edges = r.json?.data?.[coll]?.edges ?? [];
         const leaked = edges.map((e) => e.node).filter((n) => !ok(n));
