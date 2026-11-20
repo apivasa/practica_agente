@@ -261,6 +261,19 @@ Con el primer despliegue cambian tres cosas: (1) el front deja de ser un build l
 | T-M08-03 | Tampering / DoS | Medición malformada por API apaga la escalada (H-M06-01) | Medio | Trigger en BD + descarte por fila en el motor | 046 (minúsculas, espacios, UPDATE a nulo/decimal); `080_*` (desarrollador); H-M08-01 (NaN/Infinity pasan la BD, los descarta el motor) |
 | T-M08-04 | Tampering | Desactivar el trigger o quitar las categorías del indicador para saltarse la regla | Medio | Solo el dueño de la tabla altera triggers; `indicators` solo lo escribe la gestora | 046 |
 
+## Superficie nueva (V-08, V-09)
+
+- **Candado vigente hoy** (`engine/lock.js#lockToday`, `src/lib/dashboard.js#unitLockToday`, `src/views/dashboard-parts.js#lockTodayInfo`): el front recalcula, con las evaluaciones globales guardadas y las excepciones que RLS le entrega, el nivel de escalada de hoy y pinta "Inicio autorizado: `change_ref`" en `.unit-lock-today` (líder) y en la columna "Candado hoy" (comité). No hay lecturas ni escrituras nuevas contra la API: reutiliza `listEvaluations` y `listCurrentExceptions`.
+- **Mapa único `SCOPE_LABELS`** con `scopeLabel` por lista blanca (`src/lib/exceptions-logic.js`).
+
+| ID | STRIDE | Amenaza | Riesgo | Control | Prueba |
+|---|---|---|---|---|---|
+| T-V08-01 | Tampering / Elevation | XSS almacenado vía `change_ref`/motivo de excepción en "Inicio autorizado: REF" | Alto | Render por `textContent` (`el`), CSP sin `unsafe-inline` | `e2e/security/lock-today-v08.spec.js`; `tests/security/front-v08-v09.test.js` › XSS |
+| T-V08-02 | Information disclosure | El líder ve en su candado de hoy excepciones o cierres de otra unidad | Alto | RLS de `exceptions`/`evaluations` por unidad; además `lockToday` filtra por `unit_id` exacto | `e2e/security/dashboards-v01-v03.spec.js` › IDOR (RLS real); `lock-today-v08.spec.js` y `front-v08-v09.test.js` › aislamiento (defensa en profundidad) |
+| T-V08-03 | Tampering / Repudiation | Falsear el candado de hoy desde el cliente (excepción inventada en el navegador) para que tenga efecto en el servidor | Bajo | Es solo vista: ninguna Action ni función SQL lee lo que calcula el cliente; el candado oficial lo escribe la evaluación mensual con la clave secreta y queda en auditoría | `front-v08-v09.test.js` › solo vista (sin uso en `scripts/`, `supabase/`, `.github/`; vistas sin escrituras); `lock-today-v08.spec.js` › sin escrituras |
+| T-V08-04 | Tampering / DoS | Datos hostiles (mes `__proto__`, color desconocido, `change_ref` no texto) rompen el tablero o contaminan prototipos | Bajo | `Object.create(null)`, regex de mes, lista blanca de colores, `try/catch` con mensaje fijo | `front-v08-v09.test.js` › entradas hostiles |
+| T-V09-01 | Tampering | `scopeLabel` con clave heredada (`__proto__`, `constructor`) pinta funciones u objetos | Bajo | `Object.hasOwn` sobre mapa congelado | `front-v08-v09.test.js` › scopeLabel |
+
 ## Trazabilidad: amenazas de riesgo Alto → prueba automática
 
 | Amenaza | Prueba (archivo › caso) | Estado |
