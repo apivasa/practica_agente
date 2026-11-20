@@ -48,10 +48,23 @@ describe('5 · scripts/ci/supabase-start.sh (F-07)', () => {
     assert.match(code, /\[ "\$\{1:-\}" = "supabase" \] \|\| usage/, 'primer argumento fijado a supabase');
   });
 
-  test('estático: sudo solo no interactivo y solo para ss de lectura', () => {
-    const sudo = [...code.matchAll(/\bsudo\b[^\n|)]*/g)].map((m) => m[0].trim());
+  // F-10 amplía la lista blanca de forma estrecha: `ss -ltnp`/`ss -tanp` (lectura) y
+  // un único `sysctl -w net.ipv4.ip_local_reserved_ports="$new"`, cuyo valor se
+  // valida a dígitos/comas/guiones (tests/security/ci-supabase-start-f10.test.js).
+  test('estático: sudo solo no interactivo y solo para ss de lectura o la reserva de puertos (F-10)', () => {
+    // Solo se ignoran mensajes `echo "..."` literales (sin $( ni backticks ni ; fuera).
+    const exec = code.split('\n').filter((l) => !/^\s*echo\s+"[^"`]*"\s*$/.test(l) || /\$\(/.test(l)).join('\n');
+    const sudo = [...exec.matchAll(/\bsudo\b[^\n|)]*/g)].map((m) => m[0].trim());
     assert.ok(sudo.length > 0);
-    for (const s of sudo) assert.match(s, /^sudo -n ss -ltnp\b/, `uso de sudo no permitido: ${s}`);
+    const allowed = [
+      /^sudo -n ss -ltnp(\s+2>\/dev\/null)?$/,
+      /^sudo -n ss -tanp(\s+2>\/dev\/null)?$/,
+      /^sudo -n sysctl -w "net\.ipv4\.ip_local_reserved_ports=\$new" >\/dev\/null 2>&1; then$/,
+    ];
+    for (const s of sudo) assert.ok(allowed.some((re) => re.test(s)), `uso de sudo no permitido: ${s}`);
+    assert.equal(sudo.filter((s) => /\bsysctl\b/.test(s)).length, 1, 'un único sysctl con sudo');
+    assert.doesNotMatch(exec, /\bsudo\s+(-[a-zA-Z]*[^n\s-][a-zA-Z]*|--)/, 'sudo con opciones distintas de -n');
+    assert.doesNotMatch(exec, /\bsudo\s+(?!-n\s)/, 'sudo sin -n');
   });
 
   test('metacaracteres en los argumentos llegan literales y no ejecutan nada', () => {

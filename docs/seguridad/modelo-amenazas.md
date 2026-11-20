@@ -359,3 +359,12 @@ M-14 no abre superficie: reemplaza los 9 CHECK `*_safe` de M-11/M-12 por el bord
 |---|---|---|---|---|---|
 | T-M14-01 | Tampering / DoS lógico | Valor en [2^53 − 0,5, 2^53) que la BD aceptaba y `JSON.parse` redondea a 2^53: un umbral así hacía fallar la evaluación mensual (`normalizeIndicator`) | Bajo | CHECK `*_safe` con `abs(v) < 9007199254740991.5` en las 7 columnas y en los 2 JSONB | `supabase/tests/security/051`, `tests/security/api/safe-cap-m14.test.js` (incluye BD == motor sobre lo que devuelve la API) |
 | T-M14-02 | Tampering | Una migración de reemplazo deja la tabla sin CHECK (DROP sin ADD, `drop ... if exists`, sentencias separadas, `NOT VALID`) o con un tope > 2^53 | Bajo | Reemplazo atómico en un `ALTER TABLE`; revisión estática de todas las migraciones | `tests/security/db-static-m14.test.js`, `tests/security/engine-m13.test.js` › barrera; catálogo en `049` y `051` (cada CHECK una sola vez, validado, ninguno con el borde viejo) |
+
+## Superficie nueva (F-10)
+
+`scripts/ci/supabase-start.sh` ejecuta en el runner efímero de GitHub Actions `sudo -n sysctl -w net.ipv4.ip_local_reserved_ports=<existentes>,54320-54329` y `sudo -n ss -tanp` (diagnóstico). `SUPABASE_RESERVED_PORTS_FILE` cambia solo la ruta de lectura de las reservas (para pruebas); ningún workflow la fija.
+
+| ID | STRIDE | Amenaza | Riesgo | Control | Prueba |
+|---|---|---|---|---|---|
+| T-F10-01 | Elevation / Tampering | Un contenido hostil en el archivo de reservas (o en la ruta de `SUPABASE_RESERVED_PORTS_FILE`) inyecta otra clave sysctl, opciones o comandos en la llamada con sudo | Bajo (fijar la variable ya exige control del workflow) | Valor leído sin espacios y validado a `[0-9,-]`; `new` solo es `$current,$RESERVED_RANGE`; un único argumento entre comillas; sudo siempre `-n` | `tests/security/ci-supabase-start-f10.test.js`; lista blanca de sudo en `ci-supabase-start-f07.test.js` |
+| T-F10-02 | Info disclosure | `ss -tanp` con sudo vuelca procesos y sockets del runner en el log | Muy bajo (runner efímero, solo líneas de 54320-54329) | Filtro `grep -E` por los puertos de Supabase local | `ci-supabase-start-f10.test.js` › diagnóstico |
