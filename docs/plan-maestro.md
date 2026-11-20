@@ -133,7 +133,7 @@ El orquestador toma el **primer ítem `Pendiente`** cuyas dependencias estén `H
 | 23 | V-04 | Hecho | 0 | #22 | Constructor: arquitecto-SRE |
 | 24 | V-06 | Hecho | 0 | #23 | Constructor: documentador |
 | 25 | S-05 | Hecho | 1 | #26 | Fase A (pre-despliegue). Constructor: seguridad |
-| 26 | V-05 | En curso | 1 | #27 | Workflow fusionado. Falta el primer run de `deploy.yml` (P-06): la sesión programada no pudo lanzarlo (bloqueo de permisos), lo lanza el usuario |
+| 26 | V-05 | Hecho | 3 | #27, #fix deploy | Primer despliegue OK (run 44838844787): migraciones aplicadas y Pages publicado. Siguiente: S-05b (pentest fase B contra producción), luego P-05 |
 | 26b | S-05b | Pendiente | 0 | | Fase B del pentest contra Pages y Supabase real; depende del primer run de V-05; compuerta de P-05 |
 | 26c | M-06 | Hecho | 1 | #28 | Color mensual de VULN por criticidad (96 % P0/P1, 85 % P2/P3); antes de P-05 |
 | 26d | M-07 | Hecho | 0 | #31 | Pantalla de metas mensuales (`targets`) para la gestora |

@@ -1,15 +1,16 @@
 # Estado del modo autónomo
 
 ## Candado de ciclo
-Estado: EN CURSO
-Desde: 2026-11-20 18:28
-Latido: 2026-11-20 18:37
-Sesión: interactiva (session_013PQePWEzq4D4wxGZ4vzQjC) — arreglo deploy --linked
+Estado: LIBRE
+Desde: 
+Latido: 2026-11-20 18:45
+Sesión: 
 
 ## Log de ciclos (más reciente arriba)
 
 | Fecha y hora (Guayaquil) | Ítems trabajados | Resultado | Notas |
 |---|---|---|---|
+| 2026-11-20 18:45 | V-05 primer despliegue | Hecho | Sesión interactiva: arreglos de deploy.yml (--remote, --yes), despliegue OK run 44838844787. Siguiente para el orquestador: S-05b (pentest fase B contra producción), luego pedir P-05 (EVALUATION_ENABLED) y alta de la primera gestora real; recordar al usuario borrar del nivel de repositorio SUPABASE_SECRET_KEY, SUPABASE_ACCESS_TOKEN, SUPABASE_DB_PASSWORD y SUPABASE_PROJECT_REF (ya están en el environment produccion) |
 | 2026-11-20 18:07 | V-05 (primer `deploy.yml`, run 44834411127) | Falló en la verificación previa | Lanzado a pedido del usuario. La verificación detectó el registro de usuarios abierto en Supabase Auth; no se publicó nada. Espera que el usuario desactive *Allow new users to sign up* (P-06) y relance. |
 | 2026-11-20 09:15 | F-09 (#40), F-10 (#41) | Hechos | F-09: tokens del pentest en memoria + `PENTEST_TOKENS`, sin caché en disco (alertas CodeQL #14–#16; confirmar *fixed* en GitHub, la sesión recibe 403 en code-scanning). F-10 nuevo: el pentest-api de #40 falló por 54322 sin proceso escuchando (puerto efímero); se reservan 54320–54329 con sysctl, 14/14 arranques al primer intento; seguridad amplió su lista blanca de sudo. Sin reintentos ni notificaciones. Todo lo demás sigue esperando al usuario: primer `deploy.yml` (P-06) → S-05b → V-05b → P-05; C-05 (Q-04), V-07 (Q-02). |
 | 2026-11-20 07:29 | M-11 (#36), M-12 (#37), M-13 (#38), M-14 (#39) | Hechos | Endurecimiento numérico BD/motor (tope 2^53, forma JSONB, borde exacto con redondeo JS); sin reintentos. Q-08 registrado sin notificación (categorías libres vs. mediciones P0P1/P2P3). Todo lo demás espera al usuario: primer `deploy.yml` (P-06) → S-05b → V-05b → P-05; C-05 (Q-04) y V-07 (Q-02). Lección: revisores con `isolation: worktree` evitan pisarse en el checkout compartido. Pendiente menor: comentario de cabecera de `engine/numeric.js` (H-ARQ-M14-03); e2e posiblemente intermitente (H-ARQ-M14-05). |
