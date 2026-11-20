@@ -2,6 +2,12 @@
 
 Una línea por ítem, la más reciente arriba.
 
+## Sin publicar
+
+- 2026-11-20 · F-08 · Las pruebas de salud y de despliegue comparan las URL por origen exacto en lugar de por subcadena, el patrón que CodeQL marcaba como alerta alta. Sin cambios visibles en la app.
+
+## Integrados
+
 - 2026-11-20 · M-06 · El color mensual de vulnerabilidades se calcula por criticidad (P0/P1 y P2/P3 con sus umbrales, gana el peor) sobre metas de 1/3, 2/3 y 3/3 del paquete efectivo, sin usar `targets`; las mediciones malformadas se descartan y el motivo lo dice. El líder ve la meta del mes por criticidad.
 - 2026-11-20 · V-05 (#27) · Workflow de despliegue manual (`deploy.yml`): verifica secretos, Auth y `dist/`, aplica migraciones a Supabase y publica en GitHub Pages solo cuando el usuario lo dispara. La app todavía no está publicada.
 - 2026-11-20 · S-05 fase A (#26) · Pentest previo a producción contra el build de producción y Supabase local. La fase B (contra Pages y la API real) queda lista para correr tras el primer despliegue.
