@@ -149,7 +149,7 @@ El orquestador toma el **primer ítem `Pendiente`** cuyas dependencias estén `H
 | 26n | M-12 | Hecho | 0 | #37 | Residuales de M-11 (H-M11-01..03). Claves de `package_by_category` libres (categorías del indicador o `total`), no P0P1/P2P3 |
 | 26o | M-13 | Hecho | 0 | #38 | H-QA-M12-01: tope 2^53 en `engine/numeric.js`, usado por indicador, compromiso y mediciones |
 | 26p | M-14 | Hecho | 0 | #39 | H-ARQ-M13-01: CHECK `_safe` a abs(v) < 9007199254740991.5 para que BD y motor rechacen lo mismo (hoy [2^53 − 0,5, 2^53) pasa la BD y hace fallar la evaluación mensual) |
-| 26q | F-09 | Pendiente | 0 | | Alertas CodeQL abiertas en main (code-scanning #14, #15, #16, "File data in outbound network request", solo en pruebas): tests/security/api/numeric-safe-cap-m11.test.js:30, json-shape-m12.test.js:26, safe-cap-m14.test.js:24; origen: token cacheado por `readFileSync` en tests/security/api/_lib.js:144. Constructor: seguridad (validar el caché o no cachear tokens) |
+| 26q | F-09 | En curso | 0 | | Alertas CodeQL abiertas en main (code-scanning #14, #15, #16, "File data in outbound network request", solo en pruebas): tests/security/api/numeric-safe-cap-m11.test.js:30, json-shape-m12.test.js:26, safe-cap-m14.test.js:24; origen: token cacheado por `readFileSync` en tests/security/api/_lib.js:144. Constructor: seguridad (validar el caché o no cachear tokens) |
 | 27 | C-05 | Bloqueado | 0 | | Espera Q-04 |
 | 28 | V-07 | Bloqueado | 0 | | Espera Q-02 |
 
