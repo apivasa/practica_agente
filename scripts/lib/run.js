@@ -1,6 +1,6 @@
 // C-03/C-04: orquestación de la evaluación mensual y del ritmo diario.
 // Recibe la capa de datos (`db`) por parámetro: las pruebas usan una BD en memoria.
-import { packageStatus, paceStatus, recalculateOnNewCritical, quarterCommitment } from '../../engine/index.js';
+import { packageStatus, paceStatus, recalculateOnNewCritical, quarterCommitment, discardedNote } from '../../engine/index.js';
 import { addMonths, monthEnd, quarterBounds, addDays } from './dates.js';
 import {
   pickCommitment,
@@ -324,11 +324,14 @@ export async function runDaily(db, { asOf, log = () => {} }) {
           (s) => s.entity_id === entityId && s.details?.as_of === asOf && s.details?.quarter === quarter,
         );
         const snapshot = { ...context, quarter, behind_any: pace.behindAny, status };
+        // M-08 (A7): filas malformadas descartadas por buildPackageInput; quedan en el motivo.
+        const note = built.discarded > 0 ? `; ${discardedNote(built.discarded)}` : '';
+        if (note) snapshot.discarded = built.discarded;
         const fingerprint = stableStringify(status);
         if (!sameDay.some((s) => stableStringify(s.details?.status) === fingerprint && s.details?.behind_any === pace.behindAny)) {
           audit.push({ actor: ACTOR, action: 'pace_snapshot', entity: 'pace', entity_id: entityId, details: snapshot });
         }
-        log(`${unit.name}/${ind.code}: ${pace.reason}`);
+        log(`${unit.name}/${ind.code}: ${pace.reason}${note}`);
       } catch (err) {
         errors.push(`${unit.name}/${ind.code}: ${err instanceof Error ? err.message : String(err)}`);
       }

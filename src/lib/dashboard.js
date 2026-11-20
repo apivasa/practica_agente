@@ -5,7 +5,7 @@
 import {
   packageStatus, paceStatus, exceptionFromRow, exceptionStatus,
   buildPackageInput, indicatorConfig, pickCommitment, addMonths, monthEnd,
-  hasCategoryEvaluation, evaluateCategoryMonth, quarterCommitment,
+  hasCategoryEvaluation, evaluateCategoryMonth, quarterCommitment, discardedNote,
 } from '../../engine/index.js';
 
 export const COLOR_LABELS = Object.freeze({
@@ -183,7 +183,8 @@ export function packagePace({ indicator, commitment, measurements, asOf }) {
       resolved: pace.resolved,
       gap: pace.gap,
       effectiveTotal: status.effectiveTotal.total,
-      reason: pace.reason,
+      reason: built.discarded > 0 ? `${pace.reason}; ${discardedNote(built.discarded)}` : pace.reason,
+      ...(built.discarded > 0 ? { discarded: built.discarded } : {}),
     };
   } catch (err) {
     return { ok: false, reason: `No se pudo calcular el ritmo: ${err.message}` };

@@ -219,15 +219,18 @@ describe('runDaily (2027-02-10)', () => {
     assert.ok(logs.some((l) => /package_by_category/.test(l)));
   });
 
-  test('datos inválidos de una unidad se reportan como error', async () => {
+  // M-08 (A7): antes una fila malformada hacía fallar la unidad (exit 1). Ahora
+  // buildPackageInput la descarta, el ritmo se calcula y el motivo cuenta el descarte.
+  test('una fila malformada de una unidad se descarta y se anota en el motivo', async () => {
     const data = seedScenario();
     data.measurements.push({
       unit_id: U.beta, indicator_id: I.vuln, measured_on: '2027-02-01', value: 1.5, category: 'P0P1', kind: 'resolved', created_at: 'z',
     });
     const db = createFakeDb(data);
-    const r = await runDaily(db, { asOf: '2027-02-10' });
-    assert.equal(r.errors.length, 1);
-    assert.match(r.errors[0], /Unidad Beta/);
+    const logs = [];
+    const r = await runDaily(db, { asOf: '2027-02-10', log: (x) => logs.push(x) });
+    assert.deepEqual(r.errors, []);
+    assert.ok(logs.some((l) => l.startsWith('Unidad Beta/VULN') && /1 medición\(es\) descartada\(s\)/.test(l)), logs.join('\n'));
   });
 });
 

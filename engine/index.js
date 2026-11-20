@@ -53,6 +53,7 @@ export {
   quarterCommitment,
   indicatorConfig,
   buildPackageInput,
+  discardedNote,
   hasCategoryEvaluation,
   evaluateCategoryMonth,
 } from './rows.js';
