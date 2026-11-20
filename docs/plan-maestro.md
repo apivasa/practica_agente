@@ -150,7 +150,7 @@ El orquestador toma el **primer ítem `Pendiente`** cuyas dependencias estén `H
 | 26o | M-13 | Hecho | 0 | #38 | H-QA-M12-01: tope 2^53 en `engine/numeric.js`, usado por indicador, compromiso y mediciones |
 | 26p | M-14 | Hecho | 0 | #39 | H-ARQ-M13-01: CHECK `_safe` a abs(v) < 9007199254740991.5 para que BD y motor rechacen lo mismo (hoy [2^53 − 0,5, 2^53) pasa la BD y hace fallar la evaluación mensual) |
 | 26q | F-09 | Hecho | 0 | #40 | Tokens del pentest en memoria + `PENTEST_TOKENS`; sin caché en disco. Confirmar en GitHub que las alertas #14–#16 pasan a *fixed* (la sesión recibe 403 en code-scanning) |
-| 26r | F-10 | En curso | 0 | | `supabase start` sigue fallando por 54322 «address already in use» tras 3 intentos (PR #40) sin ningún proceso escuchando: el puerto cae en el rango efímero de Linux (32768–60999). Reservar 54320–54329 con `sysctl net.ipv4.ip_local_reserved_ports` antes de arrancar en `scripts/ci/supabase-start.sh`. Constructor: desarrollador |
+| 26r | F-10 | Hecho | 0 | #41 | `supabase start` sigue fallando por 54322 «address already in use» tras 3 intentos (PR #40) sin ningún proceso escuchando: el puerto cae en el rango efímero de Linux (32768–60999). Reservar 54320–54329 con `sysctl net.ipv4.ip_local_reserved_ports` antes de arrancar en `scripts/ci/supabase-start.sh`. Constructor: desarrollador. Vigilar 2 semanas `::notice::` de intento >1 en main (H-ARQ-F10-03) |
 | 27 | C-05 | Bloqueado | 0 | | Espera Q-04 |
 | 28 | V-07 | Bloqueado | 0 | | Espera Q-02 |
 

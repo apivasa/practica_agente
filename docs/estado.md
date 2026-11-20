@@ -1,15 +1,16 @@
 # Estado del modo autónomo
 
 ## Candado de ciclo
-Estado: EN CURSO
-Desde: 2026-11-20 07:50
-Latido: 2026-11-20 08:32
-Sesión: programada 2026-11-20 07:48 (F-09)
+Estado: LIBRE
+Desde: 
+Latido: 2026-11-20 09:15
+Sesión: 
 
 ## Log de ciclos (más reciente arriba)
 
 | Fecha y hora (Guayaquil) | Ítems trabajados | Resultado | Notas |
 |---|---|---|---|
+| 2026-11-20 09:15 | F-09 (#40), F-10 (#41) | Hechos | F-09: tokens del pentest en memoria + `PENTEST_TOKENS`, sin caché en disco (alertas CodeQL #14–#16; confirmar *fixed* en GitHub, la sesión recibe 403 en code-scanning). F-10 nuevo: el pentest-api de #40 falló por 54322 sin proceso escuchando (puerto efímero); se reservan 54320–54329 con sysctl, 14/14 arranques al primer intento; seguridad amplió su lista blanca de sudo. Sin reintentos ni notificaciones. Todo lo demás sigue esperando al usuario: primer `deploy.yml` (P-06) → S-05b → V-05b → P-05; C-05 (Q-04), V-07 (Q-02). |
 | 2026-11-20 07:29 | M-11 (#36), M-12 (#37), M-13 (#38), M-14 (#39) | Hechos | Endurecimiento numérico BD/motor (tope 2^53, forma JSONB, borde exacto con redondeo JS); sin reintentos. Q-08 registrado sin notificación (categorías libres vs. mediciones P0P1/P2P3). Todo lo demás espera al usuario: primer `deploy.yml` (P-06) → S-05b → V-05b → P-05; C-05 (Q-04) y V-07 (Q-02). Lección: revisores con `isolation: worktree` evitan pisarse en el checkout compartido. Pendiente menor: comentario de cabecera de `engine/numeric.js` (H-ARQ-M14-03); e2e posiblemente intermitente (H-ARQ-M14-05). |
 | 2026-11-20 03:48 | F-08 (#29), F-07 (#30), M-07 (#31), M-08 (#32), V-08+V-09 (#33), M-09 (#34), M-10 (#35) | Hechos | F-07 con 1 reintento (faltaba seguridad.yml). Nuevos: M-09/M-10 (hallazgos bajos) y M-11 (H-M10-01, P3). Sigue sin correr el primer `deploy.yml` (P-06, lo lanza el usuario): tras el deploy, S-05b y luego V-05b y aviso P-05. Antes del deploy: correr las consultas de verificación de M-08, M-09 y M-10 (runbook › Despliegue). Lección: revisores en paralelo deben usar ramas locales propias (`qa/`, `sec/`, `arq/`, `doc/`) y `push HEAD:item/<ID>`; un commit de QA revirtió trabajo de seguridad y se restauró sin force push. Nota del arquitecto: al resolver Q-03, pasar `yellowLikeRed` de configuración también a `lockToday` del front. |
 | 2026-11-19 20:48 | V-04 (#22), V-06 (#23), S-05 fase A (#26), V-05 (#27), M-06 (#28) | Hechos (V-05 sin primer run) | El lanzamiento de `deploy.yml` quedó bloqueado por permisos de la sesión: lo lanza el usuario (P-06). Tras el deploy: S-05b (`seguridad.yml` dispatch `fase_b=anonimo` desde main), luego avisar P-05 y notificar URL. Siguiente ítem: M-07 (pantalla de metas), luego M-08, V-08+V-09, F-07, V-05b. Q-07 registrado sin notificación. Dependabot #8–#11 siguen en espera. Ramas fusionadas no se pueden borrar desde la sesión (P-04). |
