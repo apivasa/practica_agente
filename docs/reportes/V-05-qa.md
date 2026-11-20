@@ -1,46 +1,69 @@
 # V-05 — Informe QA
 
-Veredicto: VERDE
+Veredicto: VERDE (intento 2, commit revisado `73a679e`, rama al revisar `c6db2bf`)
 
-Alcance: revisión estática y de comportamiento de `.github/workflows/deploy.yml` y `docs/despliegue.md`. El criterio final del plan ("primera publicación accesible en la URL de Pages; migraciones aplicadas") **no se puede comprobar todavía**: el primer despliegue a producción es compuerta del usuario (CLAUDE.md §3). Se verifica todo lo que se puede comprobar antes de ese despliegue.
+Alcance: revisión estática y de comportamiento de `.github/workflows/deploy.yml`, `docs/despliegue.md` y el cambio de `environment: produccion` en `evaluacion-mensual.yml` y `ritmo-diario.yml`. El criterio final del plan ("primera publicación accesible en la URL de Pages; migraciones aplicadas") **no se puede comprobar todavía**: el primer despliegue a producción es compuerta del usuario (CLAUDE.md §3).
 
 ## Criterio de aceptación
 
 | Punto | Estado |
 |---|---|
-| `deploy.yml` publica `dist/` en GitHub Pages | Cumplido en estructura: build → verificación de dist/ → `upload-pages-artifact` → `deploy-pages` (environment `github-pages`). Sin ejecución real todavía. |
-| Aplica migraciones a Supabase real | Cumplido en estructura: `supabase link` + `db push --dry-run` + `db push`, sin semilla. Sin ejecución real todavía. |
-| "En cada merge a `main`" | Diferido a propósito: por ahora solo `workflow_dispatch` con confirm=`desplegar` (compuerta del primer despliegue). El bloque `push` queda comentado y documentado. Ver H-V05-QA-03. |
-| Primera publicación accesible en Pages | Pendiente de la compuerta del usuario. El job `smoke` lo comprobará (HTTP 200 + título real de `index.html`). |
-| Migraciones aplicadas | Pendiente de la compuerta del usuario. |
+| `deploy.yml` publica `dist/` en GitHub Pages | Cumplido en estructura: build → verificación de dist/ → `upload-pages-artifact` → (migraciones) → `deploy-pages` (environment `github-pages`). Sin ejecución real todavía. |
+| Aplica migraciones a Supabase real | Cumplido en estructura: `migrate-plan` (dry-run) → `migrate` (dry-run, `db push`, `migration list`), sin semilla, solo si `SUPABASE_URL` es el origen de producción y el registro de Auth está cerrado. Sin ejecución real todavía. |
+| "En cada merge a `main`" | Diferido a propósito (ADR 0014): solo `workflow_dispatch` con confirm=`desplegar`. Ver H-V05-QA-03. |
+| Primera publicación accesible en Pages | Pendiente de la compuerta del usuario. `smoke` lo comprobará (HTTP 200, título real y JS principal 200). |
+| Migraciones aplicadas | Pendiente de la compuerta del usuario. `supabase migration list` deja la evidencia en el log. |
+
+## Revisión de los cambios del intento 2
+
+| Cambio | Revisión |
+|---|---|
+| Orden verify → build-pages → migrate-plan → migrate → deploy-pages (needs `[build-pages, migrate]`) → smoke | Correcto. `db push` ya no corre si falla el build o la verificación de `dist/`, y Pages no se publica sin migraciones. |
+| verify ya no recibe `SUPABASE_SECRET_KEY` (5 secretos) | Correcto. Ningún job de `deploy.yml` la menciona y `verify` pasa sin ella. |
+| Paso "Origen de producción" | Correcto. Cierra H-V05-QA-01: si los secretos apuntan a otro proyecto (aunque ref y URL sean coherentes), falla antes de migrar. Acepta la barra final. Rechaza http, rutas, subdominios, `//` y vacío. Si `csp.js` no declara la constante, falla. |
+| Paso "Registro cerrado en Auth" | Correcto. Usa `curl -f` contra `${SUPABASE_URL%/}/auth/v1/settings` con `apikey` publicable. Solo pasa con `disable_signup` = `true`. Falla con `false`, con el campo ausente, con respuesta vacía o no JSON y si curl falla. No imprime la clave. Corre después de la validación de origen, así que nunca envía la clave a un host ajeno. |
+| `migrate-plan` separado | Correcto. Solo hace dry-run, nunca `db push`. Cierra H-V05-QA-02 cuando hay revisor en el environment. |
+| `supabase migration list` | Correcto, va después de `db push`. |
+| smoke exige 200 en el JS principal | Correcto. Si la `base` se rompe (assets 404 o script fuera de `/practica_agente/assets/`), falla tras 6 intentos. |
+| `environment: produccion` en los workflows programados | Correcto para H-C03-02, con una consecuencia operativa: ver H-V05-QA-05. |
 
 ## Pruebas añadidas
 
-`tests/workflows/deploy.test.js` — 47 casos (node:test, sin dependencias). Además de leer el YAML, extrae los scripts `run:` de los pasos `verify` y `Verificar dist/` y los **ejecuta con bash** con entradas falsas, para probar comportamiento y no solo texto:
+`tests/workflows/deploy.test.js`: **73 casos** (antes 47; 5 actualizados por los cambios pedidos y 26 nuevos). Usa node:test, sin dependencias. Los scripts `run:` de verify (los 3 pasos), `Verificar dist/` y smoke se **ejecutan con bash**. `curl` y `sleep` se sustituyen por stubs en `PATH`, y el chequeo de origen corre sobre una copia de `src/security/csp.js`.
 
-- Disparador: solo `workflow_dispatch`; `confirm` obligatorio y sin default que habilite; concurrencia sin cancelar un despliegue en curso.
-- Cadena `needs`: verify → migrate → build-pages → deploy-pages → smoke; ningún `if: always()/failure()` ni `continue-on-error`.
-- Permisos: workflow `contents: read`; `pages: write` e `id-token: write` solo en `deploy-pages`; ningún otro job con escritura; los jobs con secretos usan el environment `produccion`.
-- verify (bash): pasa con configuración completa sin imprimir valores; rechaza confirm `""`, `Desplegar`, `desplegar `, `si`, `desplegarr`; rechaza ramas `item/V-05`, `mainx`, `refs/tags/main` y vacía; por cada uno de los 6 secretos ausente falla, lo nombra y no filtra los demás; lista los 6 si faltan todos; rechaza claves legadas JWT y claves intercambiadas; rechaza `SUPABASE_URL` que no corresponde al project ref (o con http).
-- migrate: sin `--include-seed`, `seed.sql`, `db reset`, `--debug`; el dry-run va en un paso anterior y distinto de `db push`; `link` con project ref y sin la clave secreta ni la publicable.
-- build-pages: el build recibe solo URL y clave publicable; orden build → verificar dist/ → upload; `npm ci --ignore-scripts`.
-- Verificar dist/ (bash): pasa con un dist correcto (el literal `sb_secret_` de supabase-js no da falso positivo); falla sin meta CSP, con loopback en la CSP, sin `upgrade-insecure-requests`, con una clave `sb_secret_` real y con `127.0.0.1:54321` en dist.
-- smoke: `permissions: {}`, sin secretos, usa `needs.deploy-pages.outputs.page_url`; exige HTTP 200 y el mismo `<title>` que `index.html`, con reintentos y `exit 1` final; la URL de respaldo coincide con `base` de `vite.config.js`.
-- docs/despliegue.md: menciona `desplegar`, los 6 secretos, dry-run, `seed.sql` y reversión.
+- Disparador: solo `workflow_dispatch`, `confirm` obligatorio y sin default que lo habilite, concurrencia sin cancelar.
+- Cadena: orden exacto de los 6 jobs y sus `needs`. `migrate` desciende de verify, build-pages y migrate-plan, y `deploy-pages` de `migrate`. Sin `if: always()` ni `continue-on-error`.
+- Permisos: workflow con `contents: read`. `pages: write` e `id-token: write` solo en `deploy-pages`. Los jobs con secretos usan `produccion`.
+- Secretos: `SUPABASE_SECRET_KEY` no aparece en `deploy.yml`. verify recibe los 5 secretos. Por cada uno ausente, falla, lo nombra y no filtra los demás. Rechaza la clave legada JWT y una `sb_secret_` cargada como publicable. Comprueba la coherencia entre URL y ref.
+- Confirmación y rama: 5 confirm inválidos y 4 refs distintas de main se rechazan.
+- Origen de producción (bash): 4 casos (ver la tabla de arriba).
+- Registro cerrado en Auth (bash): 8 casos, incluida la URL exacta consultada, la cabecera `apikey`, `-f` y que no haya doble barra.
+- migrate-plan y migrate: sin seed, reset, `--debug` ni `config push`. Usan `link` con el ref y `persist-credentials: false`. migrate-plan sin `db push` real. En migrate, el orden es dry-run → push → migration list.
+- Programados: `ritmo-diario.yml` y `evaluacion-mensual.yml` declaran `environment: produccion`.
+- build-pages y `Verificar dist/` (bash): los mismos 8 casos del intento 1.
+- smoke (bash): pasa al primer intento (2 llamadas: HTML y JS). Falla tras 12 llamadas con JS 404, sin script bajo la base, con HTML 404 o con otro título. Sin `page_url`, usa la URL de respaldo. También cubre el título y la base frente a `index.html` y `vite.config.js`.
+- docs/despliegue.md: menciona los 6 secretos de P-02, `desplegar`, dry-run, `seed.sql` y la reversión.
 
-Resultado local: 47/47 en verde; suite unitaria completa 1181/1181 en verde.
+Resultado local: 73/73. Suite unitaria completa: 1207/1207.
 
 ## Resultado CI
 
-Commit `e401178` (pruebas de QA incluidas): CI `success` (https://github.com/apivasa/practica_agente/actions/runs/44656732175) y Seguridad `success` (https://github.com/apivasa/practica_agente/actions/runs/44656732079).
+Ver la sección "CI del intento 2" al final del informe.
 
 ## Cobertura engine/
 
-99,9 % de líneas (todos los archivos al 100 % salvo `commitment.js`, 99,26 %). V-05 no toca `engine/`.
+99,9 % de líneas (sin cambios; V-05 no toca `engine/`).
 
 ## Hallazgos
 
-- **H-V05-QA-01 (Media) — La URL de producción no se contrasta con el origen de la CSP antes de migrar.** `src/security/csp.js` fija `PRODUCTION_SUPABASE_ORIGIN = https://oehtspdtpwdhfhhhkgao.supabase.co` y el build falla si `VITE_SUPABASE_URL` es otro origen. Pero `verify` solo comprueba que `SUPABASE_URL` corresponda a `SUPABASE_PROJECT_REF`, no que sea ese origen. Si los secretos apuntan a otro proyecto (ref y URL coherentes entre sí), `migrate` **aplica las migraciones en ese otro proyecto** y luego `build-pages` falla: queda un despliegue a medias en una base equivocada. Reproducir: en `verify`, `SUPABASE_PROJECT_REF=otroref` y `SUPABASE_URL=https://otroref.supabase.co` → `verify` pasa (comprobado con el script en bash). Sugerencia: que `verify` compare `SUPABASE_URL` con el origen de producción esperado (o que haga el build antes de `migrate`). No bloquea: el riesgo exige secretos mal cargados por el usuario, y P-02 ya los fijó.
-- **H-V05-QA-02 (Baja) — El dry-run informa pero no detiene.** Dry-run y `db push` son pasos consecutivos del mismo job; `docs/despliegue.md` pide "cancelar el run" si la lista no cuadra, pero el push empieza en segundos. En la práctica la revisión humana llega tarde. Sugerencia: si se quiere una revisión real, separar `db push` en un job con environment con revisor requerido. Aceptable para el primer despliegue (todas las migraciones son nuevas).
-- **H-V05-QA-03 (Info) — Desvío del texto del plan, intencional.** El plan dice "en cada merge a `main`"; el workflow solo admite disparo manual hasta que el usuario apruebe la primera publicación. Está explicado en el encabezado de `deploy.yml` y en `docs/despliegue.md`. Si se activa `push`, `verify` fallará por la comprobación de `confirm` y la prueba de seguridad sobre `SUPABASE_SECRET_KEY` exigirá ajustes, como advierte el comentario. Además, `tests/workflows/deploy.test.js` fija `workflow_dispatch` como único disparador, así que habrá que actualizar esa prueba a la vez.
-- **H-V05-QA-04 (Info) — Criterio final pendiente de la compuerta del usuario.** La publicación real y la aplicación de migraciones se verificarán con el primer run manual (jobs `migrate` y `smoke`).
+- **H-V05-QA-01 (Media): cerrado en el intento 2.** `verify` compara `SUPABASE_URL` con `PRODUCTION_SUPABASE_ORIGIN` y además el build va antes de migrar. Lo cubren las pruebas "verify origen (bash)".
+- **H-V05-QA-02 (Baja): cerrado.** `migrate-plan` es un job aparte. Con revisor requerido, la aprobación de `migrate` llega con el dry-run ya en el log. Sin revisor, sigue siendo solo un registro, y `docs/despliegue.md` ya lo dice ("Puntos de parada").
+- **H-V05-QA-05 (Media, nuevo, no bloquea): el revisor que recomienda la guía frena las evaluaciones programadas.** `docs/despliegue.md` recomienda poner un revisor requerido en el environment `produccion`. Ahora `ritmo-diario.yml` y `evaluacion-mensual.yml` también declaran `produccion`. Si el usuario sigue la recomendación, cada run de `schedule` quedará esperando una aprobación manual. El cálculo diario (candados y alertas de C-03/C-04) dejaría de ser automático: correría tarde o nunca. La lista de jobs con aprobación de "Puntos de parada" no menciona los programados.
+  - Reproducir (cuando exista el environment): añadir un revisor a `produccion` y esperar el cron de las 06:23 Guayaquil. El run queda en `waiting`.
+  - Ya está registrado por seguridad como H-V05-02 (Baja). QA lo sube a Media porque rompe un comportamiento del diseño (cálculo programado sin intervención) si se sigue la configuración recomendada.
+  - Corrección sugerida: un environment aparte con revisor solo para `migrate` (p. ej. `produccion-deploy`), o advertir en la guía que el revisor detiene los cron. No bloquea el merge: el workflow es correcto y hoy no hay revisor configurado, pero debe resolverse antes de que el usuario configure el environment (mismo pendiente que la autorización del primer despliegue).
+- **H-V05-QA-06 (Info): `disable_signup` con el texto `"true"` también pasaría.** `jq -r` convierte el texto `"true"` y el booleano `true` en la misma salida. Supabase devuelve un booleano, así que el riesgo es teórico.
+- **H-V05-QA-03 (Info): sin cambios.** El disparo es solo manual hasta que se apruebe la primera publicación. Si se activa `push`, habrá que actualizar la comprobación de `confirm` y la prueba "solo workflow_dispatch" de `tests/workflows/deploy.test.js`.
+- **H-V05-QA-04 (Info): sin cambios.** El criterio final queda pendiente del primer run manual.
+
+## CI del intento 2

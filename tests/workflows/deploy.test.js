@@ -108,15 +108,36 @@ test('deploy.yml: concurrencia sin cancelar un despliegue en curso', () => {
 
 // ---------------------------------------------------------------- cadena de jobs
 
-test('deploy.yml: jobs y cadena verify → migrate → build-pages → deploy-pages → smoke', () => {
-  assert.deepEqual(JOBS.map((j) => j.id), ['verify', 'migrate', 'build-pages', 'deploy-pages', 'smoke']);
-  assert.doesNotMatch(job('verify'), /^\s{4}needs:/m);
-  const expected = { migrate: 'verify', 'build-pages': 'migrate', 'deploy-pages': 'build-pages', smoke: 'deploy-pages' };
-  for (const [id, dep] of Object.entries(expected)) {
-    const m = job(id).match(/^ {4}needs:\s*\[?\s*([\w-]+)\s*\]?\s*$/m);
-    assert.ok(m, `${id} sin needs`);
-    assert.equal(m[1], dep, `${id} debe depender de ${dep}`);
-  }
+const needsOf = (id) => {
+  const m = job(id).match(/^ {4}needs:\s*(.+?)\s*$/m);
+  if (!m) return [];
+  return m[1].replace(/[[\]]/g, '').split(',').map((s) => s.trim()).filter(Boolean).sort();
+};
+
+// ADR 0014 (intento 2): lo barato y reversible (build, verificación de dist/)
+// falla antes que lo irreversible (db push).
+test('deploy.yml: jobs y cadena verify → build-pages → migrate-plan → migrate → deploy-pages → smoke', () => {
+  assert.deepEqual(JOBS.map((j) => j.id), ['verify', 'build-pages', 'migrate-plan', 'migrate', 'deploy-pages', 'smoke']);
+  assert.deepEqual(needsOf('verify'), []);
+  const expected = {
+    'build-pages': ['verify'],
+    'migrate-plan': ['build-pages'],
+    migrate: ['migrate-plan'],
+    'deploy-pages': ['build-pages', 'migrate'],
+    smoke: ['deploy-pages'],
+  };
+  for (const [id, deps] of Object.entries(expected)) assert.deepEqual(needsOf(id), deps, `needs de ${id}`);
+});
+
+test('deploy.yml: migrate depende (transitivamente) del build y de la verificación de dist/', () => {
+  const ancestors = (id, acc = new Set()) => {
+    for (const d of needsOf(id)) if (!acc.has(d)) { acc.add(d); ancestors(d, acc); }
+    return acc;
+  };
+  const a = ancestors('migrate');
+  assert.ok(a.has('verify') && a.has('build-pages') && a.has('migrate-plan'));
+  const d = ancestors('deploy-pages');
+  assert.ok(d.has('migrate'), 'Pages no se publica sin migraciones aplicadas');
 });
 
 test('deploy.yml: ningún job se salta la cadena con if: always() / failure()', () => {
@@ -158,7 +179,9 @@ test('deploy.yml: los jobs con secretos de producción usan el environment produ
 
 // ---------------------------------------------------------------- verify
 
-const SECRETS = [
+// docs/despliegue.md lista los 6 secretos de P-02; deploy.yml usa 5:
+// SUPABASE_SECRET_KEY no la lee ningún job del despliegue (H-S05-06).
+const ALL_SECRETS = [
   'SUPABASE_URL',
   'SUPABASE_PROJECT_REF',
   'SUPABASE_PUBLISHABLE_KEY',
@@ -166,27 +189,50 @@ const SECRETS = [
   'SUPABASE_ACCESS_TOKEN',
   'SUPABASE_DB_PASSWORD',
 ];
+const SECRETS = ALL_SECRETS.filter((s) => s !== 'SUPABASE_SECRET_KEY');
+const CODE = TEXT.split('\n').filter((l) => !isComment(l)).join('\n');
 
-test('verify: recibe los 6 secretos como env desde secrets.*', () => {
+test('deploy.yml: ningún job lee SUPABASE_SECRET_KEY (H-S05-06)', () => {
+  assert.doesNotMatch(CODE, /SUPABASE_SECRET_KEY/);
+  assert.doesNotMatch(CODE, /sb_secret_\*/);
+});
+
+test('verify: recibe los 5 secretos del despliegue como env desde secrets.*', () => {
   const v = job('verify');
   for (const s of SECRETS) assert.match(v, new RegExp(`${s}:\\s*\\$\\{\\{\\s*secrets\\.${s}\\s*\\}\\}`), s);
   assert.match(v, /CONFIRM:\s*\$\{\{\s*inputs\.confirm\s*\}\}/);
 });
 
-test('verify: el script no usa expresiones ${{ }} (sin inyección del input)', () => {
-  assert.doesNotMatch(runScript('verify', 'Confirmación, rama y secretos'), /\$\{\{/);
+test('verify: los scripts no usan expresiones ${{ }} (sin inyección del input)', () => {
+  for (const step of ['Confirmación, rama y secretos', 'Origen de producción', 'Registro cerrado en Auth']) {
+    assert.doesNotMatch(runScript('verify', step), /\$\{\{/, step);
+  }
 });
 
 test('verify: ninguna línea echo/printf imprime el valor de un secreto', () => {
-  const script = runScript('verify', 'Confirmación, rama y secretos');
-  for (const l of script.split('\n')) {
-    if (!/\b(echo|printf)\b/.test(l)) continue;
-    for (const s of SECRETS) {
-      assert.doesNotMatch(l, new RegExp(`\\$\\{?${s}\\b`), `imprime ${s}: ${l.trim()}`);
+  for (const step of ['Confirmación, rama y secretos', 'Origen de producción', 'Registro cerrado en Auth']) {
+    const script = runScript('verify', step);
+    for (const l of script.split('\n')) {
+      if (!/\b(echo)\b/.test(l)) continue;
+      for (const s of SECRETS) {
+        if (s === 'SUPABASE_URL' || s === 'SUPABASE_PROJECT_REF') continue; // no son secretos de valor sensible
+        assert.doesNotMatch(l, new RegExp(`\\$\\{?${s}\\b`), `${step}: imprime ${s}: ${l.trim()}`);
+      }
+      assert.doesNotMatch(l, /\$\{!name/, `imprime el valor indirecto: ${l.trim()}`);
     }
-    assert.doesNotMatch(l, /\$\{!name/, `imprime el valor indirecto: ${l.trim()}`);
+    assert.doesNotMatch(script, /set -x|set -[a-z]*x/);
   }
-  assert.doesNotMatch(script, /set -x|set -[a-z]*x/);
+});
+
+test('verify: orden secretos → origen de producción → registro cerrado (no se llama a un host ajeno)', () => {
+  const v = job('verify').split('\n');
+  const i = (name) => v.findIndex((l) => l.includes(`- name: ${name}`));
+  const a = i('Confirmación, rama y secretos');
+  const b = i('Origen de producción');
+  const c = i('Registro cerrado en Auth');
+  assert.ok(a >= 0 && b > a && c > b, `orden: ${a}, ${b}, ${c}`);
+  const checkout = v.findIndex((l) => /uses:\s*actions\/checkout@/.test(l));
+  assert.ok(checkout > a && checkout < b, 'el checkout (para leer csp.js) va antes del chequeo de origen');
 });
 
 const REF = 'abcdefghijklmnopqrst';
@@ -196,21 +242,25 @@ const GOOD = {
   SUPABASE_URL: `https://${REF}.supabase.co`,
   SUPABASE_PROJECT_REF: REF,
   SUPABASE_PUBLISHABLE_KEY: 'sb_publishable_FAKEpublishableVALUE123',
-  SUPABASE_SECRET_KEY: 'sb_secret_FAKEsecretVALUE4567890',
   SUPABASE_ACCESS_TOKEN: 'sbp_FAKEaccessTOKEN0987654321',
   SUPABASE_DB_PASSWORD: 'FAKE-db-password-zz9',
 };
+const SENSITIVE = ['SUPABASE_PUBLISHABLE_KEY', 'SUPABASE_ACCESS_TOKEN', 'SUPABASE_DB_PASSWORD'];
 const runVerify = (over) => bash(runScript('verify', 'Confirmación, rama y secretos'), { ...GOOD, ...over });
-const assertNoLeak = (out) => {
-  for (const s of ['SUPABASE_PUBLISHABLE_KEY', 'SUPABASE_SECRET_KEY', 'SUPABASE_ACCESS_TOKEN', 'SUPABASE_DB_PASSWORD']) {
-    assert.ok(!out.includes(GOOD[s]), `la salida filtra ${s}`);
-  }
+const assertNoLeak = (out, values = GOOD) => {
+  for (const s of SENSITIVE) assert.ok(!out.includes(values[s]), `la salida filtra ${s}`);
 };
 
 test('verify (bash): configuración completa en main con confirm=desplegar pasa sin filtrar valores', () => {
   const r = runVerify({});
   assert.equal(r.code, 0, r.out);
   assertNoLeak(r.out);
+});
+
+test('verify (bash): no exige SUPABASE_SECRET_KEY (ausente, pasa)', () => {
+  const r = runVerify({});
+  assert.equal(r.code, 0, r.out);
+  assert.doesNotMatch(r.out, /SUPABASE_SECRET_KEY/);
 });
 
 for (const bad of ['', 'Desplegar', 'desplegar ', 'si', 'desplegarr']) {
@@ -238,26 +288,24 @@ for (const s of SECRETS) {
   });
 }
 
-test('verify (bash): faltan todos → los 6 se listan', () => {
+test('verify (bash): faltan todos → los 5 se listan', () => {
   const r = runVerify(Object.fromEntries(SECRETS.map((s) => [s, ''])));
   assert.notEqual(r.code, 0);
   for (const s of SECRETS) assert.ok(r.out.includes(s), s);
 });
 
-test('verify (bash): claves legadas (JWT anon/service_role) se rechazan', () => {
+test('verify (bash): clave publicable legada (JWT anon) se rechaza sin imprimirla', () => {
   const jwt = 'eyJhbGciOiJIUzI1NiJ9.FAKE.FAKE';
-  let r = runVerify({ SUPABASE_PUBLISHABLE_KEY: jwt });
-  assert.notEqual(r.code, 0);
-  assert.ok(!r.out.includes(jwt));
-  r = runVerify({ SUPABASE_SECRET_KEY: jwt });
+  const r = runVerify({ SUPABASE_PUBLISHABLE_KEY: jwt });
   assert.notEqual(r.code, 0);
   assert.ok(!r.out.includes(jwt));
 });
 
-test('verify (bash): claves intercambiadas (secreta en la publicable) se rechazan', () => {
-  const r = runVerify({ SUPABASE_PUBLISHABLE_KEY: GOOD.SUPABASE_SECRET_KEY, SUPABASE_SECRET_KEY: GOOD.SUPABASE_PUBLISHABLE_KEY });
+test('verify (bash): una clave secreta cargada como publicable se rechaza sin imprimirla', () => {
+  const secret = 'sb_secret_FAKEsecretVALUE4567890';
+  const r = runVerify({ SUPABASE_PUBLISHABLE_KEY: secret });
   assert.notEqual(r.code, 0);
-  assertNoLeak(r.out);
+  assert.ok(!r.out.includes(secret));
 });
 
 test('verify (bash): SUPABASE_URL que no corresponde al project ref se rechaza', () => {
@@ -269,31 +317,167 @@ test('verify (bash): SUPABASE_URL que no corresponde al project ref se rechaza',
   assert.equal(r.code, 0, 'la barra final es aceptable');
 });
 
-// ---------------------------------------------------------------- migrate
+// --- Origen de producción (H-V05-QA-01): se ejecuta en una copia mínima del repo.
+const PROD_ORIGIN = readFileSync(join(ROOT, 'src', 'security', 'csp.js'), 'utf8')
+  .match(/^export const PRODUCTION_SUPABASE_ORIGIN = '([^']+)';/m)[1];
 
-test('migrate: nunca aplica seed.sql ni resetea la base', () => {
-  const m = job('migrate');
-  assert.doesNotMatch(m, /--include-seed|seed\.sql|db reset|db seed|--include-all|--debug/);
-  assert.doesNotMatch(TEXT.split('\n').filter((l) => !isComment(l)).join('\n'), /--include-seed|db reset|psql\b/);
+function runOrigin(url, cspSource) {
+  const dir = mkdtempSync(join(tmpdir(), 'v05-origin-'));
+  try {
+    mkdirSync(join(dir, 'src', 'security'), { recursive: true });
+    writeFileSync(
+      join(dir, 'src', 'security', 'csp.js'),
+      cspSource ?? readFileSync(join(ROOT, 'src', 'security', 'csp.js'), 'utf8'),
+    );
+    return bash(runScript('verify', 'Origen de producción'), { SUPABASE_URL: url }, dir);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+}
+
+test('verify origen (bash): SUPABASE_URL = PRODUCTION_SUPABASE_ORIGIN de csp.js pasa (con o sin barra final)', () => {
+  let r = runOrigin(PROD_ORIGIN);
+  assert.equal(r.code, 0, r.out);
+  r = runOrigin(`${PROD_ORIGIN}/`);
+  assert.equal(r.code, 0, r.out);
 });
 
-test('migrate: dry-run en un paso anterior a db push', () => {
+test('verify origen (bash): otro proyecto coherente con su ref se detiene antes de migrar', () => {
+  const r = runOrigin(`https://${REF}.supabase.co`);
+  assert.notEqual(r.code, 0);
+  assert.match(r.out, /no es el origen de producción/);
+});
+
+test('verify origen (bash): variantes del origen (http, ruta, subdominio) se rechazan', () => {
+  const host = new URL(PROD_ORIGIN).host;
+  for (const url of [`http://${host}`, `${PROD_ORIGIN}/rest/v1`, `https://x.${host}`, `${PROD_ORIGIN}//`, '']) {
+    assert.notEqual(runOrigin(url).code, 0, url);
+  }
+});
+
+test('verify origen (bash): si csp.js no declara la constante, falla en vez de aceptar', () => {
+  const r = runOrigin(PROD_ORIGIN, 'export const OTHER = 1;\n');
+  assert.notEqual(r.code, 0);
+  assert.match(r.out, /No se encontró PRODUCTION_SUPABASE_ORIGIN/);
+});
+
+// --- Registro cerrado en Auth (H-S05-01): curl sustituido por un stub en PATH.
+function withStubs(stubs, fn) {
+  const dir = mkdtempSync(join(tmpdir(), 'v05-stub-'));
+  try {
+    const bin = join(dir, 'bin');
+    mkdirSync(bin);
+    for (const [name, body] of Object.entries(stubs)) {
+      writeFileSync(join(bin, name), `#!/usr/bin/env bash\n${body}\n`, { mode: 0o755 });
+    }
+    return fn({ dir, bin, path: `${bin}:${process.env.PATH}` });
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+}
+
+const AUTH_CURL = 'printf "%s\\n" "$@" > "$CURL_LOG"; [ "${FAKE_CURL_EXIT:-0}" = 0 ] || exit "$FAKE_CURL_EXIT"; printf "%s" "$FAKE_SETTINGS"';
+function runAuth(settings, { exit = 0, url = PROD_ORIGIN } = {}) {
+  return withStubs({ curl: AUTH_CURL }, ({ dir, path }) => {
+    const log = join(dir, 'curl.log');
+    const r = spawnSync('bash', ['-c', runScript('verify', 'Registro cerrado en Auth')], {
+      env: {
+        PATH: path,
+        SUPABASE_URL: url,
+        SUPABASE_PUBLISHABLE_KEY: GOOD.SUPABASE_PUBLISHABLE_KEY,
+        FAKE_SETTINGS: settings,
+        FAKE_CURL_EXIT: String(exit),
+        CURL_LOG: log,
+      },
+      cwd: dir,
+      encoding: 'utf8',
+    });
+    let args = [];
+    try { args = readFileSync(log, 'utf8').split('\n'); } catch { /* curl no llamado */ }
+    return { code: r.status, out: `${r.stdout}${r.stderr}`, args };
+  });
+}
+
+test('verify auth (bash): disable_signup = true pasa, consulta /auth/v1/settings con la clave publicable y no la imprime', () => {
+  const r = runAuth('{"disable_signup":true,"external":{"email":true}}');
+  assert.equal(r.code, 0, r.out);
+  assert.ok(r.args.includes(`${PROD_ORIGIN}/auth/v1/settings`), r.args.join(' '));
+  assert.ok(r.args.includes(`apikey: ${GOOD.SUPABASE_PUBLISHABLE_KEY}`));
+  assert.ok(r.args.some((a) => /^-[a-zA-Z]*f/.test(a)), 'curl con -f: un 4xx/5xx no pasa como respuesta válida');
+  assert.ok(!r.out.includes(GOOD.SUPABASE_PUBLISHABLE_KEY));
+});
+
+test('verify auth (bash): con barra final en SUPABASE_URL la ruta no lleva doble barra', () => {
+  const r = runAuth('{"disable_signup":true}', { url: `${PROD_ORIGIN}/` });
+  assert.equal(r.code, 0, r.out);
+  assert.ok(r.args.includes(`${PROD_ORIGIN}/auth/v1/settings`));
+});
+
+for (const [label, body] of [
+  ['registro abierto (false)', '{"disable_signup":false}'],
+  ['campo ausente', '{"external":{"email":true}}'],
+  ['valor no booleano "true"', '{"disable_signup":"yes"}'],
+  ['respuesta vacía', ''],
+  ['respuesta no JSON', '<html>error</html>'],
+]) {
+  test(`verify auth (bash): ${label} → falla`, () => {
+    const r = runAuth(body);
+    assert.notEqual(r.code, 0, r.out);
+    assert.ok(!r.out.includes(GOOD.SUPABASE_PUBLISHABLE_KEY));
+  });
+}
+
+test('verify auth (bash): curl falla (proyecto pausado / 401) → falla con mensaje y sin filtrar la clave', () => {
+  const r = runAuth('{"disable_signup":true}', { exit: 22 });
+  assert.notEqual(r.code, 0);
+  assert.match(r.out, /No se pudo leer \/auth\/v1\/settings/);
+  assert.ok(!r.out.includes(GOOD.SUPABASE_PUBLISHABLE_KEY));
+});
+
+// ---------------------------------------------------------------- migrate-plan y migrate
+
+for (const id of ['migrate-plan', 'migrate']) {
+  test(`${id}: nunca aplica seed.sql ni resetea la base`, () => {
+    assert.doesNotMatch(job(id), /--include-seed|seed\.sql|db reset|db seed|--include-all|--debug|config push/);
+  });
+
+  test(`${id}: link con project ref, solo token y contraseña de BD, sin credenciales persistidas`, () => {
+    const m = job(id);
+    assert.match(m, /supabase link --project-ref "\$SUPABASE_PROJECT_REF"/);
+    assert.doesNotMatch(m, /SUPABASE_SECRET_KEY|SUPABASE_PUBLISHABLE_KEY/);
+    assert.match(m, /persist-credentials:\s*false/);
+    assert.match(m, /environment:\s*produccion/);
+  });
+}
+
+test('deploy.yml: ningún job aplica la semilla, resetea, usa psql ni config push', () => {
+  assert.doesNotMatch(CODE, /--include-seed|db reset|psql\b|config push/);
+});
+
+test('migrate-plan: solo dry-run, nunca db push real', () => {
+  const lines = job('migrate-plan').split('\n');
+  assert.ok(lines.some((l) => /supabase db push --dry-run\s*$/.test(l)), 'falta el dry-run');
+  assert.ok(!lines.some((l) => /supabase db push\s*$/.test(l)), 'migrate-plan no debe aplicar migraciones');
+});
+
+test('migrate: dry-run en un paso previo a db push y migration list después', () => {
   const lines = job('migrate').split('\n');
   const dry = lines.findIndex((l) => /supabase db push --dry-run\s*$/.test(l));
-  const push = lines.findIndex((l) => /supabase db push\s*$/.test(l) && !/--dry-run/.test(l));
-  assert.ok(dry >= 0, 'falta supabase db push --dry-run');
-  assert.ok(push >= 0, 'falta supabase db push');
-  assert.ok(dry < push, 'el dry-run debe ir antes de db push');
-  const stepsBetween = lines.slice(dry, push).filter((l) => /^\s+- name:/.test(l)).length;
-  assert.ok(stepsBetween >= 1, 'dry-run y push deben ser pasos distintos');
+  const push = lines.findIndex((l) => /supabase db push\s*$/.test(l));
+  const list = lines.findIndex((l) => /supabase migration list\s*$/.test(l));
+  assert.ok(dry >= 0 && push > dry && list > push, `orden dry-run(${dry}) → push(${push}) → list(${list})`);
+  assert.ok(lines.slice(dry, push).some((l) => /^\s+- name:/.test(l)), 'dry-run y push en pasos distintos');
 });
 
-test('migrate: link con project ref y solo token/contraseña de BD (no la clave secreta)', () => {
-  const m = job('migrate');
-  assert.match(m, /supabase link --project-ref "\$SUPABASE_PROJECT_REF"/);
-  assert.doesNotMatch(m, /SUPABASE_SECRET_KEY|SUPABASE_PUBLISHABLE_KEY/);
-  assert.match(m, /persist-credentials:\s*false/);
-});
+// ---------------------------------------------------------------- workflows programados
+
+for (const name of ['ritmo-diario.yml', 'evaluacion-mensual.yml']) {
+  test(`${name}: el job que lee SUPABASE_SECRET_KEY usa environment produccion (H-C03-02)`, () => {
+    const t = readFileSync(join(ROOT, '.github', 'workflows', name), 'utf8');
+    assert.match(t, /SUPABASE_SECRET_KEY:\s*\$\{\{\s*secrets\.SUPABASE_SECRET_KEY/);
+    assert.match(t, /^ {4}environment:\s*produccion\s*$/m);
+  });
+}
 
 // ---------------------------------------------------------------- build-pages
 
@@ -385,11 +569,66 @@ test('smoke: la URL de respaldo coincide con la base de Vite', () => {
   assert.ok(runScript('smoke', 'GET de la URL publicada').includes(`apivasa.github.io${base}`));
 });
 
+// Smoke en bash con curl y sleep sustituidos: la página se escribe en -o y el
+// código HTTP sale por -w; el JS principal se pide con -o /dev/null.
+const SMOKE_CURL = [
+  'printf "%s\\n" "$*" >> "$CURL_LOG"',
+  'out=""; prev=""; for a in "$@"; do [ "$prev" = "-o" ] && out="$a"; prev="$a"; url="$a"; done',
+  'if [ "$out" = "page.html" ]; then printf "%s" "$FAKE_PAGE" > page.html; printf "%s" "$FAKE_CODE"; else printf "%s" "$FAKE_JS_CODE"; fi',
+].join('\n');
+const PAGE_OK = '<!doctype html><html><head><title>App de control de capacidad RUN</title>'
+  + '<script type="module" crossorigin src="/practica_agente/assets/index-AbC123.js"></script></head></html>';
+
+function runSmoke({ page = PAGE_OK, code = '200', jsCode = '200', pageUrl = 'https://apivasa.github.io/practica_agente/' } = {}) {
+  return withStubs({ curl: SMOKE_CURL, sleep: 'exit 0' }, ({ dir, path }) => {
+    const log = join(dir, 'curl.log');
+    const r = spawnSync('bash', ['-c', runScript('smoke', 'GET de la URL publicada')], {
+      env: { PATH: path, PAGE_URL: pageUrl, FAKE_PAGE: page, FAKE_CODE: code, FAKE_JS_CODE: jsCode, CURL_LOG: log },
+      cwd: dir,
+      encoding: 'utf8',
+    });
+    let calls = [];
+    try { calls = readFileSync(log, 'utf8').trim().split('\n'); } catch { /* sin llamadas */ }
+    return { code: r.status, out: `${r.stdout}${r.stderr}`, calls };
+  });
+}
+
+test('smoke (bash): HTML 200 con título y JS principal 200 → pasa al primer intento', () => {
+  const r = runSmoke();
+  assert.equal(r.code, 0, r.out);
+  assert.equal(r.calls.length, 2, r.calls.join('\n'));
+  assert.ok(r.calls[0].includes('https://apivasa.github.io/practica_agente/'));
+  assert.ok(r.calls[1].includes('https://apivasa.github.io/practica_agente/assets/index-AbC123.js'), r.calls[1]);
+});
+
+test('smoke (bash): JS principal 404 (base rota) → falla tras 6 intentos', () => {
+  const r = runSmoke({ jsCode: '404' });
+  assert.notEqual(r.code, 0);
+  assert.equal(r.calls.length, 12);
+  assert.match(r.out, /no respondió 200 con el título de la app y su JS principal/);
+});
+
+test('smoke (bash): HTML sin script en /practica_agente/assets/ → falla', () => {
+  const r = runSmoke({ page: PAGE_OK.replace('/practica_agente/assets/', '/assets/') });
+  assert.notEqual(r.code, 0);
+});
+
+test('smoke (bash): HTML 404 o título distinto → falla', () => {
+  assert.notEqual(runSmoke({ code: '404' }).code, 0);
+  assert.notEqual(runSmoke({ page: PAGE_OK.replace('capacidad RUN', 'Otra app') }).code, 0);
+});
+
+test('smoke (bash): sin page_url usa la URL de respaldo de Pages', () => {
+  const r = runSmoke({ pageUrl: '' });
+  assert.equal(r.code, 0, r.out);
+  assert.ok(r.calls[0].includes('https://apivasa.github.io/practica_agente/'));
+});
+
 // ---------------------------------------------------------------- documentación
 
 test('docs/despliegue.md: documenta disparo manual, secretos, verificación y reversión', () => {
   assert.match(DOC, /desplegar/);
-  for (const s of SECRETS) assert.ok(DOC.includes(s), `docs/despliegue.md no menciona ${s}`);
+  for (const s of ALL_SECRETS) assert.ok(DOC.includes(s), `docs/despliegue.md no menciona ${s}`);
   assert.match(DOC, /dry-run/);
   assert.match(DOC, /seed\.sql/);
   assert.match(DOC, /[Rr]evers/);
