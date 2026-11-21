@@ -86,6 +86,23 @@ function withEmail(db, { emails = EMAIL_OF, failMark = false } = {}) {
   return db;
 }
 
+/**
+ * F-11 (H-C06-01): runEmailStep exige a la BD los tres métodos de C-06. Se añaden a la BD
+ * simulada: el destinatario es unit_leader vigente de la(s) unidad(es) de sus alertas, no
+ * hay alertas vencidas y marcar como omitida no hace nada.
+ */
+function withC06(db, emails = EMAIL_OF) {
+  db.recipientAccess = async (id) => ({
+    email: emails[id] ?? null,
+    bannedUntil: null,
+    deletedAt: null,
+    roles: db.tables.alerts.filter((a) => a.recipient_user_id === id).map((a) => ({ role: 'unit_leader', unit_id: a.unit_id })),
+  });
+  db.expiredEmailAlerts = async () => [];
+  db.markAlertsEmailSkipped = async () => [];
+  return db;
+}
+
 /** Resend simulado. `respond(call, n)` devuelve { status, body } o un Error. */
 function resend(respond = (_c, n) => ({ status: 200, body: { id: `msg-${n}` } })) {
   const calls = [];
@@ -287,7 +304,7 @@ describe('C-05 QA reintentos y errores de Resend', () => {
   });
 
   test('error de Resend en una alerta no detiene las demás; el paso termina en 0 con ::warning::', async () => {
-    const db = withEmail(one(), { emails: EM });
+    const db = withC06(withEmail(one(), { emails: EM }), EM);
     db.tables.alerts.push({ ...db.tables.alerts[0], id: 'a-2', recipient_user_id: '33333333-0000-4000-8000-000000000002' });
     const r = resend((c) => (c.body.to[0] === 'x@qa.example.test' ? { status: 422, body: { message: 'invalid' } } : { status: 200, body: { id: 'ok' } }));
     const lines = [];
@@ -307,7 +324,7 @@ describe('C-05 QA reintentos y errores de Resend', () => {
   });
 
   test('Resend devuelve la clave o el correo en el error: no llegan al log ni a la auditoría', async () => {
-    const db = withEmail(one(), { emails: EM });
+    const db = withC06(withEmail(one(), { emails: EM }), EM);
     const r = resend(() => ({ status: 401, body: { message: `API key ${KEY} invalid for x@qa.example.test` } }));
     const lines = [];
     await runEmailStep({
