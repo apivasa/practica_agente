@@ -7,7 +7,8 @@ name: Salud
 # - que ritmo-diario, evaluacion-mensual, el run semanal de seguridad y CI en main
 #   corrieron cuando tocaba, terminaron bien y no están deshabilitados;
 # - que el último despliegue (deploy.yml) en main terminó en success y ninguno lleva
-#   más de 60 min sin terminar (V-04b, check deploy-main; cancelado solo = aviso).
+#   más de 90 min sin terminar (V-04b, check deploy-main; cancelado solo = aviso;
+#   umbral DEPLOY_RULE.maxPendingMin, 90 desde V-05c).
 # Si algo falla, el run queda en rojo y se abre (o comenta) un issue con la etiqueta
 # `salud` sin datos sensibles. Runbook: docs/operacion.md § Salud del sistema.
 on:
