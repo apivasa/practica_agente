@@ -27,7 +27,14 @@ export const WORKFLOW_RULES = Object.freeze([
   { file: 'ci.yml', check: 'ci-main', requiresProduction: false, event: 'push', latestOnly: true },
 ]);
 
-/** @typedef {{ check: string, status: 'ok' | 'fail' | 'skip', detail: string }} Result */
+/**
+ * Despliegue (V-04b, H-ARQ-V05b-02): último run de `Despliegue` en main, con disparo
+ * `push` o `workflow_dispatch`. Fuera de WORKFLOW_RULES porque no es programado.
+ * - maxPendingMin: un run sin terminar (queued, in_progress, waiting...) no puede llevar más.
+ */
+export const DEPLOY_RULE = Object.freeze({ file: 'deploy.yml', check: 'deploy-main', events: Object.freeze(['push', 'workflow_dispatch']), maxPendingMin: 60 });
+
+/** @typedef {{ check: string, status: 'ok' | 'fail' | 'skip' | 'warn', detail: string }} Result */
 
 /** @returns {Result} */
 const result = (check, status, detail) => ({ check, status, detail });
@@ -228,11 +235,79 @@ export async function checkWorkflows({ env, github, now, rules = WORKFLOW_RULES 
   return out;
 }
 
+const PENDING_STATUSES = new Set(['queued', 'in_progress', 'waiting', 'pending', 'requested']);
+const IGNORED_CONCLUSIONS = new Set(['skipped', 'neutral']);
+const runLink = (r) => (r?.html_url ? ` — ${r.html_url}` : '');
+
+/**
+ * Evalúa el último despliegue en main con los runs ya leídos de la API (pura).
+ * - Un run sin terminar con más de maxPendingMin minutos: falla.
+ * - Último completado en success, o sin runs: pasa.
+ * - Último completado cancelado: aviso (warn), salvo que el despliegue anterior no
+ *   cancelado haya fallado, porque la cancelación no lo corrige: entonces falla.
+ * - Último completado en failure (o timed_out, startup_failure...): falla.
+ * @param {typeof DEPLOY_RULE} rule
+ * @param {{ workflow: any, runs: any[], now: Date }} data
+ * @returns {Result}
+ */
+export function assessDeploy(rule, { workflow, runs, now }) {
+  if (!workflow) return result(rule.check, 'fail', `${rule.file} no existe en la rama por defecto`);
+  if (workflow.state !== 'active') {
+    return result(rule.check, 'fail', `${rule.file} deshabilitado (${workflow.state}); reactivar con PUT .../enable`);
+  }
+  const relevant = (runs ?? [])
+    .filter((r) => rule.events.includes(r.event))
+    .sort((a, b) => Date.parse(b.created_at) - Date.parse(a.created_at));
+  const nowMs = now.getTime();
+
+  const problems = [];
+  const stuck = relevant.find((r) => {
+    if (!PENDING_STATUSES.has(r.status)) return false;
+    const since = Date.parse(r.run_started_at || r.created_at);
+    return Number.isFinite(since) && (nowMs - since) / 60_000 > rule.maxPendingMin;
+  });
+  if (stuck) {
+    const min = Math.round((nowMs - Date.parse(stuck.run_started_at || stuck.created_at)) / 60_000);
+    problems.push(`un despliegue lleva ${min} min en ${stuck.status} (máximo ${rule.maxPendingMin})${runLink(stuck)}`);
+  }
+
+  const done = relevant.filter((r) => r.status === 'completed' && !IGNORED_CONCLUSIONS.has(r.conclusion));
+  const latest = done[0];
+  if (latest && latest.conclusion !== 'success') {
+    if (latest.conclusion === 'cancelled') {
+      const previous = done.find((r) => r.conclusion !== 'cancelled');
+      if (previous && previous.conclusion !== 'success') {
+        problems.push(`último despliegue cancelado y el anterior terminó en ${previous.conclusion}${runLink(previous)}`);
+      } else if (problems.length === 0) {
+        return result(rule.check, 'warn', `último despliegue cancelado, sin uno posterior en success${runLink(latest)}`);
+      }
+    } else {
+      problems.push(`último despliegue terminó en ${latest.conclusion}${runLink(latest)}`);
+    }
+  }
+  if (problems.length > 0) return result(rule.check, 'fail', problems.join('; '));
+  if (!latest) return result(rule.check, 'ok', 'sin despliegues completados en main');
+  return result(rule.check, 'ok', `último despliegue ${latest.conclusion}${runLink(latest)}`);
+}
+
+/** Comprobación del último despliegue en main con la API de Actions. */
+export async function checkDeploy({ env, github, now, rule = DEPLOY_RULE }) {
+  const branch = env.DEFAULT_BRANCH || 'main';
+  try {
+    const workflow = await github.getWorkflow(rule.file);
+    const runs = workflow ? await github.listRuns(rule.file, { branch }) : [];
+    return [assessDeploy(rule, { workflow, runs, now })];
+  } catch (e) {
+    return [result(rule.check, 'fail', `no se pudo consultar la API de Actions (${String(e?.message ?? e).slice(0, 120)})`)];
+  }
+}
+
 /** Todas las comprobaciones. */
 export async function runAll({ env, fetchImpl, github, now = new Date(), sleep, delayMs }) {
   return [
     ...(await checkAvailability({ env, fetchImpl, sleep, delayMs })),
     ...(await checkWorkflows({ env, github, now })),
+    ...(await checkDeploy({ env, github, now })),
   ];
 }
 

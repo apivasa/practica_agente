@@ -20,7 +20,7 @@ Lo que existe hoy en `main` y pasó CI:
 - **Motor** (`engine/`): color (M-01), escalada y excepciones (C-01, C-02), vulnerabilidades: paquete, ritmo y metas (M-05) y color mensual por criticidad, P0/P1 y P2/P3 (M-06).
 - **Evaluación programada y alertas** (C-03, C-04): workflows mensual y diario. Hoy no hacen nada en producción: esperan la activación (P-05, ver "Workflows").
 - **Seguridad** (S-01 a S-04): pipeline de seguridad, modelo de amenazas, pentest de API y RLS, CSP, anti-framing y DAST con ZAP.
-- **Salud del sistema** (V-04): `salud.yml` corre cada 6 h, revisa la web, Supabase y los workflows programados, y abre o actualiza un issue si algo falla. Ver [`docs/operacion.md`](docs/operacion.md).
+- **Salud del sistema** (V-04): `salud.yml` corre cada 6 h, revisa la web, Supabase, los workflows programados y el último despliegue (`deploy-main`, V-04b), y abre o actualiza un issue si algo falla. Ver [`docs/operacion.md`](docs/operacion.md).
 - **Despliegue manual** (V-05): `deploy.yml` aplica migraciones y publica en GitHub Pages solo cuando el usuario lo dispara a mano. Publicada el 2026-11-20 en https://apivasa.github.io/practica_agente/ (migraciones aplicadas en Supabase). Sin usuarios reales todavía. Ver [`docs/despliegue.md`](docs/despliegue.md).
 - **Pentest previo a producción** (S-05, S-05b): fase A contra Supabase local y fase B contra producción en modo anónimo, ambas en VERDE y sin hallazgos altos ni críticos. Ver [`docs/seguridad/pentest-preproduccion.md`](docs/seguridad/pentest-preproduccion.md).
 
@@ -114,7 +114,7 @@ Las pruebas de `tests/security/api/` se omiten en `test:unit` a propósito. En C
 | `seguridad.yml` | PR; push a `main`, `item/**`, `fix/**`, `ensayo/**`; lunes 01:17 Guayaquil; manual | gitleaks, semgrep, `npm audit`, CodeQL, pruebas de seguridad, pentest de API contra Supabase local y DAST (e2e de seguridad y ZAP baseline). |
 | `evaluacion-mensual.yml` | Día 1 de cada mes, 06:07 Guayaquil; manual con `as_of` y `reprocess` | Cierra el mes anterior: colores, candados, auditoría y alertas `color_change` y de excepciones. |
 | `ritmo-diario.yml` | Cada día, 06:23 Guayaquil; manual con `as_of` | Ritmo de vulnerabilidades, ingreso de P0/P1 y vencimiento de excepciones. Genera alertas. |
-| `salud.yml` | Cada 6 h (00:41, 06:41, 12:41 y 18:41 UTC); manual | Comprueba Pages, Supabase, los workflows programados y CI de `main`. Si algo falla, abre o comenta un issue con la etiqueta `salud`. Sin producción activa, los checks de Pages y Supabase salen como omitidos. |
+| `salud.yml` | Cada 6 h (00:41, 06:41, 12:41 y 18:41 UTC); manual | Comprueba Pages, Supabase, los workflows programados, CI de `main` y el último run de `deploy.yml` en `main` (`deploy-main`: falla si terminó mal o lleva más de 60 min sin terminar; si solo se canceló, deja un aviso sin issue). Si algo falla, abre o comenta un issue con la etiqueta `salud`. Sin producción activa, los checks de Pages y Supabase salen como omitidos. |
 | `deploy.yml` | Solo manual, desde `main`, con `confirm` = `desplegar` | `verify`, `build-pages`, `migrate-plan`, `migrate`, `deploy-pages` y `smoke`. Ver [`docs/despliegue.md`](docs/despliegue.md). |
 | `lockfile.yml` | Push a `item/**` o `fix/**` que cambie `package.json`; manual (nunca en `main`) | Regenera y sube `package-lock.json` y relanza CI y Seguridad. |
 

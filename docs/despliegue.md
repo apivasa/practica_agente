@@ -66,6 +66,10 @@ Los jobs están encadenados: si falla uno, los siguientes no corren. El grupo de
 
 En `deploy.yml`, descomentar `push: branches: [main]` y permitir `github.event_name == 'push'` en la comprobación de `confirm`. Condiciones previas en ADR 0015 punto 5. `deploy.yml` ya no lee `SUPABASE_SECRET_KEY`, así que la regla de `tests/security/workflows.test.js` que limita esa clave a workflows `schedule` / `workflow_dispatch` no se ve afectada.
 
+## Vigilancia
+
+`salud.yml` revisa cada 6 h el último run de `deploy.yml` en `main` (check `deploy-main`, V-04b). Si falló o lleva más de 60 min sin terminar, abre o comenta el issue `salud`. Un despliegue solo cancelado deja un aviso sin issue. Qué hacer ante cada alerta: `docs/operacion.md` › Salud del sistema.
+
 ## Cómo revertir
 
 - **Front:** el workflow solo despliega desde `main`, así que no se relanza sobre un commit anterior; se hace `git revert` del commit problemático en `main` mediante PR y nuevo despliegue. Para retirar el sitio de inmediato: Settings → Pages → *Unpublish*.

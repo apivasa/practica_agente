@@ -49,13 +49,14 @@ function run(id, { hours = 2, conclusion = 'success', event = 'schedule', minute
   };
 }
 
-/** Estado sano de los cuatro workflows. */
+/** Estado sano de los cuatro workflows vigilados y del despliegue (V-04b). */
 function healthyActions() {
   return {
     'ritmo-diario.yml': { workflow: { state: 'active', created_at: '2026-11-19T00:00:00Z' }, runs: [run(11, { hours: 5 })] },
     'evaluacion-mensual.yml': { workflow: { state: 'active', created_at: '2026-11-19T00:00:00Z' }, runs: [run(12, { hours: 8 * 24 })] },
     'seguridad.yml': { workflow: { state: 'active', created_at: '2026-11-19T00:00:00Z' }, runs: [run(13, { hours: 2 * 24 })] },
     'ci.yml': { workflow: { state: 'active', created_at: '2026-11-19T00:00:00Z' }, runs: [run(14, { hours: 1, event: 'push' })] },
+    'deploy.yml': { workflow: { state: 'active', created_at: '2026-11-19T00:00:00Z' }, runs: [run(15, { hours: 3, event: 'push' })] },
   };
 }
 
@@ -105,7 +106,7 @@ describe('check.js de punta a punta (fetch simulado)', () => {
     const env = { ...PROD_ENV, GITHUB_OUTPUT: join(dir, 'out'), GITHUB_STEP_SUMMARY: join(dir, 'sum') };
     const { code, results } = await main({ argv: [], env, fetchImpl: fakeFetch(), now: NOW, log: (s) => lines.push(s), sleep: noSleep });
     assert.equal(code, 0, lines.join('\n'));
-    assert.deepEqual(results.map((r) => r.status), ['ok', 'ok', 'ok', 'ok', 'ok', 'ok']);
+    assert.deepEqual(results.map((r) => r.status), ['ok', 'ok', 'ok', 'ok', 'ok', 'ok', 'ok']);
     assert.equal(readFileSync(env.GITHUB_OUTPUT, 'utf8'), 'failures=\n');
     assert.match(readFileSync(env.GITHUB_STEP_SUMMARY, 'utf8'), /\| pages \| ok \|/);
     const log = lines.join('\n');

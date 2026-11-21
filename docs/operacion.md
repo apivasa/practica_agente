@@ -212,7 +212,7 @@ Procedimiento completo en `docs/despliegue.md`. Orden de jobs: `verify` → `bui
   - **Después de aplicarla:** guardar un valor en [2^53 − 0,5, 2^53) devuelve 23514 del CHECK `_safe`. En `package_by_category`, un valor como `9007199254740991.9999` ahora lo reporta `commitments_package_by_category_safe` y ya no `_whole`, por el orden alfabético. Es lo esperado.
 - **Falla `migrate`**: la BD puede quedar a medias, porque `db push` aplica cada archivo en su propia transacción. Leer `supabase migration list` en el log (o lanzarlo a mano) y corregir con una migración nueva. Nunca se edita una migración ya aplicada. El front no se publicó: `deploy-pages` necesita `migrate`.
 - **Falla `smoke`**: comprobar Settings → Pages (fuente = GitHub Actions) y relanzar solo `smoke`. Si el HTML da 200 pero el JS principal no, la `base` de `vite.config.js` no coincide con la ruta de Pages.
-- **Revisor requerido**: no se pone en `produccion`. `evaluacion-mensual` y `ritmo-diario` usan ese environment, y con revisor cada cron quedaría en `waiting` (ADR 0015 punto 6). Si `salud.yml` alerta `último run hace N h` y el run está en `waiting`, quitar el revisor del environment y aprobar o relanzar el run.
+- **Revisor requerido**: no se pone en `produccion`. `evaluacion-mensual` y `ritmo-diario` usan ese environment, y con revisor cada cron quedaría en `waiting` (ADR 0015 punto 6). Si `salud.yml` alerta `último run hace N h` (evaluaciones) o `deploy-main` en `waiting`, quitar el revisor del environment y aprobar o relanzar el run.
 - **Cuidado con la concurrencia con las evaluaciones**: `despliegue-produccion` y `evaluacion-produccion` son grupos distintos. No hay que desplegar migraciones de `evaluations`, `alerts` o `audit_log` el día 1 a la hora del cron mensual.
 
 ## Salud del sistema (`salud.yml`, V-04, ADR 0014)
@@ -229,9 +229,10 @@ Permisos: workflow `contents: read`; job `check` añade `actions: read`; solo el
 | `evaluacion-mensual` | workflow `active`; desde el día 2 (Guayaquil) hay un run del mes actual, el último `success`, ≤ 5 min y "Evaluar" ejecutado | estado siempre; resto con producción |
 | `seguridad-semanal` | workflow `active`; último run `schedule` hace ≤ 8 días y `success` | siempre (gracia de 8 días si el workflow es nuevo) |
 | `ci-main` | último run `push` de CI en `main` en `success` | siempre |
+| `deploy-main` (V-04b) | `deploy.yml` `active`; último run `push` o `workflow_dispatch` en `main` completado (sin contar `skipped`/`neutral`) en `success`; ningún run lleva > 60 min sin terminar (`queued`, `in_progress`, `waiting`...). Último cancelado: **aviso** (warning, no falla), salvo que el despliegue anterior no cancelado haya fallado: entonces falla. Sin despliegues: pasa | siempre (criterio en `DEPLOY_RULE` de `scripts/health/lib.js`, fuera de `WORKFLOW_RULES` porque no es programado) |
 | `actions-api` | hay `GITHUB_TOKEN` y la API responde | siempre |
 
-Si algún check falla, el job `check` queda en rojo y el job `alert` abre un issue «Salud del sistema: comprobación fallida» con la etiqueta `salud` (la crea si no existe), o **comenta el issue abierto** si ya hay uno (sin duplicados). El cuerpo solo lleva los nombres de los checks, la hora de Guayaquil y el enlace al run; el detalle está en el log y en el resumen del run. Sin producción activa, `pages`, `supabase` y la ejecución de las evaluaciones salen como `omitido` (warning) y el run queda verde.
+Si algún check falla, el job `check` queda en rojo y el job `alert` abre un issue «Salud del sistema: comprobación fallida» con la etiqueta `salud` (la crea si no existe), o **comenta el issue abierto** si ya hay uno (sin duplicados). El cuerpo solo lleva los nombres de los checks, la hora de Guayaquil y el enlace al run; el detalle está en el log y en el resumen del run. Sin producción activa, `pages`, `supabase` y la ejecución de las evaluaciones salen como `omitido` (warning) y el run queda verde. Un `aviso` (`deploy-main` con el último despliegue cancelado) también sale como warning y no abre issue.
 
 ### Qué hacer ante cada alerta
 Primero abrir el run enlazado en el issue y leer el resumen (tabla Check/Estado/Detalle). Al resolver, lanzar `salud.yml` a mano (`gh api -X POST repos/apivasa/practica_agente/actions/workflows/salud.yml/dispatches -f ref=main`) y cerrar el issue cuando salga verde.
@@ -251,6 +252,12 @@ Primero abrir el run enlazado en el issue y leer el resumen (tabla Check/Estado/
   - `duró N min`: comparar con la base de la tabla de tiempos; si se repite, aplicar la regla de paso intermitente.
 - **`seguridad-semanal`**: run semanal fallido o ausente. Si falló, seguir «Qué hacer si falla seguridad.yml» punto 7. Si no corrió, relanzar `seguridad.yml` manual en `main` y revisar su `state`.
 - **`ci-main`**: `main` está en rojo. El orquestador abre `fix/main-<fecha>` (paso 3 del ciclo).
+- **`deploy-main`** (el detalle enlaza el run):
+  - `último despliegue terminó en failure` (o `timed_out`, `startup_failure`...): seguir «Despliegue» (arriba) según el job que falló y relanzar `deploy.yml` en `main`. La alerta se repite cada 6 h (como comentario del mismo issue) hasta que un despliegue termine en `success`. Un run manual fallido por `confirm` mal escrito también cuenta: basta relanzarlo bien.
+  - `último despliegue cancelado y el anterior terminó en failure`: la cancelación no corrige el fallo. Mismo tratamiento.
+  - `un despliegue lleva N min en waiting`: alguien puso un revisor en `produccion` (prohibido, ADR 0015 punto 6). Quitarlo y aprobar o cancelar el run. En `queued`/`in_progress`: incidente de runners de GitHub o un paso colgado; cancelar el run, revisar el log y relanzar. La suma de timeouts de los jobs (~55 min) queda por debajo del umbral de 60 min.
+  - `aviso último despliegue cancelado`: no hay issue. Relanzar el despliegue si la cancelación no fue intencional.
+  - `deploy.yml deshabilitado`: reactivar con `.../workflows/deploy.yml/enable`.
 - **`actions-api` o `no se pudo consultar la API de Actions`**: incidente de la API de GitHub o falta de permiso `actions: read`. Relanzar; si persiste, revisar el bloque `permissions` de `salud.yml`.
 - **El issue dice «el job de comprobación falló sin resumen»**: `check.js` se cayó antes de escribir la salida (error de Node, checkout o timeout). Leer el log del job `check`.
 - **`salud.yml` no corre**: también se deshabilita a los 60 días sin actividad y no puede vigilarse a sí mismo. El orquestador lo comprueba en el paso 3 del ciclo (`.../workflows/salud.yml --jq .state`) y lo reactiva con `.../enable`.
