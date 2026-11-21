@@ -269,7 +269,8 @@ test('H-ARQ-F11-02: migrate y deploy-pages comprueban la punta con --strict ante
     assert.match(steps[1], /GH_TOKEN: \$\{\{ github\.token \}\}/);
     assert.match(steps[1], /HEAD_SHA: \$\{\{ github\.sha \}\}/);
     assert.match(steps[1], /run: bash scripts\/ci\/check-main-tip\.sh --strict\s*$/);
-    assert.doesNotMatch(steps[1], /^\s*if:|continue-on-error|TIP_RETR/m);
+    assert.doesNotMatch(steps[1], /^\s*if:/m);
+    assert.doesNotMatch(steps[1], /continue-on-error|TIP_RETR/);
     assert.match(jobBlock(id), /^ {6}contents: read$/m, `${id}: contents: read`);
   }
 });
@@ -277,7 +278,7 @@ test('H-ARQ-F11-02: migrate y deploy-pages comprueban la punta con --strict ante
 test('H-ARQ-F11-04: DOC_PATHS_IGNORE del script = paths-ignore de deploy.yml = predicados del filtro', () => {
   const ignore = WF.match(/^ {4}paths-ignore:\s*\n((?: {6}- .*\n)+)/m);
   assert.ok(ignore, 'deploy.yml tiene on.push.paths-ignore');
-  const yml = ignore[1].trim().split('\n').map((l) => l.replace(/^\s*-\s*/, '').replace(/^'|'$/g, ''));
+  const yml = ignore[1].trim().split('\n').map((l) => l.replace(/^\s*-\s*/, '').replace(/^'(.*)'$/, '$1'));
   assert.deepEqual(yml, ['docs/**', '**/*.md']);
   const src = readFileSync(TIP, 'utf8');
   const decl = src.match(/^DOC_PATHS_IGNORE=\((.*)\)$/m);
@@ -309,7 +310,8 @@ test('deploy.yml: verify ejecuta «Commit vigente en main» después de la esper
   const step = verify.slice(verify.indexOf('- name: Commit vigente en main'));
   assert.match(step, /HEAD_SHA: \$\{\{ github\.sha \}\}/);
   assert.match(step, /GH_TOKEN: \$\{\{ github\.token \}\}/);
-  assert.doesNotMatch(step, /^\s*if:|continue-on-error|TIP_RETR/m);
+  assert.doesNotMatch(step, /^\s*if:/m);
+  assert.doesNotMatch(step, /continue-on-error|TIP_RETR/);
 });
 
 // ------------------------------------------------------------ wait-ci.sh
