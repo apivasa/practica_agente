@@ -3,7 +3,7 @@
 ## Candado de ciclo
 Estado: EN CURSO
 Desde: 2026-11-21 08:48
-Latido: 2026-11-21 08:48
+Latido: 2026-11-21 08:56
 Sesión: programada (F-17)
 
 ## Log de ciclos (más reciente arriba)
