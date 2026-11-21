@@ -14,7 +14,7 @@ Lo que existe hoy en `main` y pasó CI:
 - **Login y rutas por rol** (F-05): correo y contraseña con Supabase Auth. Sin registro abierto. Cada rol llega a su pantalla.
 - **Pantallas por rol:**
   - Gestora: alta y edición de indicadores (M-02), tablero de completitud por custodio (V-03) y metas mensuales de los indicadores de meta acumulada sin categorías, con "Proponer un tercio" (M-07).
-  - Custodio: compromisos con umbral negociado (M-03) y captura manual o CSV de mediciones (M-04).
+  - Custodio: compromisos con umbral negociado (M-03) y captura manual o CSV de mediciones (M-04) e importación desde Excel `.xlsx` con plantilla descargable (V-07).
   - Comité: matriz unidad × indicador con alertas (V-02) y aprobación y revocación de excepciones (C-02).
   - Líder: sus indicadores, color, meta, ritmo, restricciones y alertas (V-01).
 - **Motor** (`engine/`): color (M-01), escalada y excepciones (C-01, C-02), vulnerabilidades: paquete, ritmo y metas (M-05) y color mensual por criticidad, P0/P1 y P2/P3 (M-06).
@@ -132,6 +132,7 @@ engine/                 Lógica pura compartida por el front y las Actions
   exceptions.js         Vigencia, tope de 90 días y validación de excepciones
   commitment.js         Compromisos y umbral efectivo
   measurements-input.js Validación de mediciones y parser CSV
+  xlsx.js, zip.js, xml.js Lector de .xlsx (primera hoja) y plantilla, sin dependencias
   vulnerabilities.js    Paquete trimestral, ritmo y metas mensuales
   rows.js, calendar.js  Filas de la BD -> entradas del motor; meses y trimestres
   dates.js              Fecha de negocio (America/Guayaquil)
