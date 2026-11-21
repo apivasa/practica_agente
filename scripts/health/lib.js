@@ -128,11 +128,23 @@ export function assessWorkflow(rule, { workflow, runs, jobs = [], now, productio
   if (rule.requiresProduction && !productionEnabled) {
     return result(rule.check, 'skip', 'activo; producción inactiva, no se exige ejecución');
   }
-  const done = runs
-    .filter((r) => r.status === 'completed' && r.conclusion !== 'cancelled' && r.conclusion !== 'skipped')
-    .filter((r) => !rule.event || r.event === rule.event)
-    .sort((a, b) => Date.parse(b.created_at) - Date.parse(a.created_at));
   const nowMs = now.getTime();
+  // F-18 (H-F17-02 / H-ARQ-F17-01): created_at de cada run validado con parseApiTime, como en
+  // assessDeploy. Un completado con fecha inválida o futura podría ser el más reciente (o el
+  // único que cumple maxAgeHours), así que hace fallar el check. Empates: compareSameTime.
+  const timeOf = (r) => parseApiTime(r?.created_at, nowMs);
+  const doneAll = (runs ?? [])
+    .filter((r) => r?.status === 'completed' && r.conclusion !== 'cancelled' && r.conclusion !== 'skipped')
+    .filter((r) => !rule.event || r.event === rule.event);
+  const invalid = doneAll.filter((r) => !Number.isFinite(timeOf(r)));
+  if (invalid.length > 0) {
+    return result(
+      rule.check,
+      'fail',
+      `${invalid.length} run(s) completado(s) con fecha inválida o en el futuro; no se puede determinar el más reciente${runLink(invalid[0])}`,
+    );
+  }
+  const done = doneAll.sort((a, b) => timeOf(b) - timeOf(a) || compareSameTime(a, b));
   // F-17 (H-ARQ-F16-03): misma validación que los runs de despliegue. Inválida o futura → 0
   // (época), que es fail-closed: no cuenta como «reciente» ni como «creado este mes».
   const parsedCreated = parseApiTime(workflow.created_at, nowMs);
@@ -158,7 +170,7 @@ export function assessWorkflow(rule, { workflow, runs, jobs = [], now, productio
   const problems = [];
   if (candidate.conclusion !== 'success') problems.push(`último run terminó en ${candidate.conclusion}`);
   if (rule.maxAgeHours) {
-    const age = hoursBetween(Date.parse(candidate.created_at), nowMs);
+    const age = hoursBetween(timeOf(candidate), nowMs);
     if (age > rule.maxAgeHours) problems.push(`último run hace ${fmtHours(age)} (máximo ${rule.maxAgeHours} h)`);
   }
   if (rule.maxDurationMin && candidate.run_started_at && candidate.updated_at) {
@@ -369,6 +381,8 @@ export function isolatedFailure(done, failed) {
  *      rango 2: sin id entero seguro y success.
  *   2. rango 1: id descendente (mayor = más reciente, como da la API).
  *      rangos 0 y 2: conclusion y luego String(id), solo para que el orden sea determinista.
+ *   3. F-18 (QA-F17-01): rango 1 con el mismo id: no-success antes que success, luego
+ *      conclusion (un run repetido entre páginas con distinta conclusión no puede dar ok).
  * Fail-closed: si el id no permite saber cuál es más reciente, un run no-success empatado
  * nunca queda detrás de un success, así que el empate no puede dar ok.
  */
@@ -376,8 +390,13 @@ function compareSameTime(a, b) {
   const ra = sameTimeRank(a);
   const rb = sameTimeRank(b);
   if (ra !== rb) return ra - rb;
-  if (ra === 1) return b.id - a.id;
+  if (ra === 1) return b.id - a.id || successLast(a) - successLast(b) || cmpText(a?.conclusion, b?.conclusion);
   return cmpText(a?.conclusion, b?.conclusion) || cmpText(a?.id, b?.id);
+}
+
+/** F-18 (QA-F17-01 / H-F17-01): con el mismo id entero seguro, el no-success va antes. */
+function successLast(r) {
+  return r?.conclusion === 'success' ? 1 : 0;
 }
 
 function sameTimeRank(r) {

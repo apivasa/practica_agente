@@ -1,0 +1,22 @@
+# F-18 — Informe de seguridad
+Veredicto: VERDE
+Requiere cambiar alcance: no
+Superficie nueva: ninguna. El cambio es lógica pura de `scripts/health/lib.js`. `compareSameTime` desempata un id entero repetido poniendo primero el no-success (`successLast`), y `assessWorkflow` valida el `created_at` de cada run con `parseApiTime`: un completado con fecha inválida o futura da `fail`, y el desempate usa `compareSameTime`. No hay endpoints, permisos, secretos, workflows ni dependencias nuevos.
+
+Pruebas de seguridad añadidas: `tests/security/health-workflow-f18.test.js`, 157 casos, todos de la categoría 5 (automatizaciones):
+- H-F17-01: el mismo `created_at` con el mismo id entero (success y failure) da `fail` en los dos órdenes, en las 4 reglas no mensuales, en `evaluacion-mensual` y en `assessDeploy`. Un id mayor sigue decidiendo, así que no aparecen falsos rojos.
+- H-F17-02: 13 fechas hostiles (año 2099, justo fuera de `FUTURE_SKEW_MIN`, vacía, null, ausente, número, objeto con `toString`, texto libre, solo fecha, sin zona, offset ilegible, mes 13, `T24:00` que cae en el futuro) × las 5 reglas. Se prueba con el run como único completado y junto a un failure válido anterior, en los dos órdenes: siempre `fail`. Un success en 2099 no tapa la antigüedad de `seguridad-semanal`. Dentro del margen de reloj se acepta, también sin falsos rojos. El ruido con fecha inválida (pendiente, cancelado, omitido u otro evento) no convierte un failure en `ok`.
+- Permutaciones: 4 grupos empatados hostiles (id repetido, id texto, decimal, NaN, Infinity, mayor que 2^53, tres iguales) dan siempre `fail` en todas las permutaciones, en `ci-main`, `seguridad-semanal` y `assessDeploy`.
+- Fuzz determinista: 2 × 3000 casos con un oráculo que no usa el comparador. Si el resultado es `ok`, no hay completados con fecha inválida, ningún no-success empatado queda sin id comparable, el id máximo del grupo más reciente es success y se respeta `maxAgeHours`.
+- `checkWorkflows`: si `listRuns` devuelve un objeto, un texto o un número, ninguna regla da `ok`. La excepción se captura y sale `fail`.
+
+Resultados locales (`node --test`): 157/157 en el archivo nuevo y 1063 pasan en `tests/security/health-*` y `tests/scripts/*`. Lo único que no pasa es la prueba `todo` previa del tester H-C04-QA-01 (`qa-c03.test.js`), ajena a este ítem; no hace fallar la suite.
+
+Resultados del pipeline: gitleaks · semgrep · npm audit · ZAP · pentest RLS/API corren en `seguridad.yml` sobre la rama `item/F-18` tras este push. El orquestador confirma el resultado en el PR. Revisión manual del diff: sin claves ni tokens, sin `eval`, `Function` ni `child_process`, sin cambios en workflows ni en dependencias.
+
+Hallazgos (registrados en `docs/seguridad/hallazgos.md`):
+- **H-F17-01 · Info · 5**: corregido. **H-F17-02 · Baja · 5**: corregido.
+- **H-F18-01 · Info · 5** · `scripts/health/lib.js` (`assessWorkflow`, control `maxDurationMin`). Es anterior a F-18. La duración usa `Date.parse` sin `parseApiTime`. Con `updated_at` ilegible, `run_started_at` futuro o alguno vacío, la duración sale NaN, negativa o no se calcula, y el control se salta en silencio. Reproducción: `ritmo-diario` en success, con `created_at` y `run_started_at` válidos y `updated_at: 'basura'`, da `ok`. Solo afecta al aviso de lentitud y requiere controlar la API. Corrección: usar `parseApiTime` en los dos campos; si en el candidato falta alguno, es inválido o la duración es negativa, `fail`.
+- **H-F18-02 · Info · 5** · `scripts/health/lib.js` (`checkWorkflows`, elección de `jobs`). Es anterior a F-18 y ahora se nota más porque `assessWorkflow` ordena por su cuenta. Los jobs de `requiredStep` salen del primer success en el orden de la API, no del candidato que elige `assessWorkflow`. Reproducción: `listRuns` devuelve `[success id 1 (ayer), success id 2 (hoy)]` y `listJobs(2)` tiene `Evaluar` en skipped; `ritmo-diario` da `ok`. Además, con jobs vacíos o el paso renombrado, el control pasa. Requiere controlar la API (GitHub entrega los runs del más nuevo al más viejo). Corrección: pedir los jobs del candidato que devuelve `assessWorkflow`, y con producción activa tratar el paso ausente como `fail`.
+
+Verificado sin hallazgos: 5 (sin `ok` falso en `assessWorkflow` ni en `assessDeploy` con fechas futuras o ilegibles, ids raros, ids repetidos ni permutaciones; respuestas de forma rara capturadas) y 6 (sin secretos en el diff, sin dependencias nuevas, sin patrones SAST relevantes). Las categorías 1–4, 7 y 8 no aplican: el ítem no toca la BD, Auth, entradas de usuario, el front ni los datos.
