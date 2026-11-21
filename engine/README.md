@@ -92,3 +92,12 @@ evaluateColor(mttr, m); // { color: 'green', reason: 'Valor 4 <= verde 4' }
 ```sh
 node --test --experimental-test-coverage --test-coverage-exclude='tests/**' 'tests/**/*.test.js'
 ```
+
+### Importación Excel .xlsx (V-07) — `xlsx.js`, `zip.js`, `xml.js`
+
+Sin dependencias: el .xlsx es un ZIP con XML. La descompresión deflate la inyecta el llamador (`inflate(data, maxBytes)`; en el front, `src/lib/inflate.js` con `DecompressionStream('deflate-raw')`).
+
+- `parseMeasurementsXlsx(bytes, indicator, ctx, inflate)` → `Promise<{ rows, errors }>`, mismo contrato, columnas, límites (1 MiB, 5000 filas) y mensajes que `parseMeasurementsCsv`; ambos terminan en `validateMeasurementRecords(records, indicator, ctx)`.
+- Solo la primera hoja (orden de `<sheets>`). Celdas con fórmula o con error de Excel se rechazan con fila y columna. En `fecha`, un número es serie de Excel → `AAAA-MM-DD` (`excelSerialToIsoDate`, sistemas 1900 y 1904; fecha de calendario local, sin desplazamiento de zona; la hora se descarta).
+- Defensas: ZIP sin cifrado ni ZIP64, máx. 1000 entradas, nombres únicos, tope de 8 MiB descomprimidos por parte y 20 MiB en total (comprobado contra el tamaño declarado y el real), CRC-32 verificado. XML sin `DOCTYPE`/`ENTITY`, solo entidades predefinidas y numéricas, tope de 400 000 elementos y 64 niveles.
+- `buildXlsxTemplate(columns)` → bytes de una plantilla .xlsx (ZIP sin compresión) con la cabecera en la fila 1.

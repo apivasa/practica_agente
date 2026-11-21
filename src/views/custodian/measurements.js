@@ -1,10 +1,14 @@
 // M-04 · Custodio: captura manual de mediciones e importación CSV validada
 // (vista previa con errores fila a fila; se guarda solo si no hay errores).
+// V-07: el mismo control acepta Excel .xlsx (primera hoja, mismas columnas,
+// límites y validaciones; fórmulas rechazadas) y ofrece una plantilla .xlsx.
 import { el } from '../dom.js';
 import { field, select, messages, table } from '../form.js';
 import {
-  validateMeasurementInput, parseMeasurementsCsv, CSV_COLUMNS, CSV_MAX_BYTES, CSV_MAX_ROWS,
+  validateMeasurementInput, parseMeasurementsCsv, parseMeasurementsXlsx, buildXlsxTemplate,
+  CSV_COLUMNS, CSV_MAX_BYTES, CSV_MAX_ROWS,
 } from '../../../engine/index.js';
+import { inflateRaw } from '../../lib/inflate.js';
 import { toEngineIndicator } from '../../lib/indicator-form.js';
 import { describeMeasurement } from '../../lib/measurement-form.js';
 import { todayInBusinessTz } from '../../lib/dates.js';
@@ -13,6 +17,27 @@ import { listUnits } from '../../data/units.js';
 import { listRecentMeasurements, insertMeasurements } from '../../data/measurements.js';
 
 const PREVIEW_MAX = 50;
+const XLSX_MIME = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+
+/** true si el archivo es (o dice ser) un Excel: por firma ZIP/OLE o por extensión. */
+function isExcelFile(name, head) {
+  const zip = head[0] === 0x50 && head[1] === 0x4b && head[2] === 0x03 && head[3] === 0x04;
+  const ole = head[0] === 0xd0 && head[1] === 0xcf && head[2] === 0x11 && head[3] === 0xe0;
+  return zip || ole || /\.xlsx?$/i.test(name ?? '');
+}
+
+/** Descarga unos bytes generados localmente (blob: propio, no viene de datos). */
+function downloadBytes(bytes, filename, type) {
+  const url = URL.createObjectURL(new Blob([bytes], { type }));
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  a.hidden = true;
+  document.body.append(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 0);
+}
 
 export function renderMeasurements({ rows }) {
   const msg = messages();
@@ -113,7 +138,7 @@ export function renderMeasurements({ rows }) {
     // ---- Importación CSV ----
     const spec = CSV_COLUMNS[type];
     const header = [...spec.required, ...spec.optional].join(',');
-    const file = el('input', { id: 'ms-csv', type: 'file', accept: '.csv,text/csv' });
+    const file = el('input', { id: 'ms-csv', type: 'file', accept: `.csv,.xlsx,text/csv,${XLSX_MIME}` });
     const preview = el('div', { class: 'csv-preview' });
     let pending = [];
     const saveAll = el('button', { type: 'button', class: 'btn btn-primary', text: 'Guardar mediciones del archivo', disabled: true });
@@ -129,9 +154,18 @@ export function renderMeasurements({ rows }) {
         preview.replaceChildren(errorList([{ row: null, message: 'El archivo supera 1 MB' }]));
         return;
       }
-      const text = await f.text();
+      let result;
+      try {
+        const ctx = { units: state.units, today: todayInBusinessTz() };
+        const bytes = new Uint8Array(await f.arrayBuffer());
+        if (state.current !== ind) return;
+        result = isExcelFile(f.name, bytes.subarray(0, 4))
+          ? await parseMeasurementsXlsx(bytes, cfg, ctx, inflateRaw)
+          : parseMeasurementsCsv(new TextDecoder('utf-8').decode(bytes), cfg, ctx);
+      } catch {
+        result = { rows: [], errors: [{ row: null, message: 'El archivo no se pudo leer' }] };
+      }
       if (state.current !== ind) return;
-      const result = parseMeasurementsCsv(text, cfg, { units: state.units, today: todayInBusinessTz() });
       if (result.errors.length) {
         preview.replaceChildren(errorList(result.errors));
         return;
@@ -166,10 +200,19 @@ export function renderMeasurements({ rows }) {
       }
     });
 
+    const template = el('button', {
+      type: 'button',
+      class: 'btn',
+      text: 'Descargar plantilla Excel (.xlsx)',
+      onclick: () => downloadBytes(buildXlsxTemplate([...spec.required, ...spec.optional]), `plantilla-mediciones-${type}.xlsx`, XLSX_MIME),
+    });
+
     const csv = el('section', { class: 'csv-import', 'aria-labelledby': 'ms-csv-title' }, [
-      el('h3', { id: 'ms-csv-title', text: 'Importar CSV' }),
+      el('h3', { id: 'ms-csv-title', text: 'Importar CSV o Excel' }),
       el('p', { text: `Primera fila con la cabecera: ${header}. Separador coma o punto y coma. Unidad por su nombre. Máximo 1 MB y ${CSV_MAX_ROWS} filas. Si alguna fila tiene errores no se guarda ninguna.` }),
-      field('Archivo CSV', file),
+      el('p', { class: 'xlsx-hint', text: 'Excel (.xlsx): se lee solo la primera hoja, con las mismas columnas en la fila 1. La fecha puede ser una fecha de Excel o un texto AAAA-MM-DD. No se aceptan fórmulas: copia y pega solo los valores. Los .xls antiguos y los libros con contraseña no se aceptan.' }),
+      template,
+      field('Archivo CSV o Excel (.xlsx)', file),
       preview,
       saveAll,
     ]);

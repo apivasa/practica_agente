@@ -108,7 +108,8 @@ function detectDelimiter(text) {
   return firstLine.includes(';') && !firstLine.includes(',') ? ';' : ',';
 }
 
-function normalizeHeader(h) {
+/** Nombre de columna normalizado: minúsculas, sin tildes, espacios como _. */
+export function normalizeHeader(h) {
   return h.trim().toLowerCase()
     .normalize('NFD').replace(/[̀-ͯ]/g, '')
     .replace(/\s+/g, '_');
@@ -251,6 +252,20 @@ export function parseMeasurementsCsv(text, indicator, ctx = {}) {
   if (!clean.trim()) return fileError('El archivo está vacío');
   const { records, error } = tokenizeCsv(clean, detectDelimiter(clean));
   if (error) return { rows: [], errors: [error] };
+  return validateMeasurementRecords(records, indicator, ctx);
+}
+
+/**
+ * Valida registros ya leídos de un archivo (CSV o Excel): la primera fila es la
+ * cabecera. Comparte reglas, límites y mensajes entre ambos formatos (V-07).
+ * @param {{ line: number, cells: string[] }[]} records
+ * @returns {{ rows: object[], errors: { row: number|null, message: string }[] }}
+ */
+export function validateMeasurementRecords(records, indicator, ctx = {}) {
+  const fileError = (message) => ({ rows: [], errors: [{ row: null, message }] });
+  const type = indicator?.measurementType;
+  if (!hasOwn(CSV_COLUMNS, type)) return fileError('El indicador no tiene un tipo de medición válido');
+  if (!Array.isArray(records) || records.length === 0) return fileError('El archivo está vacío');
 
   const [header, ...data] = records;
   const cols = header.cells.map(normalizeHeader);
