@@ -185,3 +185,9 @@ Detalle en `docs/reportes/M-06-seguridad.md`. Pruebas en `tests/security/engine-
 ## Borde de redondeo JS M-14
 
 Sin hallazgos nuevos. M-14 cierra H-ARQ-M13-01 (informe de arquitectura de M-13): valores en [2^53 − 0,5, 2^53) que los CHECK `*_safe` aceptaban y `JSON.parse` redondea a 2^53. Verificado bajo RLS (`supabase/tests/security/051`) y por PostgREST con JWT por rol (`tests/security/api/safe-cap-m14.test.js`); el reemplazo de los CHECK es atómico y validado (`tests/security/db-static-m14.test.js`). H-M12-01 (escala, Info) sigue registrado sin cambios.
+
+## Salud: check deploy-main V-04b
+
+| ID | Ítem | Severidad | Categoría | Ubicación | Resumen | Corrección sugerida | Estado |
+|---|---|---|---|---|---|---|---|
+| H-V04b-01 | V-04b | Baja | 5 · Automatizaciones | `scripts/health/check.js:47` (`log(\`${tag} ${r.check}: ${r.detail}\`)`), `scripts/health/lib.js` `assessDeploy` (y `assessWorkflow`, previo) | El detalle se imprime tal cual: si `conclusion`, `status` o `html_url` de la API trajeran `\n::error::…` o `%0A`, se inyectaría un comando de workflow en el log (comprobado con datos simulados). No es explotable hoy: esos campos los genera GitHub (enumerados y URL con id numérico) y los campos controlables (`display_title`, `head_branch`, mensaje del commit) no se usan (verificado en `tests/security/health-deploy-v04b.test.js`). El issue `salud` no se ve afectado (solo nombres de check validados). Defensa en profundidad. | Sanear `detail` en un punto (p. ej. en `result()`): `replace(/[\r\n]+/g, ' ')` y `replace(/::/g, ': :')` o `%` → `%25`; opcionalmente aceptar `html_url` solo si casa `^https://github\.com/[\w.-]+/[\w.-]+/actions/runs/\d+$`. Añadir el caso a la prueba de seguridad. | Registrado (propuesto como ítem) |
