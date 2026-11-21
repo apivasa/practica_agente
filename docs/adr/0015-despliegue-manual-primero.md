@@ -47,7 +47,7 @@ Estado de la fase 2: **activada** en V-05b. No cambia ninguna decisión confirma
 ### Consecuencias de la fase 2
 - Cada merge con código o migraciones a `main` llega a producción sin intervención humana. La parada humana está ahora en la revisión del PR (QA, seguridad y arquitectura) y en el CI del PR.
 - Revertir un PR que añadió una migración borra el archivo del repo. Entonces `db push` falla: la versión remota ya no está en local. Se revierte solo el código y se corrige la BD con una migración nueva (runbook, `docs/operacion.md`).
-- Un fallo de `deploy.yml` en `main` todavía no lo vigila `salud.yml` (H-ARQ-V05b-02).
+- Un fallo de `deploy.yml` en `main` lo vigila `salud.yml` con el check `deploy-main` (V-04b); no hace falta revisión manual.
 
 ## Enmienda S-05b (2026-11-20, arquitecto-SRE; no contradice el diseño)
 El punto 4 pedía la fase B "con usuarios de prueba ficticios" antes de P-05. Se precisa la compuerta en dos escalones, que es lo que ya fija el plan (S-05b) y el criterio de cierre de `docs/seguridad/pentest-preproduccion.md`:

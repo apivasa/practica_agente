@@ -67,7 +67,7 @@ Sin `supabase link` y sin token de cuenta (H-V05-01). Cada paso de migración ca
 
 - **Fusionar de a uno.** Cada merge despliega. Con dos PR con migraciones, fusionar el segundo solo cuando el CI de `main` y el despliegue del primero estén en verde (H-ARQ-V05b-01).
 - **El despliegue no espera al CI** del commit fusionado, y `main` no tiene protección de rama (H-V05b-01). Un push directo a `main` despliega sin revisión.
-- `salud.yml` todavía no vigila este workflow (H-ARQ-V05b-02). Un fallo de despliegue llega por el correo de GitHub; el orquestador lo revisa en cada ciclo.
+- Un fallo de despliegue lo detecta `salud.yml` con el check `deploy-main` (ver «Vigilancia»); no hace falta revisarlo a mano.
 
 ## Vigilancia
 
