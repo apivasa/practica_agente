@@ -521,7 +521,7 @@ describe('C-05 QA escape de nombres (HTML y cabeceras)', () => {
     await sendAlertEmails(db, { config: CONFIG, fetchImpl: r.fetchImpl, now: NOW, sleep: noSleep });
     const { html, subject, to } = r.calls[0].body;
     assert.deepEqual(to, ['x@qa.example.test']);
-    assert.ok(!/<img|<script/i.test(html), 'sin etiquetas inyectadas');
+    assert.ok(!/<\s*\/?\s*(?:img|script)\b/i.test(html), 'sin etiquetas inyectadas');
     assert.ok(html.includes('&lt;img src=x onerror=alert(1)&gt; &amp; &quot;Cía&quot; &#39;Q&#39;'));
     assert.ok(html.includes('&lt;script&gt;'));
     assert.ok(!/[\r\n]/.test(subject), 'asunto en una línea');
