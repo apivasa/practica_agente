@@ -276,12 +276,19 @@ export function assessDeploy(rule, { workflow, runs, now }) {
   // - Pendiente con created_at o run_started_at inválido: se descarta. No puede dar ok por sí
   //   solo, no cubre un fallo (newerPendingRun ya lo rechaza) y no cuenta como atascado (lado
   //   seguro; lo exige qa-v04b «sin fechas válidas: no se considera atascado ni lanza»).
+  //   F-16 (H-F15-03): si solo run_started_at es ilegible o futuro y created_at es válido, el
+  //   pendiente se conserva y el atasco se mide con created_at (newerPendingRun sigue sin
+  //   dejar que cubra un fallo).
+  // - F-16 (H-F15-02): con el mismo created_at, desempata el id numérico (mayor = más reciente).
   const relevantAll = (runs ?? []).filter((r) => rule.events.includes(r?.event));
   const timeOf = (r) => parseApiTime(r.created_at, nowMs);
-  const sinceOf = (r) => (r.run_started_at ? parseApiTime(r.run_started_at, nowMs) : timeOf(r));
-  const validTimes = (r) => Number.isFinite(timeOf(r)) && (!PENDING_STATUSES.has(r.status) || Number.isFinite(sinceOf(r)));
+  const sinceOf = (r) => {
+    const started = r.run_started_at ? parseApiTime(r.run_started_at, nowMs) : NaN;
+    return Number.isFinite(started) ? started : timeOf(r);
+  };
+  const validTimes = (r) => Number.isFinite(timeOf(r));
   const invalid = relevantAll.filter((r) => !validTimes(r) && r.status === 'completed' && !IGNORED_CONCLUSIONS.has(r.conclusion));
-  const relevant = relevantAll.filter(validTimes).sort((a, b) => timeOf(b) - timeOf(a));
+  const relevant = relevantAll.filter(validTimes).sort((a, b) => timeOf(b) - timeOf(a) || compareIdDesc(a, b));
 
   const problems = [];
   if (invalid.length > 0) {
@@ -347,6 +354,22 @@ export function isolatedFailure(done, failed) {
   return !previous || previous.conclusion === 'success';
 }
 
+/**
+ * F-16 (H-F15-02): orden por id numérico descendente (mayor = más reciente). Si alguno no
+ * tiene id entero, empate (0): se conserva el orden de entrada.
+ */
+function compareIdDesc(a, b) {
+  const ia = a?.id;
+  const ib = b?.id;
+  return Number.isSafeInteger(ia) && Number.isSafeInteger(ib) ? ib - ia : 0;
+}
+
+/**
+ * F-16 (H-F15-01): ISO 8601 con fecha, hora y zona obligatoria (Z u offset ±hh:mm), que es lo
+ * que da la API de GitHub. Date.parse solo no basta: acepta '1' o 'March 1 2001'.
+ */
+export const API_TIME_RE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{1,9})?(Z|[+-]\d{2}:\d{2})$/;
+
 /** F-14 (H-F13-02): margen para relojes desfasados; un timestamp más allá de now + esto se rechaza. */
 export const FUTURE_SKEW_MIN = 5;
 
@@ -354,12 +377,13 @@ export const FUTURE_SKEW_MIN = 5;
  * F-14 (H-F13-02): instante en ms de un timestamp de la API, o NaN si no es texto, no se
  * puede leer o está más de FUTURE_SKEW_MIN minutos en el futuro respecto a nowMs.
  * (Date.parse acepta no-strings: 12 sería el año 2001; un futuro haría negativa la espera.)
+ * F-16 (H-F15-01): además debe cumplir API_TIME_RE; cualquier otro texto da NaN.
  * @param {unknown} value
  * @param {number} nowMs
  * @returns {number}
  */
 export function parseApiTime(value, nowMs) {
-  if (typeof value !== 'string' || value.trim() === '') return NaN;
+  if (typeof value !== 'string' || !API_TIME_RE.test(value)) return NaN;
   const ms = Date.parse(value);
   if (!Number.isFinite(ms) || !Number.isFinite(nowMs)) return NaN;
   return ms > nowMs + FUTURE_SKEW_MIN * 60_000 ? NaN : ms;
