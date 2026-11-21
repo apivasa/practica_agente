@@ -28,6 +28,10 @@ const run = (id, conclusion = 'success', created = T, event = 'push', status = '
 });
 const wf = (check, runs, productionEnabled = false, jobs = []) =>
   assessWorkflow(rule(check), { workflow: WF, runs, jobs, now: NOW, productionEnabled }).status;
+// F-19 (QA): jobs reales del run `runId` con el paso requerido de la regla en success.
+const stepJobs = (check, runId) => [
+  { id: Number(runId) * 10, run_id: runId, status: 'completed', conclusion: 'success', steps: [{ name: rule(check).requiredStep, conclusion: 'success' }] },
+];
 const deploy = (runs) => assessDeploy(DEPLOY_RULE, { workflow: WF, runs, now: NOW }).status;
 
 function permutations(list) {
@@ -108,7 +112,7 @@ test('QA-F18 (2): evaluacion-mensual — success con fecha futura del mes no cue
 
 test('QA-F18 (2): ritmo-diario — empate success/failure con ids ordenados por id', () => {
   for (const p of permutations([run(10, 'success'), run(11, 'failure')])) assert.equal(wf('ritmo-diario', p, true), 'fail');
-  for (const p of permutations([run(11, 'success'), run(10, 'failure')])) assert.equal(wf('ritmo-diario', p, true), 'ok');
+  for (const p of permutations([run(11, 'success'), run(10, 'failure')])) assert.equal(wf('ritmo-diario', p, true, stepJobs('ritmo-diario', 11)), 'ok');
 });
 
 test('QA-F18 (2): entrada sin runs o con elementos nulos no lanza', () => {
@@ -123,9 +127,16 @@ test('QA-F18 (3): historial realista (ISO de la API, ids enteros crecientes) →
   const hist = (event, hours) => hours.map((h) => run(id++, 'success', at(h), event)).reverse();
   assert.equal(wf('ci-main', [...hist('push', [5, 3, 1]), run(id++, 'cancelled', at(0.5)), run(id++, null, at(0.1), 'push', 'in_progress')].reverse()), 'ok');
   assert.equal(wf('seguridad-semanal', hist('schedule', [24 * 14, 24 * 7, 24])), 'ok');
-  assert.equal(wf('ritmo-diario', hist('schedule', [48, 24, 2]), true), 'ok');
-  assert.equal(wf('correo-alertas', hist('schedule', [27, 24, 3]), true), 'ok');
-  assert.equal(wf('evaluacion-mensual', [run(id++, 'success', '2027-03-01T05:10:00Z', 'schedule'), run(id++, 'success', '2027-02-01T05:10:00Z', 'schedule')], true), 'ok');
+  // hist(...)[0] es el run más reciente (id mayor): el que juzga la regla y cuyos jobs se piden.
+  const daily = hist('schedule', [48, 24, 2]);
+  assert.equal(wf('ritmo-diario', daily, true, stepJobs('ritmo-diario', daily[0].id)), 'ok');
+  const mail = hist('schedule', [27, 24, 3]);
+  assert.equal(wf('correo-alertas', mail, true, stepJobs('correo-alertas', mail[0].id)), 'ok');
+  const closeId = id++;
+  assert.equal(
+    wf('evaluacion-mensual', [run(closeId, 'success', '2027-03-01T05:10:00Z', 'schedule'), run(id++, 'success', '2027-02-01T05:10:00Z', 'schedule')], true, stepJobs('evaluacion-mensual', closeId)),
+    'ok',
+  );
   // Offsets ±hh:mm y fracciones de segundo también son formato válido.
   assert.equal(wf('ci-main', [run(id++, 'success', '2027-03-20T06:30:00-05:00'), run(id++, 'success', '2027-03-20T11:00:00.123Z')]), 'ok');
 });
