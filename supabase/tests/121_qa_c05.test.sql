@@ -43,16 +43,16 @@ select throws_ok($$ update public.alerts set email_attempts = 101 where id = 'c0
 update public.alerts set email_attempts = 0 where id = 'c05a3000-0000-4000-8000-000000000001';
 
 -- Idempotencia de la marca (lo que hace el backend: update ... where emailed_at is null).
-select is(
-  (with u as (update public.alerts set emailed_at = now(), email_attempts = 1
-              where id = 'c05a3000-0000-4000-8000-000000000001' and emailed_at is null returning 1)
-   select count(*)::int from u), 1, 'backend: la primera marca afecta a la alerta');
-select is(
-  (with u as (update public.alerts set emailed_at = now(), email_attempts = 2
-              where id = 'c05a3000-0000-4000-8000-000000000001' and emailed_at is null returning 1)
-   select count(*)::int from u), 0, 'backend: la segunda marca no afecta (no reenvía)');
+update public.alerts set emailed_at = now(), email_attempts = 1
+  where id = 'c05a3000-0000-4000-8000-000000000001' and emailed_at is null;
+select ok((select emailed_at is not null and email_attempts = 1 from public.alerts where id = 'c05a3000-0000-4000-8000-000000000001'),
+  'backend: la primera marca fija emailed_at y el intento');
+update public.alerts set emailed_at = '2000-01-01T00:00:00Z', email_attempts = 2
+  where id = 'c05a3000-0000-4000-8000-000000000001' and emailed_at is null;
 select is((select email_attempts::int from public.alerts where id = 'c05a3000-0000-4000-8000-000000000001'), 1,
-  'la segunda marca no cambia los intentos');
+  'backend: la segunda marca no cambia los intentos (no reenvía)');
+select ok((select emailed_at > '2000-01-01T00:00:00Z' from public.alerts where id = 'c05a3000-0000-4000-8000-000000000001'),
+  'backend: la segunda marca no sobrescribe emailed_at');
 
 set local role authenticated;
 
