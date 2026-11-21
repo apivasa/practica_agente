@@ -16,6 +16,12 @@ Q-02 (2026-11-20, `docs/diseno.md` §7) fija que las mediciones llegan por ahora
 6. **Topes defensivos (zip bomb, XML).** Máximo 1000 entradas, 8 MiB descomprimidos por parte y 20 MiB en total (se comprueba contra el tamaño declarado y contra el real). Sin `DOCTYPE`/`ENTITY`, solo entidades predefinidas y numéricas, hasta 400 000 elementos y 64 niveles.
 7. **Plantilla generada en el motor.** `buildXlsxTemplate(columns)` arma un ZIP sin compresión con la cabecera del tipo de medición. La vista la descarga como `blob:` local y no necesita archivos estáticos nuevos.
 
+## Actualización V-07b (2026-11-21, Aceptado; precisa los puntos 2, 3, 5 y 6 sin cambiar la decisión)
+- **Puntos 2 y 6, tope de inflado:** `readZipEntry` pasa al descompresor `min(tope por parte, tamaño declarado)`. Una entrada que se descomprime más allá de lo que declara se rechaza como archivo dañado (`invalid`) sin llegar al tope general.
+- **Punto 6, tope de filas en streaming:** `parseXml` acepta un gancho opcional `onClose(node, stack)` que se llama al cerrarse cada elemento (puede lanzar o quitar el nodo del padre). `parseSheet` lo usa para procesar la hoja fila a fila, soltar cada `<row>` del árbol y cortar al pasar de `XLSX_MAX_SHEET_ROWS = CSV_MAX_ROWS + 2` filas con datos. El tope se deriva de `CSV_MAX_ROWS`; el conteo exacto y su mensaje siguen en `validateMeasurementRecords` (punto 3). El tope de 400 000 elementos de `parseXml` no cambia.
+- **Punto 5, fechas:** la serie se redondea al milisegundo antes de descartar la hora (como lo muestra Excel), y una serie fuera de rango se rechaza antes de operar.
+- **Punto 3, mensajes:** un negativo simple en `valor` dice "debe ser un número (o entero) ≥ 0" en vez de "posible fórmula". La regla vive en `validateMeasurementInput`, compartida por el formulario manual, el CSV y el Excel.
+
 ## Coherencia con otros ADR
 - **ADR 0009:** no agrega dependencias de front. `src/lib/inflate.js` es lógica sin DOM ni red y tiene pruebas con `node:test`. La vista no llama a Supabase directamente y la inserción sigue en `src/data/measurements.js`.
 - **ADR 0011 (CSP):** no cambia la política. `DecompressionStream` no es una petición de red (no afecta a `connect-src`). La descarga de la plantilla con `<a download href="blob:...">` es una descarga, no una carga de recurso, y `default-src 'none'` no la bloquea. No se usa `innerHTML`, `eval`, `Worker` ni `wasm`, así que no hace falta `worker-src` ni `'wasm-unsafe-eval'`.
