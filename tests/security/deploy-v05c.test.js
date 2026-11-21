@@ -28,7 +28,9 @@ const BASE = {
   CI_WAIT_INTERVAL_SECONDS: '0',
 };
 const CI = '.github/workflows/ci.yml';
-const run = (id, status, conclusion, path = CI) => ({ id, status, conclusion, path });
+// F-11 (H-QA-V05c-03): los fixtures traen head_sha y event como la API real, para que
+// endurecer el filtro jq de wait-ci.sh (sin `// $sha` ni `// "push"`) no los rompa.
+const run = (id, status, conclusion, path = CI) => ({ id, status, conclusion, path, head_sha: SHA, event: 'push' });
 const body = (...runs) => JSON.stringify({ total_count: runs.length, workflow_runs: runs });
 
 /** wait-ci.sh con un gh falso que siempre responde `resp` (null = gh falla). */
