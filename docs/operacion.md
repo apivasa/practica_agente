@@ -120,7 +120,7 @@ Mientras falte algo, el job termina en verde con `::warning::... se omite la eva
 
 ### Activación de producción (P-05): lista de comprobación
 Orden y compuertas según ADR 0015 (enmienda S-05b). Lo marcado *(usuario)* es compuerta del usuario.
-1. Fase B `anonimo` en VERDE (hecho, S-05b).
+1. Fase B `anonimo` en VERDE (hecho, S-05b). Tras el merge de S-05c, relanzarla (`workflow_dispatch` de `seguridad.yml` desde `main`, `fase_b = anonimo`): las 4 sondas de escritura anónima (`units`, `exceptions`, `audit_log`, `user_roles`) deben dar `401` con `42501`. En S-05b solo `units` quedó demostrada por privilegio (H-QA-S05b-01). Si alguna da `PGRST204`, `22xxx`/`23xxx` o `401` sin `42501`, es un fallo real de la sonda o del privilegio: no se relaja la prueba.
 2. *(usuario)* En el environment `produccion`: `SUPABASE_URL` y `SUPABASE_SECRET_KEY`. Regla de ramas `main`, **sin revisor**.
 3. `SUPABASE_URL` y `SUPABASE_PUBLISHABLE_KEY` **se quedan también a nivel de repositorio** (o la publicable como variable): `salud.yml` no declara environment (ADR 0014 punto 5) y no tiene valor por defecto para `SUPABASE_URL`. Si se borran del repositorio, con `EVALUATION_ENABLED=true` el check `supabase` falla con `falta SUPABASE_URL`. Ninguna de las dos es secreta. Las que sí se borran del repositorio: `SUPABASE_SECRET_KEY`, `SUPABASE_ACCESS_TOKEN`, `SUPABASE_DB_PASSWORD`, `SUPABASE_PROJECT_REF` (H-C03-02), después del paso 5.
 4. *(usuario)* Variable de repositorio `EVALUATION_ENABLED=true`.
