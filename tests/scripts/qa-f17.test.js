@@ -133,7 +133,7 @@ test('QA-F17 (1): propiedad — 3000 páginas aleatorias: estado invariante al o
 // con distinta conclusión (p. ej. la página trae dos veces el run por re-ejecución entre
 // páginas). compareSameTime devuelve 0 y decide el orden de entrada: ok o fail según llegue.
 // Se deja como todo para no bloquear; el fail-closed pediría no-success primero.
-test('QA-F17-01: id entero seguro repetido con distinta conclusión → no depende del orden', { todo: 'QA-F17-01' }, () => {
+test('QA-F17-01: id entero seguro repetido con distinta conclusión → no depende del orden', () => {
   const s = run(42, 'success');
   const f = run(42, 'startup_failure');
   assert.equal(assess([s, f]).status, assess([f, s]).status);
