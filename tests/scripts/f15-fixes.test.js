@@ -64,8 +64,10 @@ test('stuck: se mide con run_started_at validado; futuro o inválido no lanza ni
   const r = assess([run(2, 200, { status: 'in_progress', started: at(-120) }), run(1, 300)]);
   assert.equal(r.status, 'fail');
   assert.match(r.detail, /120 min en in_progress/);
-  assert.equal(assess([run(2, 200, { status: 'in_progress', started: at(600) }), run(1, 300)]).status, 'ok');
-  assert.equal(assess([run(2, 200, { status: 'queued', started: 12 }), run(1, 300)]).status, 'ok');
+  // F-16 (H-F15-03): run_started_at futuro o inválido con created_at válido → se mide con created_at.
+  assert.equal(assess([run(2, 200, { status: 'in_progress', started: at(600) }), run(1, 300)]).status, 'fail');
+  assert.equal(assess([run(2, 200, { status: 'queued', started: 12 }), run(1, 300)]).status, 'fail');
+  assert.equal(assess([run(2, 20, { status: 'queued', started: 12 }), run(1, 300)]).status, 'ok');
 });
 
 test('pendiente con fecha inválida no cubre un failure → fail', () => {
