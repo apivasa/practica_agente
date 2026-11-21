@@ -140,6 +140,10 @@ export function recipientSkipReason(alert, access, now) {
  *   C-06: alertas sin correo ni omisión cuyo sent_at quedó fuera de la ventana.
  * @property {(ids: string[], v: { skippedAt: string, reason: string }) => Promise<string[]>} [markAlertsEmailSkipped]
  *   C-06: marca condicional (sin emailed_at ni email_skipped_at); devuelve los ids marcados.
+ * @property {(ids: string[], v: { before: string, maxAttempts: number, skippedAt: string,
+ *   lookbackDays: number }) => Promise<string[]>} [markAlertsEmailExpired]
+ *   F-12: marca `expired` y audita en una sola transacción (RPC); devuelve los ids marcados.
+ *   Si existe, la ruta `expired` la usa en lugar de markAlertsEmailSkipped + insertAudit.
  *
  * Los tres métodos de C-06 son opcionales para no romper BD simuladas anteriores; la capa
  * real (scripts/lib/db.js) los implementa siempre, y con ellos la comprobación de rol y
@@ -170,7 +174,19 @@ export async function sendAlertEmails(db, { config, fetchImpl, now = () => new D
     try {
       const old = (await db.expiredEmailAlerts({ before: since, maxAttempts, limit: EXPIRED_BATCH })) ?? [];
       const ids = old.map((a) => a?.id).filter((id) => typeof id === 'string');
-      if (ids.length > 0) {
+      if (ids.length > 0 && typeof db.markAlertsEmailExpired === 'function') {
+        // F-12 (H-ARQ-C06-04): marca y auditoría en una sola transacción (RPC). Si falla,
+        // no queda ninguna alerta marcada sin su fila en audit_log.
+        const marked = (await db.markAlertsEmailExpired(ids, {
+          before: since,
+          maxAttempts,
+          skippedAt: now().toISOString(),
+          lookbackDays: config.lookbackDays,
+        })) ?? [];
+        summary.expired = marked.length;
+        if (marked.length > 0) log(`${marked.length} alerta(s) fuera de la ventana de ${config.lookbackDays} días: omitidas y auditadas`);
+      } else if (ids.length > 0) {
+        // C-06: BD sin la RPC de F-12 (solo BD simuladas; createDb siempre la implementa).
         const marked = new Set(await db.markAlertsEmailSkipped(ids, { skippedAt: now().toISOString(), reason: SKIP_REASONS.expired }));
         const rows = old
           .filter((a) => marked.has(a.id))

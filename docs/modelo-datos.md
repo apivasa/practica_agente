@@ -26,6 +26,8 @@ Un usuario puede tener varias filas y varios roles. Un usuario con sesión y sin
 
 Funciones de apoyo (esquema `private`, no expuesto por la API, `security definer`): `has_role(rol)`, `has_any_role()`, `is_leader_of(unidad)`, `is_custodian_of(indicador)`.
 
+Función RPC de backend (esquema `public`, F-12, migración `20261202120000_alert_email_expired_rpc_f12.sql`): `mark_alerts_email_expired(p_ids, p_before, p_max_attempts, p_skipped_at, p_lookback_days)`. Es la única función propia de `public`. `security invoker`, `search_path` vacío. `EXECUTE` solo para `service_role`: revocado a `PUBLIC`, `anon` y `authenticated`. Ver «Omisión del correo» en `alerts`.
+
 ## Tablas
 
 ### `units` — unidades de delivery
@@ -108,6 +110,7 @@ Omisión del correo (C-06, migración `20261201120000_alert_email_c06.sql`):
 - `email_skip_reason` (`text`): `expired` (pasaron 7 días sin enviarse), `recipient_missing` (el usuario ya no existe), `recipient_banned` (bloqueado en Auth) o `recipient_no_role` (ya no es líder de la unidad de la alerta ni comité).
 - CHECK `alerts_email_skip_reason_allowed`: solo esos cuatro motivos. CHECK `alerts_email_skip_pair`: las dos columnas van juntas (ambas nulas o ambas con valor). CHECK `alerts_email_sent_or_skipped`: una alerta no puede estar enviada y omitida a la vez.
 - Las escribe solo el backend. `authenticated` sigue con `UPDATE` solo sobre `read_at`; `anon` no tiene acceso. El destinatario ve la omisión de sus alertas pero no puede marcarla ni desmarcarla.
+- Desde F-12 el motivo `expired` se marca con la RPC `public.mark_alerts_email_expired`. En una sola sentencia marca `email_skipped_at` y `email_skip_reason = 'expired'` y escribe `alert_email_skipped` en `audit_log`: quedan las dos cosas o ninguna. Solo marca alertas sin enviar, sin omitir, con `sent_at` anterior al corte y con menos intentos que el tope, aunque reciba otros ids. Es idempotente. Rechaza parámetros nulos, más de 1000 ids, intentos menores que 1 y una ventana fuera de 1 a 365 días. Devuelve los ids marcados. La ventana y el tope los decide `scripts/lib/email.js` y llegan como parámetros.
 
 ### `audit_log` — auditoría
 `id`, `actor` (uuid del usuario o `system:<rol>`; las Actions usan `system:evaluate` y, en el correo, `system:alert-email`), `action`, `entity`, `entity_id`, `details` (JSON con `old` y `new`), `created_at`.

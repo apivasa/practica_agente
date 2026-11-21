@@ -193,6 +193,10 @@ function has(col, values) {
   };
 }
 
-// Funciones que la API puede exponer por /rest/v1/rpc. Hoy ninguna: toda la
-// lógica de autorización vive en el esquema `private`, no expuesto.
-export const RPC_ALLOWLIST = [];
+// Funciones que la API puede exponer por /rest/v1/rpc. La lógica de
+// autorización vive en el esquema `private`, no expuesto. Cada entrada exige
+// revisión de seguridad y una prueba de denegación por rol:
+// - mark_alerts_email_expired (F-12): solo service_role (EXECUTE revocado de
+//   PUBLIC, anon y authenticated; SECURITY INVOKER, search_path ''). Pentest
+//   en alert-email-expired-f12.test.js; pgTAP en 054_security_*_f12.
+export const RPC_ALLOWLIST = ['mark_alerts_email_expired'];

@@ -161,10 +161,10 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           HEAD_SHA: ${{ github.sha }}
         run: bash scripts/ci/wait-ci.sh
-      # F-11 (H-V05c-01): en push, el commit debe seguir siendo la punta de
-      # main (o solo seguirlo commits de documentación): un Re-run de un run
-      # viejo no republica un front ni migra desde un commit anterior. Con
-      # disparo manual no aplica. Sin if: por evento: lo decide el script.
+      # F-11 (H-V05c-01): el commit debe seguir siendo la punta de main (o
+      # solo seguirlo commits de documentación): un Re-run de un run viejo no
+      # republica un front ni migra desde un commit anterior. F-12 (H-F11-02):
+      # también con disparo manual. Sin if: por evento: lo decide el script.
       # Si lo superó un merge más nuevo en el primer intento: deploy=false.
       - name: Commit vigente en main
         id: tip
@@ -351,7 +351,9 @@ jobs:
         with:
           persist-credentials: false
       # F-11 (H-ARQ-F11-02): un rerun-failed-jobs de un run viejo nunca publica
-      # si ya entró un commit más nuevo con código.
+      # si ya entró un commit más nuevo con código. F-12 (H-F11-06): si ese
+      # commit entró mientras este run esperaba o migraba (intento 1), el rojo
+      # es esperado y no se relanza: el run del commit nuevo, en cola, publica.
       - name: Commit vigente en main
         env:
           GH_TOKEN: ${{ github.token }}

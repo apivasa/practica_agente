@@ -11,3 +11,7 @@
 79b7e59c5ccb83a97a7498602127114ca8efd608:tests/scripts/f11-fixes.test.js:generic-api-key:178
 # F-11 (seguridad): el informe docs/reportes/F-11-seguridad.md citaba en el commit a9fecda de item/F-11 la misma clave ficticia de arriba (re_TESTKEY_..., no es una credencial). La cita se reescribió sin el literal en el commit siguiente de seguridad. Ver docs/reportes/F-11-seguridad.md, intento 2.
 a9fecdafc152454404ef864e9e228972f5e81130:docs/reportes/F-11-seguridad.md:generic-api-key:69
+# F-12: clave ficticia de prueba (re_F12TESTKEY_..., no es una credencial de Resend) en el commit 933e277 de item/F-12; reemplazada por una armada en ejecución en el commit siguiente.
+933e2770b1053e574fca0c90f1adab617fd62360:tests/scripts/f12-fixes.test.js:generic-api-key:151
+# F-12 (seguridad): docs/reportes/F-12-seguridad.md citaba en el commit 9b5960d de item/F-12 la clave ficticia de arriba (re_F12TESTKEY_..., no es una credencial). La cita se reescribió sin el literal en el commit siguiente de seguridad.
+9b5960d73d35ba884b7e419cabc00a22e74f0675:docs/reportes/F-12-seguridad.md:generic-api-key:41
