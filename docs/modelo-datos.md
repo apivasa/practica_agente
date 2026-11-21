@@ -92,16 +92,24 @@ Reglas del trigger `enforce_exception_rules` (solo para usuarios finales):
 - Revocar: se marca `revoked_at`; la hora y el autor los pone el servidor. Una revocada ya no se edita.
 
 ### `alerts` — qué se notificó, a quién y cuándo
-`id`, `unit_id`, `recipient_user_id`, `kind`, `payload` (JSON con `message`, `severity` y datos del disparador), `dedupe_key` (única), `sent_at`, `read_at`.
+`id`, `unit_id`, `recipient_user_id`, `kind`, `payload` (JSON con `message`, `severity` y datos del disparador), `dedupe_key` (única), `sent_at`, `read_at`, `emailed_at`, `email_attempts`.
 
 `kind` admite solo `color_change`, `pace_behind`, `critical_intake` y `exception_expired`. `dedupe_key` evita duplicar una alerta por disparador y destinatario. Solo la inserta el backend; el usuario solo puede cambiar `read_at` de las suyas.
 
+Envío por correo (C-05, migración `20261129120000_alert_email_c05.sql`, ADR [0017](adr/0017-correo-de-alertas.md)):
+- `emailed_at` (`timestamptz`, nula = pendiente): cuándo Resend aceptó el correo. El envío la fija solo si sigue nula, así no se reenvía.
+- `email_attempts` (`smallint`, por defecto 0, entre 0 y 100): intentos de envío. Con 3 la alerta deja de reintentarse.
+- Índice parcial `alerts_email_pending_idx` sobre `sent_at` donde `emailed_at` es nula.
+- Las escribe solo el backend (`scripts/send-alert-emails.js`). RLS y privilegios no cambian: ningún usuario puede marcar ni desmarcar un envío.
+- El correo del destinatario no se guarda en el modelo: el backend lo lee de Supabase Auth en cada envío.
+
 ### `audit_log` — auditoría
-`id`, `actor` (uuid del usuario o `system:<rol>`; las Actions usan `system:evaluate`), `action`, `entity`, `entity_id`, `details` (JSON con `old` y `new`), `created_at`.
+`id`, `actor` (uuid del usuario o `system:<rol>`; las Actions usan `system:evaluate` y, en el correo, `system:alert-email`), `action`, `entity`, `entity_id`, `details` (JSON con `old` y `new`), `created_at`.
 
 - Solo inserción: un trigger bloquea `UPDATE`, `DELETE` y `TRUNCATE`, incluso para el backend.
 - Triggers de auditoría en `units`, `user_roles`, `indicators`, `commitments`, `measurements`, `targets` y `exceptions`.
 - La evaluación escribe además `evaluation_upsert`, `escalation_applied`, `alert_sent`, `exception_expired`, `pace_snapshot` (estado diario del paquete) y `evaluation_reprocess`.
+- El correo de alertas escribe `alert_emailed` (con el id de Resend y el intento) y `alert_email_failed` (con el intento y el error saneado). No guarda correos ni claves.
 
 ## RLS por rol
 

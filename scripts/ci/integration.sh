@@ -95,3 +95,6 @@ monthly_close 2027-03-01
 
 psql "$DB_URL" -v ON_ERROR_STOP=1 -f scripts/ci/verify-evaluate.sql
 echo "Integración C-03/C-04 en verde"
+
+# C-05: correo de las alertas generadas, con la capa real y Resend simulado (sin red).
+node scripts/ci/email-integration.js

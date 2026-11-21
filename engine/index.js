@@ -64,6 +64,16 @@ export {
   proposeThirdTarget,
 } from './rows.js';
 export { lockToday, buildHistory, assertHistoryFresh, YELLOW_MONTH2_ESCALATES_LIKE_RED } from './lock.js';
+export {
+  ALERT_KIND_LABELS,
+  alertKindLabel,
+  escapeHtml,
+  plainText,
+  safeHttpsUrl,
+  formatAlertEmail,
+  EMAIL_SUBJECT_MAX,
+  EMAIL_MESSAGE_MAX,
+} from './alert-email.js';
 export { validateMeasurementRecords } from './measurements-input.js';
 export {
   parseMeasurementsXlsx,

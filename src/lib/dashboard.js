@@ -6,6 +6,7 @@ import {
   packageStatus, paceStatus, exceptionFromRow, exceptionStatus,
   buildPackageInput, indicatorConfig, pickCommitment, addMonths, monthEnd,
   hasCategoryEvaluation, evaluateCategoryMonth, quarterCommitment, discardedNote, lockToday,
+  ALERT_KIND_LABELS,
 } from '../../engine/index.js';
 
 export const COLOR_LABELS = Object.freeze({
@@ -21,12 +22,8 @@ export const RESTRICTION_LABELS = Object.freeze({
   freeze_all_change: 'Se frena todo el change',
   all_capacity_to_run: 'Toda la capacidad va al RUN',
 });
-export const ALERT_KIND_LABELS = Object.freeze({
-  color_change: 'Cambio de color',
-  pace_behind: 'Atraso frente al ritmo',
-  critical_intake: 'Ingreso de P0/P1',
-  exception_expired: 'Vencimiento de excepción',
-});
+// C-05: las etiquetas de tipo de alerta son del motor (las usa también el correo).
+export { ALERT_KIND_LABELS };
 // V-09: las etiquetas de alcance son las de la pantalla de excepciones (una sola fuente).
 export { SCOPE_LABELS, scopeLabel } from './exceptions-logic.js';
 
