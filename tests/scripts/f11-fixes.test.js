@@ -119,10 +119,14 @@ test('check-main-tip: API caída o respuesta inesperada → reintenta y falla ce
   assert.equal(cmpDown.code, 1);
 });
 
-test('check-main-tip: workflow_dispatch se exime sin llamar a gh; otros eventos fallan', () => {
-  const d = runWithGh(TIP, [], { GITHUB_EVENT_NAME: 'workflow_dispatch' });
-  assert.equal(d.code, 0);
-  assert.equal(d.args, '');
+// F-12 (H-F11-02): workflow_dispatch ya no se exime; sigue la misma regla que push.
+test('check-main-tip: workflow_dispatch sigue la regla de push (consulta commits/main); otros eventos fallan', () => {
+  const d = runWithGh(TIP, [[COMMITS, tipBody(SHA)]], { GITHUB_EVENT_NAME: 'workflow_dispatch' });
+  assert.equal(d.code, 0, d.out);
+  assert.match(d.args, /^api repos\/owner\/repo\/commits\/main$/m);
+  const old = runWithGh(TIP, [[COMMITS, tipBody(NEWER)], [COMPARE, cmpBody('ahead', ['src/main.js'])]], { GITHUB_EVENT_NAME: 'workflow_dispatch' });
+  assert.equal(old.code, 1, old.out);
+  assert.match(old.out, /::error::Hay un commit más nuevo en main/);
   for (const ev of ['schedule', 'pull_request', '']) {
     const r = runWithGh(TIP, [[COMMITS, tipBody(SHA)]], { GITHUB_EVENT_NAME: ev });
     assert.equal(r.code, 1, ev);
@@ -215,7 +219,8 @@ test('H-ARQ-F11-01: behind o diverged en el primer intento siguen fallando cerra
 test('check-main-tip: escribe deploy=true en la punta, con solo docs detrás y con workflow_dispatch', () => {
   assert.equal(runWithGh(TIP, [[COMMITS, tipBody(SHA)]], { GITHUB_RUN_ATTEMPT: '1' }).output, 'deploy=true\n');
   assert.equal(runWithGh(TIP, [[COMMITS, tipBody(NEWER)], [COMPARE, cmpBody('ahead', ['docs/estado.md'])]]).output, 'deploy=true\n');
-  assert.equal(runWithGh(TIP, [], { GITHUB_EVENT_NAME: 'workflow_dispatch' }).output, 'deploy=true\n');
+  // F-12 (H-F11-02): con disparo manual también se consulta la punta.
+  assert.equal(runWithGh(TIP, [[COMMITS, tipBody(SHA)]], { GITHUB_EVENT_NAME: 'workflow_dispatch' }).output, 'deploy=true\n');
 });
 
 test('H-ARQ-F11-02: --strict falla siempre si está superado (también en el primer intento) y nunca escribe en GITHUB_OUTPUT', () => {

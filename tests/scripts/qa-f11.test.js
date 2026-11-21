@@ -147,10 +147,15 @@ describe('[P1] check-main-tip.sh: en push, el SHA debe ser la punta de main', ()
     }
   });
 
-  test('workflow_dispatch se exime (0) y no consulta la API; schedule/workflow_run fallan sin consultarla', () => {
-    const d = withFakeGh(TIP, {}, { GITHUB_EVENT_NAME: 'workflow_dispatch' });
-    assert.equal(d.code, 0);
-    assert.deepEqual(d.calls, []);
+  // F-12 (H-F11-02): workflow_dispatch ya no se exime; misma regla que push.
+  test('workflow_dispatch sigue la regla de push (consulta commits/main; superado por código → 1); schedule/workflow_run fallan sin consultarla', () => {
+    const d = withFakeGh(TIP, { [COMMITS]: mainAt(OLD) }, { GITHUB_EVENT_NAME: 'workflow_dispatch' });
+    assert.equal(d.code, 0, d.out);
+    assert.deepEqual(d.calls, [COMMITS]);
+    const old = withFakeGh(TIP, { [COMMITS]: mainAt(NEW), [COMPARE]: compare('ahead', [f('src/app.js')]) }, { GITHUB_EVENT_NAME: 'workflow_dispatch' });
+    assert.equal(old.code, 1, old.out);
+    assert.match(old.out, /::error::/);
+    assert.deepEqual(old.calls, [COMMITS, COMPARE]);
     for (const ev of ['schedule', 'workflow_run', 'repository_dispatch']) {
       const r = withFakeGh(TIP, { [COMMITS]: mainAt(OLD) }, { GITHUB_EVENT_NAME: ev });
       assert.equal(r.code, 1, ev);
@@ -349,7 +354,8 @@ describe('[P1-a] carrera de merges: salida deploy de verify', () => {
     for (const [answers, env] of [
       [{ [COMMITS]: mainAt(OLD) }, {}],
       [{ [COMMITS]: mainAt(NEW), [COMPARE]: compare('ahead', [f('docs/estado.md')]) }, {}],
-      [{}, { GITHUB_EVENT_NAME: 'workflow_dispatch' }],
+      // F-12 (H-F11-02): el disparo manual también consulta la punta.
+      [{ [COMMITS]: mainAt(OLD) }, { GITHUB_EVENT_NAME: 'workflow_dispatch' }],
     ]) {
       const r = tipRun(answers, { GITHUB_RUN_ATTEMPT: '1', ...env });
       assert.equal(r.code, 0, r.out);
@@ -407,7 +413,8 @@ describe('[P1-b] --strict en migrate y deploy-pages', () => {
     for (const [answers, env] of [
       [{ [COMMITS]: mainAt(OLD) }, {}],
       [{ [COMMITS]: mainAt(NEW), [COMPARE]: compare('ahead', [f('README.md')]) }, {}],
-      [{}, { GITHUB_EVENT_NAME: 'workflow_dispatch' }],
+      // F-12 (H-F11-02): el disparo manual también consulta la punta.
+      [{ [COMMITS]: mainAt(OLD) }, { GITHUB_EVENT_NAME: 'workflow_dispatch' }],
     ]) {
       const r = tipRun(answers, { GITHUB_RUN_ATTEMPT: '2', ...env }, ['--strict']);
       assert.equal(r.code, 0, r.out);
