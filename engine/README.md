@@ -92,3 +92,8 @@ evaluateColor(mttr, m); // { color: 'green', reason: 'Valor 4 <= verde 4' }
 ```sh
 node --test --experimental-test-coverage --test-coverage-exclude='tests/**' 'tests/**/*.test.js'
 ```
+
+### Correo de una alerta (C-05) — `alert-email.js`
+
+- `formatAlertEmail(alert, { appUrl? })` → `{ subject, text, html }` con solo los datos de esa fila de `alerts` (tipo, mensaje, unidad, fecha). Todo texto de la BD pasa por `plainText` (una línea, sin caracteres de control ni marcas bidi, recortado) y en el HTML por `escapeHtml`. `appUrl` solo se enlaza si es https sin credenciales (`safeHttpsUrl`). Lo usa `scripts/lib/email.js` (Resend, desde Actions).
+- `ALERT_KIND_LABELS` / `alertKindLabel(kind)`: etiquetas de los tipos de alerta; el front las reexporta desde `src/lib/dashboard.js` (una sola fuente).

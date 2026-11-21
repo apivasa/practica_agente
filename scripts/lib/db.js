@@ -128,6 +128,44 @@ export function createDb(sb) {
         if (error) throw fail('audit_log insert', error);
       }
     },
+    // C-05: alertas aún sin correo, recientes y con intentos disponibles.
+    pendingEmailAlerts: ({ since, maxAttempts }) =>
+      fetchAll('alerts pendientes de correo', (a, b) =>
+        sb
+          .from('alerts')
+          .select('id, unit_id, recipient_user_id, kind, payload, sent_at, email_attempts')
+          .is('emailed_at', null)
+          .lt('email_attempts', maxAttempts)
+          .gte('sent_at', since)
+          .order('sent_at')
+          .order('id')
+          .range(a, b),
+      ),
+    // C-05: correo del destinatario con la API admin de Auth (solo backend, clave secreta).
+    async userEmail(userId) {
+      const { data, error } = await sb.auth.admin.getUserById(userId);
+      if (error) throw fail('auth.admin.getUserById', error);
+      return data?.user?.email ?? null;
+    },
+    // C-05: marca condicional (emailed_at is null). Devuelve true si esta corrida la marcó.
+    async markAlertEmailed(id, { emailedAt, attempts }) {
+      const { data, error } = await sb
+        .from('alerts')
+        .update({ emailed_at: emailedAt, email_attempts: attempts })
+        .eq('id', id)
+        .is('emailed_at', null)
+        .select('id');
+      if (error) throw fail('alerts emailed_at', error);
+      return (data ?? []).length > 0;
+    },
+    async recordAlertEmailFailure(id, { attempts }) {
+      const { error } = await sb
+        .from('alerts')
+        .update({ email_attempts: attempts })
+        .eq('id', id)
+        .is('emailed_at', null);
+      if (error) throw fail('alerts email_attempts', error);
+    },
     async paceSnapshots(entityIds, quarter) {
       const out = [];
       for (const ids of chunks(entityIds, 50)) {
