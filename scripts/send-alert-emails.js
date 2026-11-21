@@ -2,7 +2,8 @@
 // C-05: envía por correo (Resend) las alertas pendientes de la tabla `alerts`.
 //   node scripts/send-alert-emails.js
 // Variables: RESEND_API_KEY (secreto; sin él solo anota ::notice:: y termina con 0),
-// ALERT_EMAIL_FROM (por defecto onboarding@resend.dev), APP_URL (opcional, https),
+// ALERT_EMAIL_FROM (por defecto onboarding@resend.dev), APP_URL (https; por defecto
+// https://apivasa.github.io/practica_agente/),
 // ALERT_EMAIL_LOOKBACK_DAYS (1..31, por defecto 7), SUPABASE_URL y SUPABASE_SECRET_KEY.
 // Ninguna clave ni correo de destinatario se imprime.
 import { pathToFileURL } from 'node:url';

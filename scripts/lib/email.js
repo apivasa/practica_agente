@@ -3,6 +3,10 @@
 // los datos de esa alerta (engine/alert-email.js). Idempotente: una alerta con emailed_at
 // no se vuelve a enviar, y la petición a Resend lleva Idempotency-Key = id de la alerta.
 // Los errores de Resend no detienen el resto: quedan en audit_log y en el log del job.
+// C-06: antes de enviar se comprueba que el destinatario sigue con rol vigente para la
+// unidad de la alerta y que su cuenta no está bloqueada; si no, la alerta se marca como
+// omitida (email_skipped_at) y se audita `alert_email_skipped`. Las alertas que salen de
+// la ventana sin haberse enviado también se marcan y auditan (motivo `expired`).
 import { formatAlertEmail, safeHttpsUrl, plainText } from '../../engine/index.js';
 
 export const RESEND_ENDPOINT = 'https://api.resend.com/emails';
@@ -10,6 +14,19 @@ export const DEFAULT_FROM = 'onboarding@resend.dev';
 export const EMAIL_ACTOR = 'system:alert-email';
 export const MAX_ATTEMPTS = 3;
 export const DEFAULT_LOOKBACK_DAYS = 7;
+/** C-06 (H-ARQ-C05-04): mismo valor por defecto que salud.yml (DEFAULT_PAGES_URL). */
+export const DEFAULT_APP_URL = 'https://apivasa.github.io/practica_agente/';
+/** Motivos de omisión (mismos valores que el check de alerts.email_skip_reason). */
+export const SKIP_REASONS = Object.freeze({
+  expired: 'expired',
+  missing: 'recipient_missing',
+  banned: 'recipient_banned',
+  noRole: 'recipient_no_role',
+});
+/** Tope de alertas vencidas que se marcan por corrida (el resto, en la siguiente). */
+export const EXPIRED_BATCH = 500;
+/** Estados HTTP de Resend que indican un problema de configuración (clave o remitente). */
+const AUTH_STATUSES = new Set([401, 403]);
 const REQUEST_TIMEOUT_MS = 15000;
 const PAUSE_MS = 600; // Resend limita las peticiones por segundo.
 const ERROR_MAX = 300;
@@ -40,9 +57,9 @@ export function readEmailConfig(env) {
   if (!/^re_[A-Za-z0-9_-]{8,}$/.test(apiKey)) throw new Error('RESEND_API_KEY no tiene el formato de una clave de Resend (re_...)');
   const from = (env.ALERT_EMAIL_FROM ?? '').trim() || DEFAULT_FROM;
   if (!isValidFrom(from)) throw new Error('ALERT_EMAIL_FROM no es un remitente válido (correo o "Nombre <correo>")');
-  const rawUrl = (env.APP_URL ?? '').trim();
-  const appUrl = rawUrl ? safeHttpsUrl(rawUrl) : null;
-  if (rawUrl && !appUrl) throw new Error('APP_URL debe ser una URL https');
+  const rawUrl = (env.APP_URL ?? '').trim() || DEFAULT_APP_URL;
+  const appUrl = safeHttpsUrl(rawUrl);
+  if (!appUrl) throw new Error('APP_URL debe ser una URL https');
   const rawDays = (env.ALERT_EMAIL_LOOKBACK_DAYS ?? '').trim();
   const lookbackDays = rawDays ? Number(rawDays) : DEFAULT_LOOKBACK_DAYS;
   if (!Number.isInteger(lookbackDays) || lookbackDays < 1 || lookbackDays > 31) {
@@ -59,6 +76,10 @@ export function readEmailConfig(env) {
 export function sanitizeError(value, apiKey = '') {
   let s = value instanceof Error ? value.message : String(value ?? '');
   if (apiKey) s = s.split(apiKey).join('[clave]');
+  // C-06 (H-C05-02): también la clave secreta de Supabase y cualquier JWT (eyJ...).
+  s = s
+    .replace(/sb_secret_[A-Za-z0-9_-]+/g, '[clave]')
+    .replace(/eyJ[A-Za-z0-9_-]{4,}(?:\.[A-Za-z0-9_-]*){0,2}/g, '[token]');
   s = s.replace(/re_[A-Za-z0-9_-]{8,}/g, '[clave]').replace(/[^\s<>@"',;()]+@[^\s<>@"',;()]+/g, '[correo]');
   return plainText(s, ERROR_MAX) || 'error desconocido';
 }
@@ -81,12 +102,48 @@ async function responseError(res) {
 }
 
 /**
+ * C-06 (H-C05-01): motivo para no enviar el correo de una alerta, o null si el destinatario
+ * sigue siendo válido. Mismo criterio que eligió a los destinatarios (recipientsFor en
+ * scripts/lib/alerts.js): líder de la unidad de la alerta o miembro del comité.
+ * @param {{ unit_id?: string|null }} alert
+ * @param {{ email?: string|null, bannedUntil?: string|null, deletedAt?: string|null,
+ *   roles?: { role: string, unit_id: string|null }[] } | null} access
+ * @param {Date} now
+ * @returns {string|null}
+ */
+export function recipientSkipReason(alert, access, now) {
+  if (!access || typeof access !== 'object' || access.deletedAt) return SKIP_REASONS.missing;
+  if (access.bannedUntil) {
+    const until = Date.parse(access.bannedUntil);
+    // Una fecha ilegible se trata como bloqueo (ante la duda, no se envía).
+    if (!Number.isFinite(until) || until > now.getTime()) return SKIP_REASONS.banned;
+  }
+  const roles = Array.isArray(access.roles) ? access.roles : [];
+  const unitId = alert?.unit_id ?? null;
+  const valid = roles.some(
+    (r) => r?.role === 'committee' || (r?.role === 'unit_leader' && unitId !== null && r.unit_id === unitId),
+  );
+  return valid ? null : SKIP_REASONS.noRole;
+}
+
+/**
  * @typedef {Object} EmailDb
  * @property {(q: { since: string, maxAttempts: number }) => Promise<any[]>} pendingEmailAlerts
  * @property {(userId: string) => Promise<string|null>} userEmail
  * @property {(id: string, v: { emailedAt: string, attempts: number }) => Promise<boolean>} markAlertEmailed
  * @property {(id: string, v: { attempts: number }) => Promise<void>} recordAlertEmailFailure
  * @property {(rows: any[]) => Promise<void>} insertAudit
+ * @property {(userId: string) => Promise<{ email: string|null, bannedUntil: string|null,
+ *   deletedAt: string|null, roles: { role: string, unit_id: string|null }[] } | null>} [recipientAccess]
+ *   C-06: correo, bloqueo y roles del destinatario (null si el usuario ya no existe).
+ * @property {(q: { before: string, maxAttempts: number, limit: number }) => Promise<any[]>} [expiredEmailAlerts]
+ *   C-06: alertas sin correo ni omisión cuyo sent_at quedó fuera de la ventana.
+ * @property {(ids: string[], v: { skippedAt: string, reason: string }) => Promise<string[]>} [markAlertsEmailSkipped]
+ *   C-06: marca condicional (sin emailed_at ni email_skipped_at); devuelve los ids marcados.
+ *
+ * Los tres métodos de C-06 son opcionales para no romper BD simuladas anteriores; la capa
+ * real (scripts/lib/db.js) los implementa siempre, y con ellos la comprobación de rol y
+ * bloqueo es obligatoria (sin recipientAccess se usa userEmail, como en C-05).
  */
 
 /**
@@ -102,8 +159,44 @@ export async function sendAlertEmails(db, { config, fetchImpl, now = () => new D
   const since = new Date(now().getTime() - config.lookbackDays * 86400000).toISOString();
   const pending = await db.pendingEmailAlerts({ since, maxAttempts });
   const emails = new Map();
-  const summary = { pending: pending.length, sent: 0, failed: 0, skipped: 0, failures: [], errors: [] };
+  const access = new Map();
+  const summary = { pending: pending.length, sent: 0, failed: 0, skipped: 0, notEligible: 0, expired: 0, failures: [], errors: [] };
   let first = true;
+  const canSkip = typeof db.markAlertsEmailSkipped === 'function';
+  const useAccess = typeof db.recipientAccess === 'function' && canSkip;
+
+  // QA-C05-1: las alertas que salen de la ventana sin correo quedan marcadas y auditadas.
+  if (canSkip && typeof db.expiredEmailAlerts === 'function') {
+    try {
+      const old = (await db.expiredEmailAlerts({ before: since, maxAttempts, limit: EXPIRED_BATCH })) ?? [];
+      const ids = old.map((a) => a?.id).filter((id) => typeof id === 'string');
+      if (ids.length > 0) {
+        const marked = new Set(await db.markAlertsEmailSkipped(ids, { skippedAt: now().toISOString(), reason: SKIP_REASONS.expired }));
+        const rows = old
+          .filter((a) => marked.has(a.id))
+          .map((a) => ({
+            actor: EMAIL_ACTOR,
+            action: 'alert_email_skipped',
+            entity: 'alerts',
+            entity_id: a.id,
+            details: {
+              kind: a.kind,
+              unit_id: a.unit_id,
+              recipient_user_id: a.recipient_user_id,
+              reason: SKIP_REASONS.expired,
+              sent_at: a.sent_at,
+              attempts: Number(a.email_attempts) || 0,
+              lookback_days: config.lookbackDays,
+            },
+          }));
+        if (rows.length > 0) await db.insertAudit(rows);
+        summary.expired = rows.length;
+        if (rows.length > 0) log(`${rows.length} alerta(s) fuera de la ventana de ${config.lookbackDays} días: omitidas y auditadas`);
+      }
+    } catch (err) {
+      summary.errors.push(`alertas fuera de la ventana: ${sanitizeError(err, config.apiKey)}`);
+    }
+  }
 
   for (const alert of pending) {
     const attempts = (Number(alert.email_attempts) || 0) + 1;
@@ -111,11 +204,30 @@ export async function sendAlertEmails(db, { config, fetchImpl, now = () => new D
     const fail = async (reason, extra = {}) => {
       const error = sanitizeError(reason, config.apiKey);
       summary.failed += 1;
-      summary.failures.push({ alert_id: alert.id, error });
+      summary.failures.push({ alert_id: alert.id, error, status: Number.isInteger(extra.status) ? extra.status : null });
       log(`alerta ${alert.id}: no se envió (${error})`);
       await db.recordAlertEmailFailure(alert.id, { attempts });
       await db.insertAudit([
         { actor: EMAIL_ACTOR, action: 'alert_email_failed', entity: 'alerts', entity_id: alert.id, details: { ...base, ...extra, error } },
+      ]);
+    };
+    // C-06: destinatario sin rol vigente, bloqueado o inexistente: no se envía ni se reintenta.
+    const skip = async (reason) => {
+      const marked = (await db.markAlertsEmailSkipped([alert.id], { skippedAt: now().toISOString(), reason })) ?? [];
+      if (!marked.includes(alert.id)) {
+        summary.skipped += 1; // otra corrida la resolvió antes
+        return;
+      }
+      summary.notEligible += 1;
+      log(`alerta ${alert.id}: correo omitido (${reason})`);
+      await db.insertAudit([
+        {
+          actor: EMAIL_ACTOR,
+          action: 'alert_email_skipped',
+          entity: 'alerts',
+          entity_id: alert.id,
+          details: { kind: alert.kind, unit_id: alert.unit_id, recipient_user_id: alert.recipient_user_id, reason },
+        },
       ]);
     };
     try {
@@ -123,7 +235,27 @@ export async function sendAlertEmails(db, { config, fetchImpl, now = () => new D
         await fail('destinatario inválido');
         continue;
       }
-      let to = emails.get(alert.recipient_user_id);
+      let to;
+      if (useAccess) {
+        let info = access.get(alert.recipient_user_id);
+        if (info === undefined) {
+          try {
+            info = (await db.recipientAccess(alert.recipient_user_id)) ?? null;
+          } catch (err) {
+            await fail(`no se pudo leer el destinatario: ${sanitizeError(err, config.apiKey)}`);
+            continue;
+          }
+          access.set(alert.recipient_user_id, info);
+        }
+        const reason = recipientSkipReason(alert, info, now());
+        if (reason) {
+          await skip(reason);
+          continue;
+        }
+        to = info.email ?? null;
+      } else {
+        to = emails.get(alert.recipient_user_id);
+      }
       if (to === undefined) {
         try {
           to = (await db.userEmail(alert.recipient_user_id)) ?? null;
@@ -187,7 +319,9 @@ export async function sendAlertEmails(db, { config, fetchImpl, now = () => new D
 
 /**
  * Punto de entrada del paso de Actions (scripts/send-alert-emails.js).
- * Sin RESEND_API_KEY: anota ::notice:: y termina con 0. Fallos de Resend: ::warning:: y 0.
+ * Sin RESEND_API_KEY: anota ::notice:: y termina con 0. Fallos de Resend: ::warning:: y 0,
+ * salvo que ningún correo salga y todos los fallos sean 401/403 (clave revocada o remitente
+ * no verificado, H-ARQ-C05-02): entonces 1, para que salud.yml lo vea.
  * Configuración inválida: 2. Errores de la BD: 1.
  * @param {{ env: Record<string, string|undefined>, fetchImpl: typeof fetch,
  *   makeDb: (supabase: { url: string, secretKey: string }) => Promise<EmailDb>,
@@ -212,6 +346,34 @@ export async function runEmailStep({ env, fetchImpl, makeDb, readSupabaseConfig,
   const summary = await sendAlertEmails(db, { config, fetchImpl, now, sleep, log: (m) => log(`  ${m}`) });
   for (const f of summary.failures) log(`::warning::Correo de la alerta ${f.alert_id} no enviado: ${f.error}`);
   for (const e of summary.errors) log(`::error::${e}`);
-  log(JSON.stringify({ pending: summary.pending, sent: summary.sent, failed: summary.failed, skipped: summary.skipped, errors: summary.errors.length }));
-  return { code: summary.errors.length > 0 ? 1 : 0, summary };
+  const authFailure = allAuthFailures(summary);
+  if (authFailure) {
+    log('::error::Resend rechazó todos los envíos con 401/403: revisar RESEND_API_KEY y que ALERT_EMAIL_FROM use un dominio verificado (docs/operacion.md).');
+  }
+  log(
+    JSON.stringify({
+      pending: summary.pending,
+      sent: summary.sent,
+      failed: summary.failed,
+      skipped: summary.skipped,
+      not_eligible: summary.notEligible,
+      expired: summary.expired,
+      errors: summary.errors.length,
+    }),
+  );
+  return { code: summary.errors.length > 0 || authFailure ? 1 : 0, summary };
+}
+
+/**
+ * true si hubo fallos, ningún envío y todos los fallos fueron 401 o 403 de Resend
+ * (un problema de configuración, no uno puntual).
+ * @param {{ sent: number, failed: number, failures: { status?: number|null }[] }} summary
+ */
+export function allAuthFailures(summary) {
+  return (
+    summary.sent === 0 &&
+    summary.failed > 0 &&
+    summary.failures.length === summary.failed &&
+    summary.failures.every((f) => AUTH_STATUSES.has(f.status))
+  );
 }

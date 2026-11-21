@@ -63,7 +63,9 @@ Tipos de alerta:
 
 **Correo de alertas** (C-05). Cada alerta de tu bandeja te llegará también por correo, a la dirección con la que entras a la app. Un correo por alerta, solo con los datos de esa alerta: tipo, mensaje, unidad, fecha y hora (UTC) y el enlace **Ver en la app**. Si la alerta es de severidad alta, el asunto empieza con "[Urgente]". El correo es una copia: la alerta sigue en tu bandeja y se marca como leída solo en la app.
 
-Hoy el correo **no está activo**: espera la activación de la evaluación en producción (P-05) y la clave de Resend (P-09). Las alertas se generan solo en local y se ven solo en la app.
+El correo **no sale** si, cuando toca enviarlo, ya no eres miembro del comité, tu cuenta está bloqueada o ya no existe. Tampoco sale si la alerta pasó 7 días sin enviarse. En esos casos la alerta sigue en la bandeja, el correo no se reintenta aunque recuperes el rol y la omisión queda en la auditoría.
+
+Hoy el correo **no está activo**: espera la clave de Resend (P-09). Mientras tanto, las alertas solo se ven en la app.
 
 ### Excepciones (`#/comite/excepciones`)
 

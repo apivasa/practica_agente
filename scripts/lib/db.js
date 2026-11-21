@@ -135,6 +135,7 @@ export function createDb(sb) {
           .from('alerts')
           .select('id, unit_id, recipient_user_id, kind, payload, sent_at, email_attempts')
           .is('emailed_at', null)
+          .is('email_skipped_at', null)
           .lt('email_attempts', maxAttempts)
           .gte('sent_at', since)
           .order('sent_at')
@@ -147,6 +148,55 @@ export function createDb(sb) {
       if (error) throw fail('auth.admin.getUserById', error);
       return data?.user?.email ?? null;
     },
+    // C-06: correo, bloqueo y roles vigentes del destinatario. null si el usuario no existe.
+    async recipientAccess(userId) {
+      const { data, error } = await sb.auth.admin.getUserById(userId);
+      if (error) {
+        if (error.status === 404) return null;
+        throw fail('auth.admin.getUserById', error);
+      }
+      const user = data?.user;
+      if (!user) return null;
+      const { data: roles, error: e2 } = await sb.from('user_roles').select('role, unit_id').eq('user_id', userId);
+      if (e2) throw fail('user_roles del destinatario', e2);
+      return {
+        email: user.email ?? null,
+        bannedUntil: user.banned_until ?? null,
+        deletedAt: user.deleted_at ?? null,
+        roles: roles ?? [],
+      };
+    },
+    // C-06: alertas sin correo ni omisión cuyo sent_at quedó fuera de la ventana (un lote).
+    async expiredEmailAlerts({ before, maxAttempts, limit }) {
+      const { data, error } = await sb
+        .from('alerts')
+        .select('id, unit_id, recipient_user_id, kind, sent_at, email_attempts')
+        .is('emailed_at', null)
+        .is('email_skipped_at', null)
+        .lt('email_attempts', maxAttempts)
+        .lt('sent_at', before)
+        .order('sent_at')
+        .order('id')
+        .limit(limit);
+      if (error) throw fail('alerts fuera de la ventana', error);
+      return data ?? [];
+    },
+    // C-06: marca condicional de omisión; devuelve los ids que esta corrida marcó.
+    async markAlertsEmailSkipped(ids, { skippedAt, reason }) {
+      const out = [];
+      for (const part of chunks(ids, 100)) {
+        const { data, error } = await sb
+          .from('alerts')
+          .update({ email_skipped_at: skippedAt, email_skip_reason: reason })
+          .in('id', part)
+          .is('emailed_at', null)
+          .is('email_skipped_at', null)
+          .select('id');
+        if (error) throw fail('alerts email_skipped_at', error);
+        out.push(...(data ?? []).map((r) => r.id));
+      }
+      return out;
+    },
     // C-05: marca condicional (emailed_at is null). Devuelve true si esta corrida la marcó.
     async markAlertEmailed(id, { emailedAt, attempts }) {
       const { data, error } = await sb
@@ -154,6 +204,7 @@ export function createDb(sb) {
         .update({ emailed_at: emailedAt, email_attempts: attempts })
         .eq('id', id)
         .is('emailed_at', null)
+        .is('email_skipped_at', null)
         .select('id');
       if (error) throw fail('alerts emailed_at', error);
       return (data ?? []).length > 0;
