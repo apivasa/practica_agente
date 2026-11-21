@@ -63,3 +63,79 @@ Verificado sin hallazgos:
 - **Acciones:** todas fijadas por SHA. Las acciones de terceros no reciben la contraseña.
 - **Expresiones `${{ }}`:** ninguna se interpola en `run:`.
 - **`paths-ignore`:** no deja fuera código, migraciones ni workflows.
+
+---
+
+## Re-revisión V-05b + V-05c (SHA 86b447c)
+Veredicto: VERDE
+Requiere cambiar alcance: no
+Superficie nueva:
+- En push, `verify` espera al run de `ci.yml` del mismo commit (`scripts/ci/wait-ci.sh`). Usa el `github.token` con `actions: read`, solo en `verify`.
+- `db-url.sh` apaga xtrace al entrar en `supabase_db_url` y no lo vuelve a activar.
+
+Pruebas de seguridad añadidas: `tests/security/deploy-v05c.test.js`, con 65 casos de categoría 5. Todos pasan con `node --test`, sin red y sin dependencias. Las pruebas se ejecutan de verdad: `wait-ci.sh` y `db-url.sh` corren con bash y un `gh` falso en PATH.
+- **Inyección en la entrada (20 casos):**
+  - 8 `HEAD_SHA` hostiles: vacío, 39 o 41 hex, mayúsculas, `&branch=evil`, `$(…)`, salto de línea y un ref.
+  - 8 `GITHUB_REPOSITORY` hostiles: query, fragmento, ruta extra, espacio, salto de línea y `$(id)`.
+  - 4 topes o intervalos hostiles.
+  - En todos falla sin llamar a `gh`. Además, la URL consultada es exactamente `head_sha=<sha>&event=push&branch=main`.
+- **Workflow impostor (10 casos):**
+  - Un run en success de `ci.yaml`, `ci.yml.bak`, `ci.yml-evil`, `xci.yml`, `CI.yml`, `evil/.github/workflows/ci.yml`, `seguridad.yml` o `deploy.yml` no abre la compuerta.
+  - Un impostor con id mayor no tapa un CI real en failure.
+  - Un success viejo no tapa un rerun en failure.
+- **Solo `success` abre (24 casos):**
+  - Bloquean el despliegue `failure`, `cancelled`, `timed_out`, `skipped`, `neutral`, `action_required`, `stale`, `startup_failure`, `null`, `""` y `SUCCESS`.
+  - También lo bloquean los status distintos de `completed` aunque `conclusion` diga success.
+  - Si la API falla, devuelve HTML, `{}`, una lista vacía o nada, el despliegue falla cerrado.
+- **Token (2 casos):**
+  - Un `gh` que vuelca `GH_TOKEN` por stderr y en el cuerpo no lo hace llegar al log.
+  - El script no tiene xtrace, `eval` ni escrituras a `GITHUB_ENV`/`GITHUB_OUTPUT`.
+- **Estructura de `deploy.yml` (5 casos):**
+  - El paso de la compuerta no tiene `if:` ni `continue-on-error`, y no admite `${{ }}` en `run:`. `HEAD_SHA` sale de `github.sha` y no hay overrides de `CI_WAIT_*`.
+  - Nadie redefine `GITHUB_EVENT_NAME`, `GITHUB_REPOSITORY`, `GITHUB_SHA` ni `GITHUB_REF`.
+  - `actions: read` aparece solo en `verify` y no hay ningún permiso de escritura salvo los de Pages.
+  - La cadena de `needs` sigue intacta, sin `always()`.
+  - Solo disparan `push` y `workflow_dispatch`, y `ci.yml` corre en todo push a `main` sin filtro de rutas. Si `ci.yml` filtrara rutas, el despliegue esperaría un CI que nunca llega; hoy fallaría cerrado.
+- **Traza en `db-url.sh` (4 casos):**
+  - Con `set -x`, el comando posterior que usa `$SUPABASE_DB_URL` no se traza.
+  - Con `SHELLOPTS=xtrace` heredado y con `BASH_XTRACEFD` desviado a stdout, la contraseña no sale por ningún canal.
+  - `migrate-plan` y `migrate` no reactivan la traza.
+
+Valoración de no restaurar xtrace: es correcto y más seguro que restaurarlo. Si la traza se restaurara, la línea siguiente (`supabase db push --db-url "$SUPABASE_DB_URL"`) se trazaría con la URL expandida. Solo la taparía `::add-mask::`, y la máscara depende de que el runner ya haya procesado la línea. El único efecto es que el resto del paso pierde la traza, y ningún paso la usa. Queda cubierto por la prueba "con xtrace, el comando que usa $SUPABASE_DB_URL después tampoco se traza".
+
+Compuerta de CI: el despliegue no corre cuando el CI está en rojo, cancelado, ausente o sin terminar.
+- La consulta fija `head_sha`, `event=push` y `branch=main`, y filtra por la ruta exacta `.github/workflows/ci.yml`. Decide el último run (id mayor); un rerun conserva el id y refleja el último intento.
+- Cualquier conclusión distinta de `success`, un timeout de 20 min o errores persistentes de la API hacen fallar `verify`. Con eso no corre ni build, ni `db push`, ni Pages.
+- Si llegan dos merges seguidos, `ci.yml` (`cancel-in-progress`) cancela el CI del primero: su despliegue falla y despliega el segundo, que lo contiene.
+- Con disparo manual no se espera al CI. Es una decisión explícita de quien escribe `desplegar`, el mismo actor de antes.
+
+`vars.SUPABASE_DB_POOLER_HOST`: sigue validada por regex en `verify` y otra vez en `db-url.sh`. Un valor hostil (otro host, puerto, `user@`, salto de línea, `$(…)`) no construye la URL, así que la contraseña no sale hacia otro host (61 casos de `deploy-v05b.test.js`, todavía en verde).
+
+Resultados del pipeline:
+- **Local:** `deploy-v05b`, `deploy-v05c`, `wait-ci-v05c`, `db-url-v05b`, `workflows/deploy` y `qa-v05b`: 326 pruebas, 0 fallan.
+- **Sobre 86b447c:**
+  - Seguridad (gitleaks, semgrep, npm audit, ZAP, pentest RLS/API): success, https://github.com/apivasa/practica_agente/actions/runs/44868418993
+  - CI: success, https://github.com/apivasa/practica_agente/actions/runs/44868418987
+- **Sobre b285778** (commit posterior de otro revisor en la rama): Seguridad y CI en curso al escribir esto (runs 44870030077 y 44870030035).
+- No se lanzó nada contra producción.
+
+Hallazgos:
+- **H-V05c-01 · Baja · 5 · `deploy.yml` › `verify`.**
+  - Problema: un run viejo de despliegue relanzado republica el `dist/` de un commit anterior, porque `verify` no comprueba que `github.sha` siga siendo la punta de `main`.
+  - Cómo se reproduce: el commit A se despliega, luego B se despliega, y después se pulsa *Re-run* en el run de A. El mensaje de timeout de `wait-ci.sh` invita a relanzar.
+  - Corrección sugerida: en push, comparar `HEAD_SHA` con `gh api repos/$GITHUB_REPOSITORY/commits/main --jq .sha`.
+  - No es Alta: requiere escritura en el repo y una acción deliberada. Si B trajo migraciones, `db push` falla antes de Pages.
+- **H-V05c-02 · Info · 5 · `scripts/ci/wait-ci.sh`.**
+  - El script exime de la espera a cualquier evento distinto de `push`, en lugar de eximir solo a `workflow_dispatch`.
+  - El filtro jq no vuelve a comprobar `head_sha`, `head_branch` ni `event` de cada run.
+  - Hoy no es explotable: no hay otros disparadores y la API aplica los filtros. Se acepta como defensa en profundidad.
+- **H-V05b-01 (Media) → mitigado en parte.** El gate de CI ya existe. Siguen abiertos `main` sin ruleset (usuaria) y que `deploy.yml` no espera a `seguridad.yml`.
+- **H-V05b-02 → Corregido.**
+
+Verificado sin hallazgos:
+- **Compuerta CI:** no se salta con CI rojo, cancelado, ausente o impostor.
+- **Inyección:** por SHA, repositorio y tope.
+- **Fugas:** ni `GH_TOKEN` ni la contraseña de la BD se trazan, tampoco con xtrace.
+- **Permisos:** mínimos. `actions: read` solo en `verify`, y ninguna escritura salvo Pages.
+- **Expresiones `${{ }}`:** ninguna en `run:`.
+- **Acciones:** fijadas por SHA (sin cambios).
