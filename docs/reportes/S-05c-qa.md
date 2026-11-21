@@ -35,3 +35,25 @@ No aplica: el ítem no toca `engine/`.
 - **H-QA-S05c-03 · Info · el login de la suite `roles` exige 400 exacto.** Si hay límite de tasa (429), el caso falla. El propio mensaje lo explica, así que hay que repetirlo más tarde y no tratarlo como un hallazgo de enumeración.
 
 No hay hallazgos bajos, altos ni críticos.
+
+## Intento 2 (commit 3d993e6)
+Veredicto: VERDE
+
+Revisión del cambio de seguridad tras el ROJO de arquitectura (A-1): ahora cada sonda lleva una violación garantizada, y además se exige `message` ~ `/permission denied/`, como pedía H-QA-S05c-02.
+
+| Punto | Estado | Evidencia |
+|---|---|---|
+| `units.name = '   '` viola el CHECK | Cumplido | `check (length(trim(name)) > 0)` en `data_model.sql:22`. Ninguna migración lo borra y `units` no tiene trigger BEFORE INSERT (`audit_units` es AFTER, `hardening.sql:80-81`). |
+| `exceptions`: FK y `reason` en blanco | Cumplido | `reason` tiene `check (length(trim(reason)) > 0)` en `:171`. C-02 solo añade `reason_max_len`. La FK `exceptions_unit_id_fkey` se borra en `hardening.sql:118-121` y se recrea sobre `units(id)`. El trigger BEFORE INSERT `exceptions_enforce_rules` (`business_date.sql:5-76`) devuelve `new` sin cambios fuera de `authenticated`, y nunca reescribe `reason` ni `unit_id`. |
+| `audit_log.actor = null` viola NOT NULL | Cumplido | `actor text not null` sin default (`:200`). No hay ningún trigger BEFORE INSERT en `audit_log`: solo `append_only` y `no_truncate`, que son UPDATE, DELETE y TRUNCATE. Un `null` explícito anula cualquier default. |
+| `user_roles`: FK y `user_roles_scope` | Cumplido | La FK `auth.users(id)` está en `:67`. `unit_leader` sin `unit_id` viola el CHECK (`:72-78`). El UUID no está en `seed.sql`. |
+| Orden privilegio, luego restricciones | Cumplido | PostgreSQL comprueba los permisos de la relación al iniciar el ejecutor, antes de procesar filas. Después, por cada fila, vienen BEFORE triggers, WITH CHECK de RLS, `ExecConstraints` y FK, en ese orden. Sin GRANT, la respuesta es `42501 permission denied for table …`. Con GRANT, sin política anon, saldría primero el 42501 de RLS («new row violates…»), y la nueva regex también lo rechaza. En ningún caso queda fila. |
+| Mis pruebas siguen coherentes | Cumplido | No exigían el payload viejo. Los cuerpos reales con «permission denied for table/schema» siguen pasando. |
+
+Pruebas añadidas en `tests/security/qa-s05c-anon-probes.test.js`, que pasa de 4 a 6 casos:
+- se rechazan los códigos que daría cada violación garantizada (23514, 23503 y 23502) con 400, 403 y 409;
+- se rechaza un 42501 de RLS, con el texto real de PostgreSQL, en las 4 tablas, con 401 y con 403, y también un 42501 sin mensaje.
+
+Resultado local: `node --test 'tests/security/*.test.js'` dio 630 pruebas: 628 pasan, 0 fallan y 2 se omiten. Las 2 omitidas son preexistentes: `front-s04` sin `dist/`.
+
+H-QA-S05c-02 queda resuelto. H-QA-S05c-01 y H-QA-S05c-03 no cambian (Info). No hay hallazgos nuevos.

@@ -48,3 +48,32 @@ test('QA: las sondas no fijan columnas generadas ni de autoría (id, created_at,
     }
   }
 });
+
+// --- Intento 2 (A-1 de S-05c-arquitectura, H-QA-S05c-02) --------------------
+// Traza a: «aunque anon tuviera INSERT, cada sonda respondería 23xxx y la prueba
+// falla» y «solo vale 42501 por falta de GRANT, no por RLS».
+test('QA: el código que daría cada violación garantizada se rechaza (anon con privilegio)', () => {
+  // units/exceptions: CHECK en blanco → 23514; exceptions/user_roles: FK → 23503;
+  // audit_log: NOT NULL → 23502. PostgREST: 400 (23502/23514) o 409 (23503).
+  const expected = { units: ['23514'], exceptions: ['23503', '23514'], audit_log: ['23502'], user_roles: ['23503', '23514'] };
+  for (const [t, codes] of Object.entries(expected)) {
+    assert.ok(t in ANON_WRITE_PROBES, t);
+    for (const code of codes) {
+      for (const status of [400, 403, 409]) {
+        assert.notEqual(privilegeDenialProblem(status, { code, details: null, hint: null, message: 'violates' }), null, `${t} ${status} ${code}`);
+      }
+    }
+  }
+});
+
+test('QA: 42501 de RLS (GRANT presente sin política) no cuenta como falta de privilegio', () => {
+  // Texto real de PostgreSQL cuando hay INSERT pero falla el WITH CHECK de RLS.
+  for (const t of Object.keys(ANON_WRITE_PROBES)) {
+    const rls = { code: '42501', details: null, hint: null, message: `new row violates row-level security policy for table "${t}"` };
+    assert.notEqual(privilegeDenialProblem(401, rls), null, `401 ${t}`);
+    assert.notEqual(privilegeDenialProblem(403, rls), null, `403 ${t}`);
+  }
+  // 42501 sin mensaje: no se puede distinguir; se rechaza.
+  assert.notEqual(privilegeDenialProblem(401, { code: '42501', details: null, hint: null }), null);
+  assert.notEqual(privilegeDenialProblem(403, { code: '42501', message: null }), null);
+});
