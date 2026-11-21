@@ -313,7 +313,7 @@ test('5 · deploy.yml: la contraseña de la BD solo llega a pasos run (nunca a u
   const steps = CODE.split(/^\s+- (?=name:|uses:|id:)/m);
   for (const s of steps) {
     if (!/secrets\.SUPABASE_DB_PASSWORD/.test(s)) continue;
-    assert.doesNotMatch(s, /^\s*uses:|\n\s+uses:/, `una acción recibe SUPABASE_DB_PASSWORD:\n${s}`);
+    assert.doesNotMatch(s, /^\s*uses:/m, `una acción recibe SUPABASE_DB_PASSWORD:\n${s}`);
   }
   for (const [name, body] of Object.entries(JOBS)) {
     assert.doesNotMatch(body, /^ {4}env:/m, `job ${name} con env a nivel de job`);
