@@ -40,6 +40,27 @@ export const WORKFLOW_RULES = Object.freeze([
  */
 export const DEPLOY_RULE = Object.freeze({ file: 'deploy.yml', check: 'deploy-main', events: Object.freeze(['push', 'workflow_dispatch']), maxPendingMin: 90 });
 
+/** Longitud máxima (en caracteres) de un valor escrito en el log o en el resumen del job. */
+export const LOG_VALUE_MAX = 300;
+
+// C0 (0x00-0x1f, incluye \r y \n), DEL y C1 (0x7f-0x9f, incluye NEL), separadores U+2028/U+2029.
+const isLogControl = (cp) => cp <= 0x1f || (cp >= 0x7f && cp <= 0x9f) || cp === 0x2028 || cp === 0x2029;
+
+/**
+ * F-21 (H-F20-01): deja un valor en una sola línea antes de escribirlo en stdout/stderr o en
+ * $GITHUB_STEP_SUMMARY. Cambia cada carácter de control o separador de línea por un espacio y
+ * recorta a `max` caracteres (code points) terminando en «…». Así ningún valor de la API puede
+ * abrir una línea nueva que empiece con `::` (comandos de workflow de Actions).
+ * @param {unknown} value
+ * @param {number} [max]
+ * @returns {string}
+ */
+export function sanitizeLogValue(value, max = LOG_VALUE_MAX) {
+  const chars = Array.from(String(value ?? ''), (c) => (isLogControl(c.codePointAt(0)) ? ' ' : c));
+  const limit = Number.isSafeInteger(max) && max > 0 ? max : LOG_VALUE_MAX;
+  return chars.length > limit ? `${chars.slice(0, limit - 1).join('')}…` : chars.join('');
+}
+
 /** @typedef {{ check: string, status: 'ok' | 'fail' | 'skip' | 'warn', detail: string }} Result */
 
 /** @returns {Result} */
@@ -227,10 +248,12 @@ export function assessWorkflow(rule, { workflow, runs, jobs = [], now, productio
  */
 function requiredStepProblem(step, jobs, candidate) {
   const list = Array.isArray(jobs) ? jobs : [];
-  if (list.length === 0) return `sin jobs del último run; no se puede comprobar el paso "${step}"`;
+  // F-21 (H-ARQ-F20-03 / QA-F20-02): el id se valida antes que la lista; checkWorkflows no pide
+  // jobs sin id entero, así que con id inválido el motivo real es el id, no "sin jobs".
   if (!Number.isSafeInteger(candidate?.id)) {
     return `el último run no tiene id verificable; no se puede comprobar el paso "${step}"`;
   }
+  if (list.length === 0) return `sin jobs del último run; no se puede comprobar el paso "${step}"`;
   if (list.some((j) => !Number.isSafeInteger(j?.run_id) || j.run_id !== candidate.id)) {
     return `los jobs recibidos no traen el run_id del último run; no se puede comprobar el paso "${step}"`;
   }
