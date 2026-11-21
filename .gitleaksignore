@@ -7,3 +7,5 @@
 50d96c24674abe12078bc48d5bdd18e0a7b17297:tests/scripts/email-c06.test.js:jwt:310
 # C-06 (QA): JWT ficticio de prueba (HS256, payload {"role":"service_role"}, firma "signatura-ficticia" en base64) en el commit 632991f de item/C-06; revisado por seguridad: no es una credencial. Ver docs/reportes/C-06-seguridad.md.
 632991f37c7f2c403a7518b8bd64d5480456f42a:tests/scripts/qa-c06.test.js:jwt:309
+# F-11: clave ficticia de prueba (re_TESTKEY_..., no es una credencial de Resend) en el commit 79b7e59 de item/F-11; reemplazada por una armada en ejecución en el commit siguiente.
+79b7e59c5ccb83a97a7498602127114ca8efd608:tests/scripts/f11-fixes.test.js:generic-api-key:178

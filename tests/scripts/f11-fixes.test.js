@@ -175,7 +175,9 @@ test('wait-ci.sh: el filtro jq conserva los valores por defecto // $sha y // "pu
 
 // ------------------------------------------------------------ H-C06-01
 
-const env = { SUPABASE_URL: 'https://x.supabase.co', SUPABASE_SECRET_KEY: 'sb_secret_x', RESEND_API_KEY: 're_TESTKEY_f11_123456' };
+// Clave ficticia armada en ejecución (un literal con forma de clave dispara gitleaks).
+const FAKE_RESEND_KEY = ['re', 'TESTKEY', 'f11', 'ficticia'].join('_');
+const env = { SUPABASE_URL: 'https://x.supabase.co', SUPABASE_SECRET_KEY: 'sb_secret_x', RESEND_API_KEY: FAKE_RESEND_KEY };
 const readSupabaseConfig = (e) => ({ url: e.SUPABASE_URL, secretKey: e.SUPABASE_SECRET_KEY });
 const alert = { id: 'a1', unit_id: 'u1', recipient_user_id: '22222222-0000-4000-8000-000000000001', kind: 'color_change', payload: {}, sent_at: '2027-02-01T11:00:00Z', emailed_at: null, email_attempts: 0 };
 
