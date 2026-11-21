@@ -61,14 +61,36 @@ Reglas y errores frecuentes: ver [docs/indicadores.md, sección 3](indicadores.m
 
 La fecha no puede ser futura.
 
-**Importar CSV.**
-1. En **Archivo CSV** elige el archivo. La pantalla te recuerda la cabecera que espera ese indicador.
+**Importar CSV o Excel.**
+1. En **Archivo CSV o Excel (.xlsx)** elige el archivo. La pantalla te recuerda la cabecera que espera ese indicador.
 2. La app lo valida sin guardar nada:
    - Con errores: ves "El archivo tiene N errores; no se guardó nada." y la lista "Fila N: ...". Corrige el archivo y vuelve a elegirlo.
    - Sin errores: ves "N filas válidas, listas para guardar." y una vista previa de hasta 50 filas.
 3. Pulsa **Guardar N mediciones**. Se guardan todas o ninguna.
 
 Formato de columnas, ejemplos y errores frecuentes: [docs/indicadores.md, sección 4](indicadores.md#4-carga-de-mediciones).
+
+**Usar la plantilla Excel (V-07).**
+1. Elige el **Indicador**.
+2. Pulsa **Descargar plantilla Excel (.xlsx)**. Baja `plantilla-mediciones-<tipo>.xlsx` con la cabecera de ese tipo en la fila 1 (por ejemplo `fecha`, `unidad`, `valor`). Se genera en tu navegador.
+3. Ábrela en Excel o LibreOffice y llena una medición por fila, desde la fila 2.
+4. Guárdala como **Libro de Excel (.xlsx)**.
+5. Impórtala como arriba, en **Archivo CSV o Excel (.xlsx)**.
+
+Si importas la plantilla sin llenar ves "El archivo no tiene filas de datos".
+
+**Reglas del Excel.**
+- Se lee **solo la primera hoja**. Las demás se ignoran.
+- Mismo formato que el CSV: mismas columnas en la fila 1, mismos valores, mismos mensajes de error y mismo "todo o nada".
+- **Fecha:** una fecha de Excel o un texto `AAAA-MM-DD`. La hora se descarta. No escribas la fecha como número suelto (`20261120`): se lee como fecha de Excel y se rechaza. Usa texto `2026-11-20` o formato de fecha.
+- **Sin fórmulas.** Una celda con fórmula se rechaza con "Fila N: Columna X: la celda tiene una fórmula; no se aceptan fórmulas, copia y pega solo los valores". Copia la hoja y usa **Pegar valores**. Una celda con error de Excel (`#DIV/0!`, etc.) también se rechaza.
+- Un texto que empieza con `=`, `+`, `-` o `@` se rechaza, igual que en el CSV. Un número negativo en `valor` cae en el mismo mensaje.
+- Máximo **1 MB** y **5000 filas** de datos, como el CSV.
+- **No se aceptan** los `.xls` antiguos ni los libros con contraseña. Ves "Es un Excel antiguo (.xls) o un archivo protegido; guárdalo como libro de Excel .xlsx sin contraseña". En Excel usa *Guardar como → Libro de Excel (.xlsx)*, sin contraseña.
+- **Navegador:** Chrome o Edge 103, Firefox 113 o Safari 16.4, o posteriores. En uno más antiguo ves "Este navegador no puede leer archivos Excel; usa CSV o actualiza el navegador". El CSV sigue funcionando.
+- Si ves "El archivo Excel es demasiado grande al descomprimirlo" o "tiene demasiadas partes internas", quita hojas, imágenes o tablas dinámicas, o guárdalo como CSV UTF-8.
+
+Más casos para operación: [docs/operacion.md, «Importación de mediciones desde Excel»](operacion.md#importación-de-mediciones-desde-excel-v-07-adr-0018).
 
 **Vulnerabilidades.** Además de las resueltas, carga las P0/P1 nuevas como **Detectada**. Registra en Compromisos el paquete trimestral por `P0P1` y `P2P3`: sin él no se calcula el ritmo. Ver [sección 6](indicadores.md#6-caso-vulnerabilidades).
 

@@ -74,3 +74,25 @@ export {
   EMAIL_SUBJECT_MAX,
   EMAIL_MESSAGE_MAX,
 } from './alert-email.js';
+export { validateMeasurementRecords } from './measurements-input.js';
+export {
+  parseMeasurementsXlsx,
+  readFirstSheet,
+  parseSheet,
+  parseSharedStrings,
+  parseWorkbook,
+  parseRelationships,
+  resolvePartPath,
+  excelSerialToIsoDate,
+  columnIndex,
+  columnLetter,
+  decodeOoxmlEscapes,
+  buildXlsxTemplate,
+  XlsxError,
+  XLSX_MAX_BYTES,
+  XLSX_MAX_PART_BYTES,
+  XLSX_MAX_TOTAL_BYTES,
+  XLSX_MAX_COLUMNS,
+} from './xlsx.js';
+export { parseXml, decodeEntities, XmlError, XML_MAX_ELEMENTS, XML_MAX_DEPTH } from './xml.js';
+export { crc32, listZipEntries, readZipEntry, buildStoredZip, looksLikeZip, ZipError, ZIP_MAX_ENTRIES } from './zip.js';

@@ -329,6 +329,15 @@ Primero abrir el run enlazado en el issue y leer el resumen (tabla Check/Estado/
 ### Auditoría de acciones automáticas (CLAUDE.md §4)
 Verificado en V-04: las acciones con efecto en la BD quedan en `audit_log` con actor `system:evaluate` (`scripts/lib/run.js`): `evaluation_upsert`, `escalation_applied` (candado), `alert_sent`, `exception_expired`, `evaluation_reprocess` y `pace_snapshot`; las escrituras de usuarios las registran los triggers de `20261119120200_audit_triggers.sql`, y `audit_log` es append-only. La única acción automática de `salud.yml` con efecto es abrir o comentar un issue: queda registrada en el propio issue (autor `github-actions[bot]`, fecha y enlace al run) y no toca la BD, por eso no se escribe en `audit_log` (haría falta la clave secreta en un workflow que no la necesita).
 
+## Importación de mediciones desde Excel (V-07, ADR 0018)
+La lectura del .xlsx ocurre entera en el navegador del custodio. No hay workflow ni servidor que vigilar, y una falla no genera alerta de salud. Ante un reporte de un custodio:
+- **«Este navegador no puede leer archivos Excel»**: el navegador no tiene `DecompressionStream` (se necesita Chrome/Edge 103, Firefox 113 o Safari 16.4 o posterior). Hay que actualizar el navegador o guardar la hoja como CSV UTF-8 e importarla.
+- **«Es un Excel antiguo (.xls) o un archivo protegido»**: abrirlo en Excel y usar *Guardar como → Libro de Excel (.xlsx)*, sin contraseña.
+- **«La celda tiene una fórmula»**: copiar la hoja y usar *Pegar valores*. Las fórmulas se rechazan a propósito.
+- **Fecha incorrecta o «fecha futura»**: en la columna `fecha` un número se lee como fecha de Excel. Si se escribió `20261120` como número, hay que cambiarlo a texto `2026-11-20` o a formato de fecha.
+- **«El archivo Excel es demasiado grande al descomprimirlo» o «tiene demasiadas partes internas»**: el archivo supera los topes de ADR 0018 punto 6. Hay que quitar hojas, imágenes o tablas dinámicas, o exportar a CSV. Si el archivo es legítimo y aun así choca con los topes, se abre un ítem para revisarlos (con revisión de seguridad).
+- Nada se guarda si hay errores (todas o ninguna). Corregir un archivo ya importado sigue el flujo normal de mediciones (M-04).
+
 ## Pendiente de completar
 - Correo de alertas (C-05): fila de `correo-alertas.yml` en `WORKFLOW_RULES` de `scripts/health/lib.js` (H-ARQ-C05-01), antes de completar P-09. Medir la base del job tras la activación.
 - Restauración probada contra el Supabase de producción y medición de tiempos base de `salud.yml` y `deploy.yml` (V-05, tras el primer despliegue y la activación).
