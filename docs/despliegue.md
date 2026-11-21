@@ -2,7 +2,9 @@
 
 Workflow: `.github/workflows/deploy.yml` (nombre en Actions: **Despliegue**).
 Destino: Supabase del proyecto de P-02 (migraciones) y GitHub Pages (`https://apivasa.github.io/practica_agente/`).
-Decisiones: ADR 0015 (orden de jobs, Auth fuera de `db push`, fase 2 = despliegue continuo).
+
+**Estado (2026-11-20).** Primer despliegue hecho (run 44838844787): migraciones aplicadas y sitio publicado. Pentest fase B en modo `anonimo` en VERDE (S-05b, run 44839422473), sin hallazgos altos ni críticos. Las evaluaciones programadas siguen apagadas hasta P-05. La fase B en modo `roles` está pendiente.
+Decisiones: ADR 0015 (manual primero, orden de jobs, Auth fuera de `db push`, fase 2 = despliegue continuo).
 
 El primer despliegue a producción ya se hizo a mano (V-05, run 44838844787). Desde V-05b el despliegue es **continuo**.
 
@@ -58,6 +60,8 @@ Sin `supabase link` y sin token de cuenta (H-V05-01). Cada paso de migración ca
 - En el log de `migrate`, la salida de `supabase migration list`; o Supabase → Database → Migrations.
 - Supabase → Authentication → Users: **sin** las cuentas de `seed.sql`.
 - En el navegador (DevTools → Network): las peticiones van solo a `https://<ref>.supabase.co`.
+- Después de validar, activar los workflows programados: variable de repositorio `EVALUATION_ENABLED = true` (P-05). Basta la fase B en modo `anonimo` en VERDE (ADR 0015, enmienda S-05b). Lista de pasos: `docs/operacion.md` › Activación de producción (P-05).
+- Antes de dar de alta usuarios reales o anunciar la URL: fase B en modo `roles` en VERDE, Site URL, redirecciones y política de contraseñas en el panel de Supabase (H-S05-01), y sin copias de `SUPABASE_SECRET_KEY` a nivel de repositorio (H-C03-02).
 
 ## Precauciones
 

@@ -6,7 +6,7 @@ Las unidades de delivery manejan su capacidad con libertad, pero se controlan co
 
 La construye un orquestador con cinco subagentes en modo autónomo (ver [`CLAUDE.md`](CLAUDE.md)).
 
-## Estado actual (2026-11-19)
+## Estado actual (2026-11-20)
 
 Lo que existe hoy en `main` y pasó CI:
 
@@ -22,8 +22,9 @@ Lo que existe hoy en `main` y pasó CI:
 - **Seguridad** (S-01 a S-04): pipeline de seguridad, modelo de amenazas, pentest de API y RLS, CSP, anti-framing y DAST con ZAP.
 - **Salud del sistema** (V-04): `salud.yml` corre cada 6 h, revisa la web, Supabase y los workflows programados, y abre o actualiza un issue si algo falla. Ver [`docs/operacion.md`](docs/operacion.md).
 - **Despliegue continuo** (V-05, V-05b): `deploy.yml` aplica las migraciones y publica en GitHub Pages en cada push a `main` que no sea solo documentación, y también a mano con `confirm` = `desplegar`. La app está publicada en `https://apivasa.github.io/practica_agente/` (primer despliegue de V-05). Ver [`docs/despliegue.md`](docs/despliegue.md).
+- **Pentest previo a producción** (S-05, S-05b): fase A contra Supabase local y fase B contra producción en modo anónimo, ambas en VERDE y sin hallazgos altos ni críticos. Ver [`docs/seguridad/pentest-preproduccion.md`](docs/seguridad/pentest-preproduccion.md).
 
-Todavía **no** existen: la evaluación programada activa en producción (espera `EVALUATION_ENABLED`, P-05), la fase B del pentest contra producción (S-05b), correo u otro canal externo de alertas (C-05, espera Q-04) y fuentes automáticas de mediciones (V-07, espera Q-02). Ver [`docs/plan-maestro.md`](docs/plan-maestro.md).
+Todavía **no** existen: la evaluación programada activa en producción (espera `EVALUATION_ENABLED`, P-05), la fase B del pentest en modo `roles` (espera las cuentas de prueba del usuario), correo u otro canal externo de alertas (C-05, espera Q-04) y fuentes automáticas de mediciones (V-07, espera Q-02). Ver [`docs/plan-maestro.md`](docs/plan-maestro.md).
 
 ## Manuales por rol
 

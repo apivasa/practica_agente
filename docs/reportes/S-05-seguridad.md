@@ -36,6 +36,7 @@ Run de referencia: [Seguridad 44661334199](https://github.com/apivasa/practica_a
 - **ZAP full scan del front** (`s05-fase-a`): 15 URL, FAIL 0, WARN 5, PASS 138, sin riesgo alto.
 - **ZAP API scan** (`s05-fase-a`): 80 URL, FAIL 0, WARN 4, PASS 116, sin riesgo alto. 43 850 peticiones: 0 × 401, 0 × 5xx, 200 en las lecturas base, 403 donde la gestora no tiene privilegio y 400 cuando el parser estricto de PostgREST rechaza el payload.
 - Fase B: no se ha ejecutado. Requiere el primer despliegue (compuerta de la usuaria); el procedimiento está en `pentest-preproduccion.md` › Fase B.
+- **Actualización S-05b (2026-11-20):** fase B ejecutada en modo `anonimo` y en **VERDE**: [run 44839422473](https://github.com/apivasa/practica_agente/actions/runs/44839422473). Detalle en `docs/reportes/S-05b-seguridad.md` y en `pentest-preproduccion.md` › Resultados de la fase B.
 
 ## Hallazgos
 No hay altos ni críticos abiertos.
