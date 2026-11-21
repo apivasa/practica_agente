@@ -190,4 +190,4 @@ No se quitó ninguna aserción ni se relajó ninguna condición. Los títulos se
   - Ese valor por defecto existía solo por los fixtures de QA, que ya se actualizaron. El desarrollador puede quitarlo y exigir los campos sin romper pruebas de QA.
   - No bloquea.
   - Cómo reproducir: una respuesta `{"workflow_runs":[{"id":1,"status":"completed","conclusion":"success","path":".github/workflows/ci.yml"}]}` termina con código 0.
-- **H-QA-V05c-04 · Baja · documentación.** `docs/operacion.md` sigue diciendo «> 60 min» en la fila `deploy-main` (línea 336) y «umbral de 60 min de `DEPLOY_RULE.maxPendingMin`» en el runbook (línea 362). El código ya usa 90. Le corresponde a arquitecto-SRE o al documentador. No bloquea.
+- **H-QA-V05c-04 · Baja · documentación: cerrado.** En 9b4a34a, `docs/operacion.md` todavía decía 60 min. El commit de arquitectura 3ee661f, ya integrado en la rama, lo actualizó a 90 min (líneas 336 y 362).
