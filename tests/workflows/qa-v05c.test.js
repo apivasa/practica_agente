@@ -99,7 +99,8 @@ function waitCi(json) {
     rmSync(dir, { recursive: true, force: true });
   }
 }
-const runs = (...w) => JSON.stringify({ workflow_runs: w });
+// Fixtures realistas: la API siempre trae head_sha y event (V-05c, H-V05c-02).
+const runs = (...w) => JSON.stringify({ workflow_runs: w.map((x) => ({ head_sha: SHA, event: 'push', ...x })) });
 
 test('wait-ci: un workflow con ruta parecida (ci.yml-old, ci.yaml) en success no cuenta como el CI', () => {
   const r = waitCi(runs(
@@ -123,4 +124,27 @@ test('wait-ci: CI cancelled del SHA desplegado → no despliega (no hay atajo qu
   const r = waitCi(runs({ id: 5, status: 'completed', conclusion: 'cancelled', path: '.github/workflows/ci.yml' }));
   assert.equal(r.code, 1, r.out);
   assert.match(r.out, /cancelled/);
+});
+
+// Intento 2: ci.yml con la nueva concurrencia (H-QA-V05c-01). Traza: "un merge a main despliega"
+// exige que el CI del SHA del merge termine; en ramas no main se sigue cancelando (sin regresión).
+test('V-05c intento 2: ci.yml agrupa por SHA en main y cancela solo fuera de main', () => {
+  const conc = topBlock(CI, 'concurrency');
+  assert.ok(conc, 'ci.yml sin concurrency');
+  assert.match(conc, /group:\s*ci-\$\{\{\s*github\.ref == 'refs\/heads\/main' && github\.sha \|\| github\.ref\s*\}\}/);
+  assert.match(conc, /cancel-in-progress:\s*\$\{\{\s*github\.ref != 'refs\/heads\/main'\s*\}\}/);
+});
+
+test('wait-ci intento 2: run del mismo SHA pero con event distinto de push no habilita el despliegue', () => {
+  const r = waitCi(runs({ id: 6, status: 'completed', conclusion: 'success', path: '.github/workflows/ci.yml', event: 'pull_request' }));
+  assert.equal(r.code, 1, r.out);
+});
+
+test('wait-ci intento 2: un success de otro SHA no tapa el failure del SHA desplegado', () => {
+  const r = waitCi(runs(
+    { id: 7, status: 'completed', conclusion: 'failure', path: '.github/workflows/ci.yml' },
+    { id: 50, status: 'completed', conclusion: 'success', path: '.github/workflows/ci.yml', head_sha: 'c'.repeat(40) },
+  ));
+  assert.equal(r.code, 1, r.out);
+  assert.match(r.out, /conclusion 'failure'/);
 });
