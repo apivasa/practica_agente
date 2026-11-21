@@ -1,15 +1,16 @@
 # Estado del modo autónomo
 
 ## Candado de ciclo
-Estado: EN CURSO
-Desde: 2026-11-21 10:50
-Latido: 2026-11-21 11:23
-Sesión: programada session_013PQePVYwZ4AWerGWfGHej2
+Estado: LIBRE
+Desde: 
+Latido: 2026-11-21 12:20
+Sesión: 
 
 ## Log de ciclos (más reciente arriba)
 
 | Fecha y hora (Guayaquil) | Ítems trabajados | Resultado | Notas |
 |---|---|---|---|
+| 2026-11-21 12:20 | F-20 (#64), F-21 (#65) | Hechos | Programado. F-20: `requiredStepProblem` exige `run_id` del run evaluado y el paso en success en todas sus apariciones (1 reintento por lint en pruebas nuevas de dev, QA y seguridad). F-21: saneo de valores de la API en log y resumen de salud (H-F20-01) y mensaje de id no verificable; 2 reintentos (enlace al run recortado, H-ARQ-F21-01; CodeQL por URL por subcadena en pruebas del dev). Sin ítems nuevos: no queda nada `Pendiente`; lo demás espera a la usuaria (P-04, P-08, P-09, Q-xx con valores por defecto). Sin notificación. Lecciones: el `git add -A` del orquestador coló `.claude/worktrees` como gitlinks en main (quitado en 33e8df8; añadido a `.git/info/exclude`); el documentador informó un SHA inexistente cuando el push se rechazó por `-c push.negotiate`: pedir siempre la salida literal de `git log origin/<rama>`. |
 | 2026-11-21 09:49 | F-17 (#61), F-18 (#62), F-19 (#63) | Hechos | Programado. Endurecimiento del check de salud: desempate transitivo y fail-closed (`compareSameTime`), fechas de runs y de duración validadas en `assessWorkflow`, jobs de `requiredStep` pedidos al run evaluado. F-19 1 reintento: arquitectura ROJO por CI rojo en 9 pruebas con fixtures sin jobs; QA los actualizó con jobs de forma real sin tocar aserciones, CI verde. El arquitecto contrastó con la API real (ritmo-diario run 44864590732): sin falsos `fail`. Nuevo F-20 (info de F-19). `correo-alertas.yml` sigue con 0 runs (gracia vence 2026-11-22 09:04 UTC); no se lanzó a mano (bloqueado por permiso en el ciclo anterior, no se rodea). Local: el checkout traía un `main` viejo divergente; se trabajó en rama local `orq` sobre origin/main (reset bloqueado por permiso). Sin notificación: nada bloquea. |
 | 2026-11-21 07:53 | F-14 (#58), F-15 (#59), F-16 (#60) | Hechos | Programado. Endurecimiento del check `deploy-main` de salud (cadenas de fallos, fechas validadas ISO 8601, desempate por id); sin reintentos de revisión. F-15: pentest-api falló una vez por puerto 54322 ocupado (intermitente de F-10 reaparece; se relanzó el job, verde). Nuevo F-17 (info de F-16, baja prioridad). `correo-alertas.yml` sigue con 0 runs: el cron de 11:53 UTC no corrió (el arquitecto confirma workflow válido y crons de GitHub retrasados en todo el repo); lanzarlo a mano lo bloqueó el permiso de la sesión, no se rodea. Si sigue en 0, el check de salud fallará tras 2026-11-22 09:04 UTC y abrirá issue. Sin notificación: nada bloquea. Lección: los subagentes en worktree no pueden usar `-c push.negotiate`; push normal. |
 | 2026-11-21 05:49 | F-12 (#56), F-13 (#57) | Hechos | Programado. Sin reintentos. F-12: dispatch sigue la regla de punta, status saneado, H-F11-06 documentado, RPC `mark_alerts_email_expired` (solo service_role) desplegada en producción (Despliegue de 6525323 en verde). F-13: correo fail-closed sin la RPC y `deploy-main` en aviso por rojo esperado. Gitleaks en rojo una vez por un literal ficticio citado en el informe de seguridad (corregido + huella). Nuevo F-14 (bajos de F-13). `correo-alertas.yml` sigue con 0 runs (primer cron 11:53 UTC; gracia vence 2026-11-22 09:04 UTC): si sigue sin runs, el siguiente ciclo lo lanza a mano (H-ARQ-C06-02). Sin notificación: nada nuevo bloquea. |
