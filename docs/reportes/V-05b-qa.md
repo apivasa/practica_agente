@@ -1,6 +1,6 @@
 # V-05b — Informe QA
 
-Veredicto: **VERDE**
+Veredicto: **ROJO** (re-revisión V-05b + V-05c, 2026-11-21; la revisión inicial de abajo fue VERDE)
 
 Rama `item/V-05b` (commit del desarrollador ae7de7c). Fuentes del criterio: `docs/plan-maestro.md` (V-05b), ADR 0015 punto 5, H-V05-01 (`docs/reportes/V-05-seguridad.md`) y H-S03-02.
 
@@ -88,3 +88,55 @@ Verificación de que las pruebas detectan regresiones: se aplicaron 8 mutaciones
   - `paths-ignore: '**/*.md'` también ignora cambios que solo toquen `.md` dentro de `src/` o `public/`. Hoy no existen ni se publican, así que no afecta.
   - Cambios solo en `tests/**` sí despliegan: es inocuo, porque el despliegue es idempotente, pero gasta un run.
 - **Observación · Baja.** La URL con la contraseña viaja como argumento de la CLI (`--db-url`), así que es visible en la lista de procesos del runner. El runner es efímero y la URL está enmascarada en el log: aceptable. Se deja anotado para seguridad.
+
+---
+
+## Re-revisión 2026-11-21: V-05c e integración de main
+
+Veredicto: **ROJO**
+
+Rama `item/V-05b` en 86b447c. Incluye V-05c (`scripts/ci/wait-ci.sh`, `{ set +x; }` en `scripts/ci/db-url.sh`), la integración de main (b267345: V-07, C-05, grants) y H-ARQ-V04b-02 (f708741). A main solo le falta 010877b, que es un latido de docs.
+
+### Criterio de aceptación
+
+| Punto | Estado | Evidencia |
+|---|---|---|
+| V-05c: en push, `verify` espera al CI del mismo SHA y exige success | Cumplido (bash) | Es el último paso de `verify` y bloquea build, migraciones y Pages. Consulta `head_sha`, `event=push` y `branch=main` y toma el run de `ci.yml` con el id mayor. Si la conclusión es `failure`, `cancelled`, `timed_out` o `null`, falla. También falla si el run no aparece o no termina antes del tope. Con dispatch no espera. |
+| V-05c: `actions: read`, tope 20 min | Cumplido | `verify` tiene `contents: read` y `actions: read`, sin permisos de escritura. El tope por defecto es 1200 s y el `timeout-minutes` del job es 25. En main, CI tarda 3-5 min. |
+| V-05c: `{ set +x; }` en `supabase_db_url` | Cumplido | Es la primera instrucción. Con `set -x` en el paso, la traza no muestra ni la contraseña ni la URL (prueba del desarrollador, verificada). |
+| V-05b: un merge a main despliega | **No cumplido en el flujo real** | Ver H-QA-V05c-01. |
+| V-05b: dispatch con confirm, `--db-url` sin token, contraseña ≥ 12 | Cumplido | Sin cambios desde la revisión inicial. Las pruebas siguen en verde. |
+| Docs en fase 2 (H-QA-V05b-02) | Cerrado | `docs/despliegue.md` documenta el push a main y `SUPABASE_DB_POOLER_HOST`. La prueba `todo` de `qa-v05b.test.js` pasa a ser una prueba normal. |
+
+### Pruebas añadidas o modificadas
+
+- `tests/workflows/qa-v05c.test.js` (nuevo, 6 casos):
+  - `ci.yml` corre en todo push a main sin filtro de rutas, así que cada despliegue por push tiene un CI de su SHA que esperar. Pasa.
+  - El CI de un merge a main no se cancela cuando llega el commit siguiente (concurrencia de `ci.yml`). **Falla**: es H-QA-V05c-01.
+  - Bordes de `wait-ci.sh`: rutas parecidas (`ci.yml-old`, `ci.yaml`) no cuentan como el CI; la ruta con sufijo `@ref` sí cuenta; `completed` con conclusión `null` no despliega; `cancelled` no despliega. Pasan.
+- `tests/workflows/qa-v05b.test.js`: la prueba `todo` de docs pasa a ser una prueba normal.
+
+### Resultado
+
+- `node --test 'tests/**/*.test.js'` en local: 2370 pruebas, 2365 pasan, **1 falla** (H-QA-V05c-01), 2 omitidas, 2 `todo` (no son de este ítem).
+- CI de la rama en 86b447c: CI y Seguridad en `success`, runs 44868418987 y 44868418993. El run de este push mostrará la falla de la prueba nueva.
+
+### Cobertura engine/
+
+99,97 % de líneas (96,44 % de ramas). Este ítem no cambia `engine/`.
+
+### Hallazgos
+
+- **H-QA-V05c-01 · Alta · funcional, bloquea el merge.** Con V-05c, un merge a main normalmente no se despliega.
+  - `ci.yml` tiene `concurrency: { group: ci-${{ github.ref }}, cancel-in-progress: true }`. Cuando llega otro commit a main, se cancela el CI del commit anterior.
+  - Después de cada merge, el orquestador sube un commit de docs (estado o latido) en menos de 4 minutos.
+  - Ese commit cancela el CI del merge. `wait-ci.sh` falla con `cancelled`, `verify` queda en rojo y no se despliega.
+  - El commit de docs no redespliega, porque `paths-ignore` de deploy.yml excluye `docs/**`. El código fusionado queda sin publicar, y `deploy-main` de salud.yml lo informa como **failure** (no como aviso, porque el run falla en lugar de cancelarse) y abre el issue `salud`.
+  - El mensaje de `wait-ci.sh` («el despliegue de ese commit lo reemplaza») es falso cuando el commit siguiente solo toca docs.
+  - Evidencia en main (API de Actions): los CI de los merges #52 (7b4579d), #50 (f0b7108) y #49 (4604747) terminaron `cancelled` por el commit de docs siguiente: 3 de los últimos 4 merges.
+  - Cómo reproducir: `node --test tests/workflows/qa-v05c.test.js`, caso 2. En real: merge de un PR y push de un latido antes de que termine el CI del merge.
+  - Corrección sugerida (desarrollador): que `ci.yml` no cancele en main, por ejemplo `cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}`. Así se mantiene la cancelación en las ramas `item/**`. La prueba acepta esa forma, `false`, o un grupo por `github.sha` o `github.run_id`.
+  - Revisar también el texto del error de `wait-ci.sh` para el caso `cancelled`.
+- **H-QA-V05c-02 · Baja · diagnóstico.** Si `gh api` devuelve siempre un error (por ejemplo, 403 por falta de `actions: read`), `wait-ci.sh` reintenta durante 20 min y termina con «No apareció ningún run de CI». Falla de forma segura, pero el mensaje apunta a la causa equivocada. Sugerencia: si el último intento fue un error de la API, indicarlo en el mensaje final.
+- **Observación · Baja.** `wait-ci.sh` confía en el filtro `head_sha` del servidor y no vuelve a comprobar `.head_sha` en la respuesta. Con la API de GitHub es suficiente; volver a comprobarlo sería defensa en profundidad.
+- H-QA-V05b-01 (variable del pooler): resuelto por P-07 según `docs/pendientes-usuario.md`. H-QA-V05b-03 (CLI real contra el pooler) sigue pendiente de la primera corrida en main.

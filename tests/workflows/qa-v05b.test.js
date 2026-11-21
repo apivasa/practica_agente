@@ -259,13 +259,10 @@ test('las contraseñas de prueba usadas contra Auth local cumplen la política (
   for (const p of [lib, seed, 'Otra-Pass-Local-2026', 'Pentest-Signup-2026!', 'x-Pentest-2026']) assert.ok(policyOk(p), p);
 });
 
-// ------------------------------------------------------- documentación (pendiente)
+// ------------------------------------------------------- documentación
 
-// El documentador actualiza docs/despliegue.md después de las revisiones
-// (paso 8 del ciclo). Queda registrado como todo para que se vea en la salida.
-test('docs/despliegue.md documenta el despliegue en push a main y la variable SUPABASE_DB_POOLER_HOST', {
-  todo: 'lo actualiza el documentador (paso 8); hoy la guía sigue en la fase 1 con SUPABASE_ACCESS_TOKEN',
-}, () => {
+// H-QA-V05b-02 (cerrado en la re-revisión): la guía ya describe la fase 2.
+test('docs/despliegue.md documenta el despliegue en push a main y la variable SUPABASE_DB_POOLER_HOST', () => {
   const doc = readFileSync(join(ROOT, 'docs', 'despliegue.md'), 'utf8');
   assert.match(doc, /SUPABASE_DB_POOLER_HOST/);
   assert.match(doc, /push/);
