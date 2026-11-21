@@ -21,9 +21,18 @@
 #   --strict  en `migrate` y `deploy-pages` (H-ARQ-F11-02): superado = ::error::
 #     y 1 siempre. Nunca escribe en $GITHUB_OUTPUT.
 #
-# Solo el disparo manual (workflow_dispatch) se exime: usa la punta de la rama
-# en el momento de lanzarlo y lo decide quien confirma. Cualquier otro evento
-# falla.
+# F-12 (H-F11-02): el disparo manual (workflow_dispatch) sigue la misma regla
+# que push, con y sin --strict. verify exige refs/heads/main, así que un
+# disparo nuevo despliega la punta y pasa; un Re-run de un disparo viejo (que
+# reutiliza confirm y github.sha) ya no republica un commit superado.
+# Cualquier otro evento falla.
+#
+# F-12 (H-F11-06): con --strict en el intento 1, superado por código es la
+# carrera prevista (entró un merge mientras este run esperaba o migraba). El
+# run más nuevo está en cola (concurrency despliegue-produccion) y publicará
+# front y migraciones juntos. Se mantiene el rojo (fail-closed: --strict nunca
+# publica ni migra un commit superado y el workflow no tiene if: por paso),
+# pero el ::error:: lo explica como esperado y pide no relanzarlo.
 #
 # Entrada (env):
 #   GITHUB_EVENT_NAME, GITHUB_REPOSITORY, GITHUB_RUN_ATTEMPT, GITHUB_OUTPUT
@@ -68,12 +77,7 @@ set_deploy() {
 
 event="${GITHUB_EVENT_NAME:-}"
 case "$event" in
-  push) ;;
-  workflow_dispatch)
-    echo "Disparo manual (workflow_dispatch): se despliega la punta de la rama al lanzar."
-    set_deploy true
-    exit 0
-    ;;
+  push | workflow_dispatch) ;;
   *)
     echo "::error::Evento no admitido: solo push a main o workflow_dispatch."
     exit 1
@@ -151,9 +155,12 @@ fi
 # anterior: src/x.js → docs/x.md cambia lo desplegable.
 # Veredictos: "docs" (se despliega), "code ahead" (superado por código),
 # "unknown <motivo>" (no se puede afirmar nada: siempre falla) o
-# "code <status>" (behind/diverged: siempre falla).
+# "code <status>" (behind/diverged: siempre falla). H-F11-05: el status se
+# sanea a [a-z_] (vacío → "desconocido") antes de imprimirlo en ::error::.
 cmp_filter='def doc: type == "string" and (startswith("docs/") or endswith(".md"));
-  if .status != "ahead" then "code \(.status // "desconocido")"
+  def clean_status: (.status // "" | tostring | gsub("[^a-z_]"; "")) as $s
+    | if $s == "" then "desconocido" else $s end;
+  if .status != "ahead" then "code \(clean_status)"
   elif (.files | type) != "array" then "unknown sin lista de archivos"
   elif (.files | length) >= 300 then "unknown lista de archivos truncada"
   elif (.files | all(type == "object" and (.filename | type) == "string")) | not then "unknown archivo sin nombre"
@@ -182,6 +189,11 @@ if [ "$strict" -eq 0 ] && [ "$status" = "ahead" ] && [ "$attempt" = "1" ]; then
   echo "::warning::Hay un commit más nuevo en main (${tip}) con cambios desplegables; su despliegue lo cubre. Este run no publica ${sha} (se saltan build, migraciones y Pages) y termina en verde."
   set_deploy false
   exit 0
+fi
+
+if [ "$strict" -eq 1 ] && [ "$status" = "ahead" ] && [ "$attempt" = "1" ]; then
+  echo "::error::Hay un commit más nuevo en main (${tip}) con cambios desplegables (${status}); su despliegue lo cubre. Rojo esperado (H-F11-06): entró mientras este run esperaba o migraba, y su run, en cola tras este, aplica migraciones y publica el front juntos. No se aplica ni publica ${sha}; no relances este run."
+  exit 1
 fi
 
 echo "::error::Hay un commit más nuevo en main (${tip}) con cambios desplegables (${status}); su despliegue lo cubre. No se despliega ${sha}: no relances despliegues de commits viejos (republicaría un front anterior)."
