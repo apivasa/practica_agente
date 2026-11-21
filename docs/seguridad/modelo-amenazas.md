@@ -399,3 +399,13 @@ Importación de mediciones desde Excel `.xlsx` en `#/custodio/mediciones`, sin d
 | T-V07-05 | Tampering (XSS) | Contenido de celdas o cabeceras en mensajes de error | Bajo | Mensajes como texto (`el(..., { text })`, sin `innerHTML`) | `xlsx-import-v07.test.js` › XSS y estático; e2e › XSS en unidad y cabecera |
 | T-V07-06 | Elevation | El Excel abre una vía de escritura nueva (otra unidad por id libre, otro indicador, columnas `indicator_id`/`unit_id`) | Bajo | Mismas filas validadas que el CSV, unidades solo de la lista cargada, mismo `insertMeasurements(ind.id, …)`; RLS del custodio por indicador | `xlsx-import-v07.test.js` › cat 1; `api/idor-escalation.test.js` (RLS) |
 | T-V07-07 | Tampering | La plantilla descargada lleva fórmulas, enlaces externos o macros; la descarga obliga a relajar la CSP | Muy bajo | Plantilla generada localmente con nombres escapados, ZIP sin comprimir; `blob:` creado y revocado en la vista; CSP sin cambios (las descargas no dependen de `default-src`) | `xlsx-import-v07.test.js` › plantilla; e2e › descarga sin violaciones de CSP |
+
+## Superficie nueva (V-07b)
+
+Sin superficie nueva: endurece la de V-07 (ADR 0018). El tope del descompresor pasa a `min(tope de la parte, tamaño declarado)`; la hoja se procesa fila a fila (`parseXml` con `onClose`), las filas ya leídas se sueltan del árbol y la lectura se corta al pasar de `XLSX_MAX_SHEET_ROWS` (cabecera + 5001) filas con datos. Cambian además el mensaje de negativos en `valor` (se siguen rechazando) y el redondeo de fechas de serie. Actualiza los controles de T-V07-01 y T-V07-02.
+
+| ID | STRIDE | Amenaza | Riesgo | Control | Prueba |
+|---|---|---|---|---|---|
+| T-V07b-01 | DoS | Zip bomb que miente en el tamaño declarado (hacia abajo, hacia arriba, 0) para que se descomprima más de lo declarado | Muy bajo | `inflate(data, min(maxBytes, entry.size))`; rechazo previo si el declarado supera el tope; tamaño real == declarado y CRC | `tests/security/xlsx-import-v07b.test.js` › H-V07-01 (bomba de 100 MiB que declara 2 KB, declarado 0, ±1 byte, inflate hostil que ignora el tope) |
+| T-V07b-02 | DoS | Hoja con cientos de miles de filas, filas vacías, filas enormes, XML roto o profundo tras el corte, filas fuera de la primera `sheetData` para evadir el corte | Muy bajo | Corte al pasar de 5002 filas con datos sin analizar el resto; filas soltadas del árbol al procesarse; topes de elementos (400 000) y profundidad (64) siguen aplicando a todo el documento | `xlsx-import-v07b.test.js` › H-V07-02 |
+| T-V07b-03 | Tampering | El mensaje nuevo de negativos abre un hueco para fórmulas que empiezan por `-` | Muy bajo | Solo `^-\d+([.,]\d+)?$` recibe el mensaje nuevo y se rechaza igual; el resto sigue en `FORMULA_RE` | `xlsx-import-v07b.test.js` › QA-V07-1 |
