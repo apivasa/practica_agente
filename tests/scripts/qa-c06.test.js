@@ -522,6 +522,7 @@ describe('[H] H-ARQ-C05-01: salud.yml vigila correo-alertas.yml', () => {
   const workflow = { state: 'active', created_at: '2026-11-01T00:00:00Z' };
   const at = new Date('2027-03-10T15:00:00Z');
   const run = (hoursAgo, conclusion = 'success') => ({
+    id: 7,
     status: 'completed',
     conclusion,
     event: 'schedule',
@@ -546,7 +547,9 @@ describe('[H] H-ARQ-C05-01: salud.yml vigila correo-alertas.yml', () => {
   test('con producción: run fallido o demasiado antiguo falla; uno reciente y correcto pasa', () => {
     assert.equal(assessWorkflow(rule, { workflow, runs: [run(2, 'failure')], now: at, productionEnabled: true }).status, 'fail');
     assert.equal(assessWorkflow(rule, { workflow, runs: [run(rule.maxAgeHours + 1)], now: at, productionEnabled: true }).status, 'fail');
-    assert.equal(assessWorkflow(rule, { workflow, runs: [run(2)], now: at, productionEnabled: true }).status, 'ok');
+    // F-19 (QA): jobs reales del run, con el paso «Enviar correos» en success.
+    const jobs = [{ id: 700, run_id: 7, status: 'completed', conclusion: 'success', steps: [{ name: rule.requiredStep, conclusion: 'success' }] }];
+    assert.equal(assessWorkflow(rule, { workflow, runs: [run(2)], jobs, now: at, productionEnabled: true }).status, 'ok');
   });
 
   test('con producción, el paso «Enviar correos» omitido (falta un secreto) falla', () => {

@@ -63,8 +63,20 @@ function healthyActions() {
 
 const evalJobs = (stepConclusion = 'success') => [{ steps: [{ name: 'Verificar configuración', conclusion: 'success' }, { name: 'Evaluar', conclusion: stepConclusion }] }];
 
+/**
+ * F-19 (QA): jobs como los devuelve la API para el run `runId`: run_id del propio run y el paso
+ * requerido de la regla de su workflow (p. ej. «Enviar correos» en correo-alertas), en success.
+ */
+function realJobs(actions, runId) {
+  const file = Object.keys(actions).find((f) => (actions[f].runs ?? []).some((r) => r.id === runId));
+  const step = WORKFLOW_RULES.find((r) => r.file === file)?.requiredStep;
+  const steps = [{ name: 'Verificar configuración', conclusion: 'success' }];
+  if (step) steps.push({ name: step, conclusion: 'success' });
+  return file ? [{ id: runId * 100, run_id: runId, status: 'completed', conclusion: 'success', steps }] : [];
+}
+
 /** fetch simulado: Pages, Supabase y la API REST de GitHub. */
-function fakeFetch({ pages = 200, supabase = 200, actions = healthyActions(), jobs = evalJobs(), issues = [], calls = [] } = {}) {
+function fakeFetch({ pages = 200, supabase = 200, actions = healthyActions(), jobs, issues = [], calls = [] } = {}) {
   return async (url, init = {}) => {
     calls.push({ url: String(url), method: init.method ?? 'GET', headers: init.headers, body: init.body });
     const u = new URL(url);
@@ -89,7 +101,10 @@ function fakeFetch({ pages = 200, supabase = 200, actions = healthyActions(), jo
       const ev = u.searchParams.get('event');
       return json(200, { workflow_runs: (actions[w[1]]?.runs ?? []).filter((r) => !ev || r.event === ev) });
     }
-    if (/^actions\/runs\/\d+\/jobs$/.test(p)) return json(200, { jobs });
+    if ((w = p.match(/^actions\/runs\/(\d+)\/jobs$/))) {
+      const list = jobs ?? realJobs(actions, Number(w[1]));
+      return json(200, { total_count: list.length, jobs: list });
+    }
     if (p === 'issues' && (init.method ?? 'GET') === 'GET') return json(200, issues);
     if (p === 'labels') return json(422, {});
     if (p === 'issues') return json(201, { number: 77 });
@@ -205,7 +220,7 @@ describe('assessWorkflow (pura)', () => {
     assert.match(r.detail, /terminó en failure/);
   });
   test('runs cancelados no cuentan', () => {
-    const r = assessWorkflow(daily, { ...base, runs: [run(1, { conclusion: 'cancelled' }), run(2, { hours: 3 })] });
+    const r = assessWorkflow(daily, { ...base, runs: [run(1, { conclusion: 'cancelled' }), run(2, { hours: 3 })], jobs: evalJobs() });
     assert.equal(r.status, 'ok');
   });
   test('duración mayor a 5 min: falla', () => {

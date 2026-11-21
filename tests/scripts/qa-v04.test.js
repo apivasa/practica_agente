@@ -58,6 +58,8 @@ function wfRun({ ageMs = 2 * H, conclusion = 'success', event = 'schedule', durM
   };
 }
 const OLD_WF = { state: 'active', created_at: '2026-01-01T00:00:00Z' };
+// F-19 (QA): jobs reales del run `runId` con el paso «Evaluar» en success (producción activa).
+const evalJobsOf = (runId = 1) => [{ id: runId * 100, run_id: runId, status: 'completed', conclusion: 'success', steps: [{ name: 'Evaluar', conclusion: 'success' }] }];
 const rule = (check) => WORKFLOW_RULES.find((r) => r.check === check);
 
 /** API de GitHub simulada para issue.js; registra las llamadas. */
@@ -241,7 +243,7 @@ describe('[C] workflows programados: umbrales exactos', () => {
 
   test('ritmo-diario: 30 h exactas ok; 30 h + 1 min falla', () => {
     const r = rule('ritmo-diario');
-    assert.equal(assessWorkflow(r, { ...prod, workflow: OLD_WF, runs: [wfRun({ ageMs: 30 * H })] }).status, 'ok');
+    assert.equal(assessWorkflow(r, { ...prod, workflow: OLD_WF, runs: [wfRun({ ageMs: 30 * H })], jobs: evalJobsOf(1) }).status, 'ok');
     const late = assessWorkflow(r, { ...prod, workflow: OLD_WF, runs: [wfRun({ ageMs: 30 * H + 60_000 })] });
     assert.equal(late.status, 'fail');
     assert.match(late.detail, /máximo 30 h/);
@@ -249,7 +251,7 @@ describe('[C] workflows programados: umbrales exactos', () => {
 
   test('ritmo-diario: duración de 5 min exactos ok; 5 min + 1 s falla', () => {
     const r = rule('ritmo-diario');
-    assert.equal(assessWorkflow(r, { ...prod, workflow: OLD_WF, runs: [wfRun({ durMs: 5 * 60_000 })] }).status, 'ok');
+    assert.equal(assessWorkflow(r, { ...prod, workflow: OLD_WF, runs: [wfRun({ durMs: 5 * 60_000 })], jobs: evalJobsOf(1) }).status, 'ok');
     assert.equal(assessWorkflow(r, { ...prod, workflow: OLD_WF, runs: [wfRun({ durMs: 5 * 60_000 + 1000 })] }).status, 'fail');
   });
 

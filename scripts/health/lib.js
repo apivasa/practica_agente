@@ -9,6 +9,7 @@ export const HEALTH_LABEL = 'salud';
 export const ISSUE_TITLE = 'Salud del sistema: comprobación fallida';
 
 const HOUR_MS = 3_600_000;
+const JOBS_MAX_PAGES = 5;
 const LOOPBACK = new Set(['127.0.0.1', 'localhost', '[::1]']);
 
 /**
@@ -115,7 +116,38 @@ const hoursBetween = (a, b) => (b - a) / HOUR_MS;
 const fmtHours = (h) => `${Math.round(h)} h`;
 
 /**
+ * F-19 (H-F18-02 / QA-F18-01): candidato que evalúa assessWorkflow, extraído para que
+ * checkWorkflows pida los jobs de `requiredStep` a ese mismo run y no al primer success en el
+ * orden de la API. Pura.
+ * - invalid: runs completados (no cancelados ni omitidos) con created_at inválido o futuro
+ *   (F-18, H-F17-02): si hay alguno, assessWorkflow falla y no hay candidato.
+ * - candidate: el más reciente (o, en reglas mensuales, el más reciente del mes en curso,
+ *   America/Guayaquil), o null.
+ * @param {typeof WORKFLOW_RULES[number]} rule
+ * @param {{ runs: any[], now: Date }} data
+ * @returns {{ candidate: any | null, invalid: any[] }}
+ */
+export function pickWorkflowCandidate(rule, { runs, now }) {
+  const nowMs = now.getTime();
+  // F-18 (H-F17-02 / H-ARQ-F17-01): created_at de cada run validado con parseApiTime, como en
+  // assessDeploy. Un completado con fecha inválida o futura podría ser el más reciente (o el
+  // único que cumple maxAgeHours), así que hace fallar el check. Empates: compareSameTime.
+  const timeOf = (r) => parseApiTime(r?.created_at, nowMs);
+  const doneAll = (runs ?? [])
+    .filter((r) => r?.status === 'completed' && r.conclusion !== 'cancelled' && r.conclusion !== 'skipped')
+    .filter((r) => !rule.event || r.event === rule.event);
+  const invalid = doneAll.filter((r) => !Number.isFinite(timeOf(r)));
+  if (invalid.length > 0) return { candidate: null, invalid };
+  const done = doneAll.sort((a, b) => timeOf(b) - timeOf(a) || compareSameTime(a, b));
+  if (!rule.monthly) return { candidate: done[0] ?? null, invalid };
+  const month = businessDate(now).slice(0, 7);
+  return { candidate: done.find((r) => businessDate(new Date(timeOf(r))).slice(0, 7) === month) ?? null, invalid };
+}
+
+/**
  * Evalúa un workflow programado con los datos ya leídos de la API (pura).
+ * `jobs` son los jobs del candidato (ver pickWorkflowCandidate); solo se usan con
+ * `requiredStep` y producción activa.
  * @param {typeof WORKFLOW_RULES[number]} rule
  * @param {{ workflow: any, runs: any[], jobs?: any[], now: Date, productionEnabled: boolean }} data
  * @returns {Result}
@@ -129,14 +161,7 @@ export function assessWorkflow(rule, { workflow, runs, jobs = [], now, productio
     return result(rule.check, 'skip', 'activo; producción inactiva, no se exige ejecución');
   }
   const nowMs = now.getTime();
-  // F-18 (H-F17-02 / H-ARQ-F17-01): created_at de cada run validado con parseApiTime, como en
-  // assessDeploy. Un completado con fecha inválida o futura podría ser el más reciente (o el
-  // único que cumple maxAgeHours), así que hace fallar el check. Empates: compareSameTime.
-  const timeOf = (r) => parseApiTime(r?.created_at, nowMs);
-  const doneAll = (runs ?? [])
-    .filter((r) => r?.status === 'completed' && r.conclusion !== 'cancelled' && r.conclusion !== 'skipped')
-    .filter((r) => !rule.event || r.event === rule.event);
-  const invalid = doneAll.filter((r) => !Number.isFinite(timeOf(r)));
+  const { candidate, invalid } = pickWorkflowCandidate(rule, { runs, now });
   if (invalid.length > 0) {
     return result(
       rule.check,
@@ -144,23 +169,19 @@ export function assessWorkflow(rule, { workflow, runs, jobs = [], now, productio
       `${invalid.length} run(s) completado(s) con fecha inválida o en el futuro; no se puede determinar el más reciente${runLink(invalid[0])}`,
     );
   }
-  const done = doneAll.sort((a, b) => timeOf(b) - timeOf(a) || compareSameTime(a, b));
   // F-17 (H-ARQ-F16-03): misma validación que los runs de despliegue. Inválida o futura → 0
   // (época), que es fail-closed: no cuenta como «reciente» ni como «creado este mes».
   const parsedCreated = parseApiTime(workflow.created_at, nowMs);
   const createdMs = Number.isFinite(parsedCreated) ? parsedCreated : 0;
 
-  let candidate = done[0];
-  if (rule.monthly) {
+  if (rule.monthly && !candidate) {
     const month = businessDate(now).slice(0, 7);
     const day = Number(businessDate(now).slice(8, 10));
-    candidate = done.find((r) => businessDate(new Date(r.created_at)).slice(0, 7) === month);
-    if (!candidate) {
-      if (day < 2) return result(rule.check, 'ok', 'día 1: el cierre del mes aún puede estar en curso');
-      if (businessDate(new Date(createdMs)).slice(0, 7) === month) return result(rule.check, 'ok', 'workflow creado este mes; sin cierre que exigir');
-      return result(rule.check, 'fail', `sin run del cierre mensual de ${month}`);
-    }
-  } else if (!candidate) {
+    if (day < 2) return result(rule.check, 'ok', 'día 1: el cierre del mes aún puede estar en curso');
+    if (businessDate(new Date(createdMs)).slice(0, 7) === month) return result(rule.check, 'ok', 'workflow creado este mes; sin cierre que exigir');
+    return result(rule.check, 'fail', `sin run del cierre mensual de ${month}`);
+  }
+  if (!candidate) {
     if (rule.maxAgeHours && hoursBetween(createdMs, nowMs) < rule.maxAgeHours) {
       return result(rule.check, 'ok', 'workflow reciente; aún no le toca correr');
     }
@@ -170,23 +191,50 @@ export function assessWorkflow(rule, { workflow, runs, jobs = [], now, productio
   const problems = [];
   if (candidate.conclusion !== 'success') problems.push(`último run terminó en ${candidate.conclusion}`);
   if (rule.maxAgeHours) {
-    const age = hoursBetween(timeOf(candidate), nowMs);
+    const age = hoursBetween(parseApiTime(candidate.created_at, nowMs), nowMs);
     if (age > rule.maxAgeHours) problems.push(`último run hace ${fmtHours(age)} (máximo ${rule.maxAgeHours} h)`);
   }
-  if (rule.maxDurationMin && candidate.run_started_at && candidate.updated_at) {
-    const min = (Date.parse(candidate.updated_at) - Date.parse(candidate.run_started_at)) / 60_000;
-    if (min > rule.maxDurationMin) problems.push(`duró ${Math.round(min)} min (máximo ${rule.maxDurationMin})`);
+  if (rule.maxDurationMin) {
+    // F-19 (H-F18-01 / H-ARQ-F18-01): fechas validadas con parseApiTime. Si falta alguna, es
+    // ilegible o futura, o la duración sale negativa, no se puede comprobar el máximo: problema.
+    const started = parseApiTime(candidate.run_started_at, nowMs);
+    const updated = parseApiTime(candidate.updated_at, nowMs);
+    if (!Number.isFinite(started) || !Number.isFinite(updated)) {
+      problems.push('duración no verificable: run_started_at o updated_at falta, es ilegible o está en el futuro');
+    } else if (updated < started) {
+      problems.push('duración no verificable: updated_at es anterior a run_started_at');
+    } else {
+      const min = (updated - started) / 60_000;
+      if (min > rule.maxDurationMin) problems.push(`duró ${Math.round(min)} min (máximo ${rule.maxDurationMin})`);
+    }
   }
   if (rule.requiredStep && productionEnabled && candidate.conclusion === 'success') {
-    const steps = jobs.flatMap((j) => j.steps ?? []).filter((s) => s.name === rule.requiredStep);
-    if (steps.length > 0 && steps.every((s) => s.conclusion === 'skipped')) {
-      problems.push(`paso "${rule.requiredStep}" omitido con EVALUATION_ENABLED=true (¿falta un secreto?)`);
-    }
+    const stepProblem = requiredStepProblem(rule.requiredStep, jobs, candidate);
+    if (stepProblem) problems.push(stepProblem);
   }
   const link = candidate.html_url ? ` — ${candidate.html_url}` : '';
   return problems.length > 0
     ? result(rule.check, 'fail', `${problems.join('; ')}${link}`)
     : result(rule.check, 'ok', `último run ${candidate.conclusion}${link}`);
+}
+
+/**
+ * F-19 (H-F18-02 / QA-F18-01): problema con el paso requerido en los jobs del candidato, o null.
+ * Falla si no hay jobs, si algún job declara un run_id distinto del candidato, si el paso no
+ * aparece (renombrado o job omitido) o si todas sus apariciones quedaron `skipped`.
+ */
+function requiredStepProblem(step, jobs, candidate) {
+  const list = Array.isArray(jobs) ? jobs : [];
+  if (list.length === 0) return `sin jobs del último run; no se puede comprobar el paso "${step}"`;
+  if (list.some((j) => j?.run_id !== undefined && j?.run_id !== candidate.id)) {
+    return `los jobs recibidos no son del último run; no se puede comprobar el paso "${step}"`;
+  }
+  const steps = list.flatMap((j) => (Array.isArray(j?.steps) ? j.steps : [])).filter((s) => s?.name === step);
+  if (steps.length === 0) return `paso "${step}" no aparece en el último run`;
+  if (steps.every((s) => s.conclusion === 'skipped')) {
+    return `paso "${step}" omitido con EVALUATION_ENABLED=true (¿falta un secreto?)`;
+  }
+  return null;
 }
 
 /**
@@ -222,7 +270,20 @@ export function createGitHubClient({ token, repo, apiUrl = 'https://api.github.c
       if (event) q.set('event', event);
       return call('GET', `/actions/workflows/${encodeURIComponent(file)}/runs?${q}`).then((d) => d?.workflow_runs ?? []);
     },
-    listJobs: (runId) => call('GET', `/actions/runs/${Number(runId)}/jobs?per_page=20`).then((d) => d?.jobs ?? []),
+    // F-19: per_page=100 (máximo de la API) y páginas siguientes según total_count, para que
+    // un run con el paso requerido no dé un falso «paso no aparece». filter=latest (por
+    // defecto): jobs del último intento del run.
+    listJobs: async (runId) => {
+      const jobs = [];
+      for (let page = 1; page <= JOBS_MAX_PAGES; page++) {
+        const d = await call('GET', `/actions/runs/${Number(runId)}/jobs?per_page=100&page=${page}`);
+        const batch = Array.isArray(d?.jobs) ? d.jobs : [];
+        jobs.push(...batch);
+        const total = Number.isSafeInteger(d?.total_count) ? d.total_count : jobs.length;
+        if (batch.length < 100 || jobs.length >= total) break;
+      }
+      return jobs;
+    },
     findOpenIssue: (label) =>
       call('GET', `/issues?state=open&labels=${encodeURIComponent(label)}&per_page=10`).then(
         (list) => (list ?? []).find((i) => !i.pull_request) ?? null,
@@ -244,8 +305,9 @@ export async function checkWorkflows({ env, github, now, rules = WORKFLOW_RULES 
       const runs = workflow ? await github.listRuns(rule.file, { branch, event: rule.event ?? undefined }) : [];
       let jobs = [];
       if (rule.requiredStep && productionEnabled && workflow?.state === 'active') {
-        const latest = runs.find((r) => r.status === 'completed' && r.conclusion === 'success');
-        if (latest) jobs = await github.listJobs(latest.id);
+        // F-19 (H-F18-02 / QA-F18-01): los jobs del mismo candidato que evalúa assessWorkflow.
+        const { candidate } = pickWorkflowCandidate(rule, { runs, now });
+        if (candidate?.conclusion === 'success' && Number.isSafeInteger(candidate.id)) jobs = await github.listJobs(candidate.id);
       }
       out.push(assessWorkflow(rule, { workflow, runs, jobs, now, productionEnabled }));
     } catch (e) {
