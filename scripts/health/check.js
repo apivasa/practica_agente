@@ -9,7 +9,7 @@
 // Sale con 1 si algún check falla. Nunca imprime claves ni la URL de Supabase.
 import { appendFileSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
-import { checkAvailability, checkDeploy, checkWorkflows, createGitHubClient, failedChecks } from './lib.js';
+import { checkAvailability, checkDeploy, checkWorkflows, createGitHubClient, failedChecks, sanitizeLogValue } from './lib.js';
 
 /**
  * @param {{ argv: string[], env: Record<string,string|undefined>, fetchImpl: typeof fetch,
@@ -19,7 +19,7 @@ import { checkAvailability, checkDeploy, checkWorkflows, createGitHubClient, fai
 export async function main({ argv, env, fetchImpl, now = new Date(), log = console.log, sleep, delayMs }) {
   const only = argv.find((a) => a.startsWith('--only='))?.slice(7) ?? 'all';
   if (!['all', 'availability', 'workflows'].includes(only)) {
-    log(`::error::--only inválido: ${only}`);
+    log(`::error::--only inválido: ${sanitizeLogValue(only)}`);
     return { code: 2, results: [] };
   }
   const results = [];
@@ -44,12 +44,14 @@ export async function main({ argv, env, fetchImpl, now = new Date(), log = conso
           : r.status === 'warn'
             ? `${plain ? '' : '::warning::'}aviso`
             : 'ok';
-    log(`${tag} ${r.check}: ${r.detail}`);
+    // F-21 (H-F20-01): detalle y nombre en una sola línea y acotados (sin comandos `::` inyectados).
+    log(`${tag} ${sanitizeLogValue(r.check)}: ${sanitizeLogValue(r.detail)}`);
   }
   const failures = failedChecks(results);
   if (env.GITHUB_OUTPUT) appendFileSync(env.GITHUB_OUTPUT, `failures=${failures.join(',')}\n`);
   if (env.GITHUB_STEP_SUMMARY) {
-    const rows = results.map((r) => `| ${r.check} | ${r.status} | ${r.detail.replace(/\|/g, '/')} |`);
+    const cell = (v) => sanitizeLogValue(v).replace(/\|/g, '/');
+    const rows = results.map((r) => `| ${cell(r.check)} | ${cell(r.status)} | ${cell(r.detail)} |`);
     appendFileSync(env.GITHUB_STEP_SUMMARY, ['| Check | Estado | Detalle |', '|---|---|---|', ...rows, ''].join('\n'));
   }
   log(JSON.stringify({ checks: results.length, failures }));
@@ -60,7 +62,7 @@ if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href) {
   main({ argv: process.argv.slice(2), env: process.env, fetchImpl: fetch }).then(
     ({ code }) => process.exit(code),
     (e) => {
-      console.error(`::error::salud: ${e?.message ?? e}`);
+      console.error(`::error::salud: ${sanitizeLogValue(e?.message ?? e)}`);
       process.exit(2);
     },
   );
