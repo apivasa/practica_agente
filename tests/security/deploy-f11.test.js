@@ -217,7 +217,8 @@ test('sec check-main-tip: deploy.yml lo ejecuta en verify, sin if:, continue-on-
   const i = verify.indexOf('run: bash scripts/ci/check-main-tip.sh');
   assert.ok(i > 0);
   const step = verify.slice(verify.lastIndexOf('- name:', i), i);
-  assert.doesNotMatch(step, /^\s*if:|continue-on-error|TIP_RETR|GITHUB_EVENT_NAME|GITHUB_REPOSITORY/m);
+  assert.doesNotMatch(step, /^\s*if:/m);
+  assert.doesNotMatch(step, /continue-on-error|TIP_RETR|GITHUB_EVENT_NAME|GITHUB_REPOSITORY/);
   assert.match(step, /HEAD_SHA: \$\{\{ github\.sha \}\}/);
   // El resto de jobs dependen de verify (no hay forma de saltarlo en un run nuevo).
   for (const j of ['build-pages']) {

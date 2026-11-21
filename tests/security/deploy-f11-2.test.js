@@ -243,7 +243,8 @@ for (const [id, effect] of [['migrate', 'supabase db push'], ['deploy-pages', 'a
     const step = j.slice(j.lastIndexOf('- name:', check), check);
     assert.match(step, /GH_TOKEN: \$\{\{ github\.token \}\}/);
     assert.match(step, /HEAD_SHA: \$\{\{ github\.sha \}\}/);
-    assert.doesNotMatch(step, /^\s*if:|continue-on-error|TIP_RETR|GITHUB_EVENT_NAME|GITHUB_RUN_ATTEMPT|GITHUB_REPOSITORY/m);
+    assert.doesNotMatch(step, /^\s*if:/m);
+    assert.doesNotMatch(step, /continue-on-error|TIP_RETR|GITHUB_EVENT_NAME|GITHUB_RUN_ATTEMPT|GITHUB_REPOSITORY/);
     // El checkout que trae el script va antes y sin credenciales persistidas.
     const co = j.indexOf('actions/checkout@');
     assert.ok(co >= 0 && co < check);
