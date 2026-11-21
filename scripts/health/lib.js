@@ -220,19 +220,29 @@ export function assessWorkflow(rule, { workflow, runs, jobs = [], now, productio
 
 /**
  * F-19 (H-F18-02 / QA-F18-01): problema con el paso requerido en los jobs del candidato, o null.
- * Falla si no hay jobs, si algún job declara un run_id distinto del candidato, si el paso no
- * aparece (renombrado o job omitido) o si todas sus apariciones quedaron `skipped`.
+ * Fail-closed (F-20): falla si no hay jobs, si algún job no trae `run_id` entero igual al id
+ * del candidato (H-F19-01), si el paso no aparece (renombrado o job omitido), si todas sus
+ * apariciones quedaron `skipped`, o si alguna aparición no terminó en `success`
+ * (H-F19-02 / QA-F19-01: `failure`, `null`, `skipped` en una pata de la matriz, etc.).
  */
 function requiredStepProblem(step, jobs, candidate) {
   const list = Array.isArray(jobs) ? jobs : [];
   if (list.length === 0) return `sin jobs del último run; no se puede comprobar el paso "${step}"`;
-  if (list.some((j) => j?.run_id !== undefined && j?.run_id !== candidate.id)) {
-    return `los jobs recibidos no son del último run; no se puede comprobar el paso "${step}"`;
+  if (!Number.isSafeInteger(candidate?.id)) {
+    return `el último run no tiene id verificable; no se puede comprobar el paso "${step}"`;
   }
-  const steps = list.flatMap((j) => (Array.isArray(j?.steps) ? j.steps : [])).filter((s) => s?.name === step);
+  if (list.some((j) => !Number.isSafeInteger(j?.run_id) || j.run_id !== candidate.id)) {
+    return `los jobs recibidos no traen el run_id del último run; no se puede comprobar el paso "${step}"`;
+  }
+  const steps = list.flatMap((j) => (Array.isArray(j.steps) ? j.steps : [])).filter((s) => s?.name === step);
   if (steps.length === 0) return `paso "${step}" no aparece en el último run`;
   if (steps.every((s) => s.conclusion === 'skipped')) {
     return `paso "${step}" omitido con EVALUATION_ENABLED=true (¿falta un secreto?)`;
+  }
+  const bad = steps.filter((s) => s.conclusion !== 'success');
+  if (bad.length > 0) {
+    const seen = [...new Set(bad.map((s) => String(s.conclusion ?? 'sin conclusión')))].join(', ');
+    return `paso "${step}" no terminó en success en todas sus apariciones (${bad.length} de ${steps.length}: ${seen})`;
   }
   return null;
 }
