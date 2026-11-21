@@ -115,7 +115,7 @@ Roles de BD: `anon` (sin privilegios), `authenticated` (todos los usuarios; el r
 | T-CI-08 | Information disclosure | Clave secreta o JWT legado incrustado en `dist/` (no versionado, gitleaks no lo ve). | El front solo usa `VITE_SUPABASE_URL` y `VITE_SUPABASE_PUBLISHABLE_KEY`. | `tests/security/static-secrets.test.js` (dist obligatorio en `seguridad.yml`) |
 | T-CI-09 | Repudiation / Tampering | Neutralizar un control (`continue-on-error`, `\|\| true`) para que el pipeline pase. | Prohibido por CLAUDE.md §4. | `workflows.test.js` (sin `continue-on-error` ni `\|\| true` en pasos de seguridad) |
 
-| T-CI-10 | Elevation / Tampering | `deploy.yml` (V-05) con la clave secreta o credenciales de BD se dispara desde una rama o PR y aplica migraciones o publica un `dist/` alterado. | Solo `push` a `main` y `environment` protegido; sin `pull_request`; secretos solo en el job de despliegue; `db push` sin `--include-seed`. | Prueba a añadir en `workflows.test.js` cuando exista `deploy.yml` (V-05); hoy `db-static-f03.test.js` (guarda de seed). |
+| T-CI-10 | Elevation / Tampering | `deploy.yml` con credenciales de BD se dispara desde una rama, un tag, un PR o un fork, se salta `verify` (confirmación, rama, registro cerrado) o filtra la cadena de conexión; un push directo a `main` despliega sin revisión (V-05b). | `on.push.branches: [main]` sin tags ni comodines, sin `pull_request*`/`workflow_run`; `verify` exime `confirm` solo con `GITHUB_EVENT_NAME = push` y exige `refs/heads/main`; todos los jobs dependen de `verify`; environment `produccion` con regla `main`; sin `SUPABASE_ACCESS_TOKEN` (H-V05-01): `db push --db-url` al pooler validado por regex con contraseña codificada y `::add-mask::`; sin `set -x`/`--debug`. Residual: `main` sin protección de rama (H-V05b-01). | `tests/security/deploy-v05b.test.js` (61 casos), `preprod-s05.test.js`, `workflows.test.js` |
 
 ---
 
@@ -337,7 +337,7 @@ Con el primer despliegue cambian tres cosas: (1) el front deja de ser un build l
 | T-EXC-03 (T/E: la evaluación programada aplica una excepción revocada y quita candados indebidamente, H-C02-01) | `tests/security/exceptions-c02.test.js` › automatización | **Falla: H-C02-01** |
 | T-EXC-04 (I/T: XSS almacenado en motivo y `change_ref`) | `tests/security/exceptions-c02.test.js` › XSS; `api/exceptions-c02.test.js` › XSS | Activa (C-02) |
 | T-CI-01..09 | `tests/security/workflows.test.js`; jobs gitleaks, semgrep, npm-audit, CodeQL | Activa |
-| T-CI-10 | `workflows.test.js` (caso deploy) | **Asignada a V-05** |
+| T-CI-10 | `tests/security/deploy-v05b.test.js`, `preprod-s05.test.js` › deploy.yml | Activa (V-05b) |
 | T-PROD-03, T-PROD-05 | `tests/security/preprod-s05.test.js` › VITE_ solo publicable, › db push/reset, › deploy.yml (si existe); `prod/fase-b.test.js` › sin secretos | Activa (S-05; la parte de producción, en fase B) |
 | T-PROD-06 | `tests/security/api/preprod-s05.test.js` › inyección, › esquemas no expuestos, › embebidos; `seguridad.yml` › `s05-fase-a` (ZAP API scan) | Activa (S-05) |
 
