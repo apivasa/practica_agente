@@ -19,12 +19,13 @@ Lo que existe hoy en `main` y pasó CI:
   - Líder: sus indicadores, color, meta, ritmo, restricciones y alertas (V-01).
 - **Motor** (`engine/`): color (M-01), escalada y excepciones (C-01, C-02), vulnerabilidades: paquete, ritmo y metas (M-05) y color mensual por criticidad, P0/P1 y P2/P3 (M-06).
 - **Evaluación programada y alertas** (C-03, C-04): workflows mensual y diario. Hoy no hacen nada en producción: esperan la activación (P-05, ver "Workflows").
+- **Correo de alertas** (C-05): `correo-alertas.yml` envía con Resend cada alerta de la bandeja a su destinatario, un correo por alerta y sin reenvíos. Hoy no envía nada: espera la activación (P-05) y la clave `RESEND_API_KEY` (P-09).
 - **Seguridad** (S-01 a S-04): pipeline de seguridad, modelo de amenazas, pentest de API y RLS, CSP, anti-framing y DAST con ZAP.
 - **Salud del sistema** (V-04): `salud.yml` corre cada 6 h, revisa la web, Supabase, los workflows programados y el último despliegue (`deploy-main`, V-04b), y abre o actualiza un issue si algo falla. Ver [`docs/operacion.md`](docs/operacion.md).
 - **Despliegue manual** (V-05): `deploy.yml` aplica migraciones y publica en GitHub Pages solo cuando el usuario lo dispara a mano. Publicada el 2026-11-20 en https://apivasa.github.io/practica_agente/ (migraciones aplicadas en Supabase). Sin usuarios reales todavía. Ver [`docs/despliegue.md`](docs/despliegue.md).
 - **Pentest previo a producción** (S-05, S-05b): fase A contra Supabase local y fase B contra producción en modo anónimo, ambas en VERDE y sin hallazgos altos ni críticos. Ver [`docs/seguridad/pentest-preproduccion.md`](docs/seguridad/pentest-preproduccion.md).
 
-Todavía **no** existen: la evaluación programada en producción (espera P-05, variable `EVALUATION_ENABLED`), la fase B del pentest en modo `roles` (espera las cuentas de prueba del usuario), correo u otro canal externo de alertas (C-05, espera Q-04) y fuentes automáticas de mediciones (V-07, espera Q-02). Ver [`docs/plan-maestro.md`](docs/plan-maestro.md).
+Todavía **no** existen: la evaluación programada en producción (espera P-05, variable `EVALUATION_ENABLED`), la fase B del pentest en modo `roles` (espera las cuentas de prueba del usuario) y fuentes automáticas de mediciones (V-07, espera Q-02). Ver [`docs/plan-maestro.md`](docs/plan-maestro.md).
 
 ## Manuales por rol
 
@@ -114,13 +115,14 @@ Las pruebas de `tests/security/api/` se omiten en `test:unit` a propósito. En C
 | `seguridad.yml` | PR; push a `main`, `item/**`, `fix/**`, `ensayo/**`; lunes 01:17 Guayaquil; manual | gitleaks, semgrep, `npm audit`, CodeQL, pruebas de seguridad, pentest de API contra Supabase local y DAST (e2e de seguridad y ZAP baseline). |
 | `evaluacion-mensual.yml` | Día 1 de cada mes, 06:07 Guayaquil; manual con `as_of` y `reprocess` | Cierra el mes anterior: colores, candados, auditoría y alertas `color_change` y de excepciones. |
 | `ritmo-diario.yml` | Cada día, 06:23 Guayaquil; manual con `as_of` | Ritmo de vulnerabilidades, ingreso de P0/P1 y vencimiento de excepciones. Genera alertas. |
+| `correo-alertas.yml` | Cada día, 06:53 y 09:53 Guayaquil; manual | Envía por correo (Resend) las alertas pendientes de los últimos 7 días, una por destinatario. No reenvía las ya enviadas y reintenta hasta 3 veces. Sin `RESEND_API_KEY` termina en verde con un aviso. |
 | `salud.yml` | Cada 6 h (00:41, 06:41, 12:41 y 18:41 UTC); manual | Comprueba Pages, Supabase, los workflows programados, CI de `main` y el último run de `deploy.yml` en `main` (`deploy-main`: falla si terminó mal o lleva más de 60 min sin terminar; si solo se canceló, deja un aviso sin issue). Si algo falla, abre o comenta un issue con la etiqueta `salud`. Sin producción activa, los checks de Pages y Supabase salen como omitidos. |
 | `deploy.yml` | Solo manual, desde `main`, con `confirm` = `desplegar` | `verify`, `build-pages`, `migrate-plan`, `migrate`, `deploy-pages` y `smoke`. Ver [`docs/despliegue.md`](docs/despliegue.md). |
 | `lockfile.yml` | Push a `item/**` o `fix/**` que cambie `package.json`; manual (nunca en `main`) | Regenera y sube `package-lock.json` y relanza CI y Seguridad. |
 
 Los jobs que levantan Supabase local (tres en `ci.yml` y tres en `seguridad.yml`) usan `scripts/ci/supabase-start.sh`: si el arranque falla (por ejemplo, puerto ocupado), detiene Supabase, espera 10 s y reintenta, hasta 3 intentos en total. Si se agotan, el job falla con el código del último intento. Detalle en [`docs/operacion.md`](docs/operacion.md).
 
-Los dos workflows de evaluación solo actúan si existen los secretos `SUPABASE_URL` y `SUPABASE_SECRET_KEY` y la variable de repositorio `EVALUATION_ENABLED=true`. Si falta algo, terminan en verde con un aviso y no escriben nada. Detalle, reprocesos y qué hacer si fallan: [`docs/operacion.md`](docs/operacion.md).
+Los dos workflows de evaluación y `correo-alertas.yml` solo actúan si existen los secretos `SUPABASE_URL` y `SUPABASE_SECRET_KEY` y la variable de repositorio `EVALUATION_ENABLED=true`. Si falta algo, terminan en verde con un aviso y no escriben nada. El correo además necesita el secreto `RESEND_API_KEY` en el environment `produccion`. Detalle, reprocesos y qué hacer si fallan: [`docs/operacion.md`](docs/operacion.md).
 
 ## Estructura del repo
 
@@ -133,6 +135,7 @@ engine/                 Lógica pura compartida por el front y las Actions
   commitment.js         Compromisos y umbral efectivo
   measurements-input.js Validación de mediciones y parser CSV
   vulnerabilities.js    Paquete trimestral, ritmo y metas mensuales
+  alert-email.js        Asunto, texto y HTML del correo de una alerta (C-05)
   rows.js, calendar.js  Filas de la BD -> entradas del motor; meses y trimestres
   dates.js              Fecha de negocio (America/Guayaquil)
 src/
@@ -147,11 +150,12 @@ supabase/
   tests/                pgTAP (y tests/security/)
 scripts/
   evaluate.js           Evaluación mensual o diaria (Actions)
-  lib/                  Lectura de BD, armado de entradas, alertas y escritura
+  send-alert-emails.js  Correo de alertas con Resend (Actions, C-05)
+  lib/                  Lectura de BD, armado de entradas, alertas, correo y escritura
   ci/                   integration.sh, seed-evaluations.sh, verify-evaluate.sql y supabase-start.sh (arranque de Supabase local con reintento acotado, F-07)
 tests/                  node:test: engine/, front/, scripts/, security/ (y security/api/)
 e2e/                    Playwright por pantalla; e2e/security/
-.github/workflows/      ci, seguridad, evaluacion-mensual, ritmo-diario, salud, deploy, lockfile
+.github/workflows/      ci, seguridad, evaluacion-mensual, ritmo-diario, correo-alertas, salud, deploy, lockfile
 docs/                   Diseño, plan, ADR, manuales, modelo de datos, operación, seguridad
 ```
 

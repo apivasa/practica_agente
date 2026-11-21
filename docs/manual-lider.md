@@ -53,7 +53,9 @@ La fecha del avance es hoy si miras el mes en curso, o el último día del mes s
 | Ingreso de P0/P1 | Entraron P0/P1 nuevas que cambian la meta del trimestre. |
 | Vencimiento de excepción | Una excepción de tu unidad vence hoy o ya venció. |
 
-Las alertas solo se ven en la app; no hay correo todavía.
+**Correo de alertas** (C-05). Cada alerta de tu bandeja te llegará también por correo, a la dirección con la que entras a la app. Un correo por alerta, solo con los datos de esa alerta: tipo, mensaje, tu unidad, fecha y hora (UTC) y el enlace **Ver en la app**. Si la alerta es de severidad alta, el asunto empieza con "[Urgente]". El correo es una copia: la alerta sigue en tu bandeja y la marcas como leída solo en la app.
+
+Hoy el correo **no está activo**: espera la activación de la evaluación en producción (P-05) y la clave de Resend (P-09). Mientras tanto, las alertas solo se ven en la app.
 
 ## Cómo leer los colores
 
