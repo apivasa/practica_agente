@@ -23,6 +23,7 @@
 //   S05_REQUIRE=1        sin variables la prueba falla en vez de omitirse
 import { describe, test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
+import { ANON_WRITE_PROBES, privilegeDenialProblem } from './anon-write-probes.js';
 
 const PAGES = process.env.S05_PAGES_URL;
 const REF = process.env.S05_PROJECT_REF;
@@ -211,14 +212,17 @@ describe('S-05 fase B · producción (no destructiva)', { skip }, () => {
       });
     }
 
-    for (const t of ['units', 'exceptions', 'audit_log', 'user_roles']) {
+    for (const [t, body] of Object.entries(ANON_WRITE_PROBES)) {
       // Sin privilegio INSERT para anon (hardening.sql): PostgreSQL rechaza antes de
-      // tocar filas. Si prosperara, es un hallazgo crítico y la fila lleva la marca
-      // s05-fase-b para borrarla (procedimiento en pentest-preproduccion.md).
-      test(`${t}: escritura anónima denegada`, async () => {
-        const r = await api(`/rest/v1/${t}`, { method: 'POST', body: { name: 's05-fase-b' }, headers: { Prefer: 'return=minimal' } });
-        assert.ok([400, 401, 403].includes(r.status), `anon POST ${t}: ${fmt(r)}`);
-        assert.doesNotMatch(r.text, /"code":"23/, 'llegó a validar restricciones: tiene privilegio');
+      // tocar filas. El cuerpo usa columnas reales (S-05c, H-QA-S05b-01) para que
+      // PostgREST no responda 400 PGRST204 antes del chequeo de privilegios; solo
+      // vale 401/403 con 42501. Si prosperara, es un hallazgo crítico: las FK a ids
+      // inexistentes lo impiden en exceptions/user_roles y en units/audit_log la
+      // fila lleva la marca s05-fase-b para borrarla (pentest-preproduccion.md).
+      test(`${t}: escritura anónima denegada por privilegio (42501)`, async () => {
+        const r = await api(`/rest/v1/${t}`, { method: 'POST', body, headers: { Prefer: 'return=minimal' } });
+        const problem = privilegeDenialProblem(r.status, r.json);
+        assert.equal(problem, null, `anon POST ${t}: ${problem} · ${fmt(r)}`);
       });
     }
 
@@ -287,6 +291,30 @@ describe('S-05 fase B · producción (no destructiva)', { skip }, () => {
         const p = JSON.parse(Buffer.from(s.token.split('.')[1], 'base64url'));
         assert.ok(p.exp - p.iat <= 3600, `jwt_expiry de producción = ${p.exp - p.iat} s`);
       }
+    });
+
+    test('login sin enumeración: cuenta existente con clave errónea ≡ correo inexistente (H-QA-S05b-02)', async () => {
+      // 2 intentos fallidos en total (uno por caso), sin fuerza bruta. La cuenta
+      // existente es la gestora de prueba: con su login correcto del before()
+      // suma 2 inicios de sesión, dentro del tope de la cabecera.
+      const login = (email, password) => api('/auth/v1/token?grant_type=password', { method: 'POST', body: { email, password } });
+      const wrong = 'no-es-la-clave-s05c-' + 'x'.repeat(8);
+      assert.notEqual(users.gestora.password, wrong);
+      const existing = await login(users.gestora.email, wrong);
+      const missing = await login('s05-no-existe@example.invalid', wrong);
+      for (const r of [existing, missing]) {
+        assert.equal(r.status, 400, `login fallido debe dar 400 (429 = límite, repetir más tarde): ${fmt(r)}`);
+        assert.ok(!r.json?.access_token, 'login fallido emitió token');
+      }
+      const shape = (r) => ({
+        status: r.status,
+        code: r.json?.code ?? null,
+        error_code: r.json?.error_code ?? null,
+        error: r.json?.error ?? null,
+        msg: r.json?.msg ?? r.json?.message ?? r.json?.error_description ?? null,
+        keys: Object.keys(r.json ?? {}).sort(),
+      });
+      assert.deepEqual(shape(existing), shape(missing), `enumeración: la respuesta distingue cuentas existentes\n  existente: ${fmt(existing)}\n  inexistente: ${fmt(missing)}`);
     });
 
     test('líder: solo ve su unidad y lo suyo (IDOR de lectura)', async () => {
