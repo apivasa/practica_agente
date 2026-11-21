@@ -232,9 +232,22 @@ describe('sendAlertEmails', () => {
     const db = fakeDb([row('a-l1', U1, L1, evil)]);
     const { calls, fetchImpl } = fakeResend();
     await sendAlertEmails(db, opts(fetchImpl));
-    assert.doesNotMatch(calls[0].body.html, /<script>/);
+    assert.ok(!calls[0].body.html.includes(evil), 'la carga no aparece literal');
+    assert.doesNotMatch(calls[0].body.html, /<\s*\/?\s*script\b/i);
     assert.match(calls[0].body.html, /&lt;script&gt;/);
     assert.doesNotMatch(calls[0].body.subject, /[\r\n]/);
+  });
+
+  test('etiquetas script en mayúsculas o mixtas también llegan escapadas', async () => {
+    for (const evil of ['<SCRIPT>alert(1)</SCRIPT>', '<ScRiPt >alert(1)</sCrIpT >']) {
+      const db = fakeDb([row('a-l1', U1, L1, evil)]);
+      const { calls, fetchImpl } = fakeResend();
+      await sendAlertEmails(db, opts(fetchImpl));
+      const { html } = calls[0].body;
+      assert.ok(!html.includes(evil), `la carga ${evil} no aparece literal`);
+      assert.doesNotMatch(html, /<\s*\/?\s*script\b/i);
+      assert.match(html, /&lt;script\s*&gt;/i);
+    }
   });
 
   test('error de la BD al marcar queda en errors (sin la clave)', async () => {
