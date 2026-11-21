@@ -2,7 +2,7 @@
 
 Qué ve y qué puede hacer el comité en la app. Solo describe lo que está construido (2026-11-19).
 
-> La app todavía no está publicada en GitHub Pages (V-05). Hoy se usa en local; ver [README](../README.md#correr-en-local). En local entra con `comite@example.test`.
+> La app está publicada en https://apivasa.github.io/practica_agente/ desde el 2026-11-20 (V-05), pero todavía no tiene usuarios reales: el alta espera la fase B del pentest con roles (ADR 0015). Hoy se usa en local; ver [README](../README.md#correr-en-local). En local entra con `comite@example.test`.
 
 ## Tu rol
 
@@ -61,7 +61,7 @@ Tipos de alerta:
 | Ingreso de P0/P1 | Cuando entran P0/P1 nuevas que cambian la meta del trimestre. |
 | Vencimiento de excepción | El día que vence una excepción y cuando ya venció. |
 
-Las alertas solo se ven dentro de la app. No hay correo ni otro canal externo todavía (C-05, espera Q-04). Hoy se generan solo en local: la evaluación programada se activa en producción después del despliegue (V-05).
+Las alertas solo se ven dentro de la app. No hay correo ni otro canal externo todavía (C-05, espera Q-04). Hoy se generan solo en local: la evaluación programada en producción espera la activación (P-05).
 
 ### Excepciones (`#/comite/excepciones`)
 

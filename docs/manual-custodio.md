@@ -2,7 +2,7 @@
 
 Qué ve y qué puede hacer un custodio en la app. Solo describe lo que está construido (2026-11-20).
 
-> La app todavía no está publicada en GitHub Pages (V-05). Hoy se usa en local; ver [README](../README.md#correr-en-local). En local: `custodio1@example.test` (VULN) o `custodio2@example.test` (AVAIL, MTTR, OBS).
+> La app está publicada en https://apivasa.github.io/practica_agente/ desde el 2026-11-20 (V-05), pero todavía no tiene usuarios reales: el alta espera la fase B del pentest con roles (ADR 0015). Hoy se usa en local; ver [README](../README.md#correr-en-local). En local: `custodio1@example.test` (VULN) o `custodio2@example.test` (AVAIL, MTTR, OBS).
 
 ## Tu rol
 
@@ -83,6 +83,6 @@ Desde M-08 la base de datos también revisa cada medición de un indicador de me
 
 ## Cuándo cuentan tus datos
 
-- La evaluación mensual corre el día 1 a las 06:07 (Guayaquil) y cierra el mes anterior. Carga antes de esa hora. Hoy todavía no corre en producción: se activa después del despliegue (V-05).
+- La evaluación mensual corre el día 1 a las 06:07 (Guayaquil) y cierra el mes anterior. Carga antes de esa hora. Hoy todavía no corre en producción: espera la activación (P-05).
 - Si cargas tarde o corriges un dato, el mes se puede reprocesar a mano (lo hace operación, ver [docs/operacion.md](operacion.md#reprocesar-un-mes)).
 - La gestora ve en su tablero de completitud qué unidades te faltan.
