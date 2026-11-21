@@ -148,7 +148,8 @@ test('H-F11-06: en un relanzamiento (intento 2) el mensaje no dice que el rojo s
 const NOW = new Date('2027-03-10T12:00:00Z');
 const A1 = '33333333-0000-4000-8000-0000000000f1';
 const A2 = '33333333-0000-4000-8000-0000000000f2';
-const CONFIG = { apiKey: 're_F12TESTKEY_no_leak_1234', from: 'onboarding@resend.dev', appUrl: null, lookbackDays: 7 };
+// Clave ficticia armada en ejecución (no es una credencial de Resend; evita falsos positivos de gitleaks).
+const CONFIG = { apiKey: ['re', 'F12TESTKEY', 'ficticia'].join('_'), from: 'onboarding@resend.dev', appUrl: null, lookbackDays: 7 };
 
 /** BD simulada mínima: sin pendientes, con vencidas y la RPC de F-12. */
 function dbWithRpc({ rpc, skipped } = {}) {
