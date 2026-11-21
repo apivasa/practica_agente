@@ -181,8 +181,9 @@ Errores frecuentes (la fila 1 es la cabecera):
 | `unidad: "..." no existe` | Nombre mal escrito. |
 | `valor: "..." debe ser un entero mayor o igual que 0` | Decimal o negativo en meta acumulada. |
 | `valor: fuera de rango, debe ser menor que 2^53 ...` | Valor de 2^53 (9007199254740992) o más en cualquier tipo (M-13). |
-| `valor: "..." debe ser un número mayor o igual que 0` | Texto, negativo o notación exponencial como `1e20`, que no se admite. En meta acumulada el mensaje dice "entero". |
-| `... la celda empieza con =, +, -, @ ...` | Celda con forma de fórmula de hoja de cálculo. Se rechaza; un valor negativo como `-1` también cae aquí. |
+| `valor: "..." debe ser un número mayor o igual que 0` | Texto o notación exponencial como `1e20`, que no se admite. En meta acumulada el mensaje dice "entero". |
+| `valor: "-5" debe ser un número ≥ 0 (no se aceptan negativos ni fórmulas)` | Número negativo simple (`-5`, `-0,5`) en `valor` (V-07b). En meta acumulada dice "un entero ≥ 0". Igual en CSV, Excel y captura manual. |
+| `... la celda empieza con =, +, -, @ ...` | Celda con forma de fórmula de hoja de cálculo (`=A1`, `-1+2`, `-A1`), o un `-` en otra columna que no sea `valor`. Se rechaza. |
 | `categoria: "..." no es una de P0P1, P2P3` | Categoría distinta a las del indicador (por ejemplo `P0/P1`). |
 | `cumple: "..." debe ser sí o no` | Valor no reconocido. |
 | `Comillas sin cerrar` | Una comilla doble abierta sin cerrar. |

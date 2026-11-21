@@ -82,10 +82,12 @@ Si importas la plantilla sin llenar ves "El archivo no tiene filas de datos".
 **Reglas del Excel.**
 - Se lee **solo la primera hoja**. Las demás se ignoran.
 - Mismo formato que el CSV: mismas columnas en la fila 1, mismos valores, mismos mensajes de error y mismo "todo o nada".
-- **Fecha:** una fecha de Excel o un texto `AAAA-MM-DD`. La hora se descarta. No escribas la fecha como número suelto (`20261120`): se lee como fecha de Excel y se rechaza. Usa texto `2026-11-20` o formato de fecha.
+- **Fecha:** una fecha de Excel o un texto `AAAA-MM-DD`. La hora se descarta. Una hora a menos de medio milisegundo de la medianoche cuenta como el día siguiente, como la muestra Excel (V-07b). No escribas la fecha como número suelto (`20261120`): se lee como fecha de Excel y se rechaza. Usa texto `2026-11-20` o formato de fecha.
 - **Sin fórmulas.** Una celda con fórmula se rechaza con "Fila N: Columna X: la celda tiene una fórmula; no se aceptan fórmulas, copia y pega solo los valores". Copia la hoja y usa **Pegar valores**. Una celda con error de Excel (`#DIV/0!`, etc.) también se rechaza.
-- Un texto que empieza con `=`, `+`, `-` o `@` se rechaza, igual que en el CSV. Un número negativo en `valor` cae en el mismo mensaje.
-- Máximo **1 MB** y **5000 filas** de datos, como el CSV.
+- Un texto que empieza con `=`, `+`, `-` o `@` se rechaza, igual que en el CSV.
+- Un número negativo en `valor` (`-5`, `-0,5`) se rechaza con "valor: "-5" debe ser un número ≥ 0 (no se aceptan negativos ni fórmulas)". En meta acumulada dice "un entero ≥ 0". Vale igual en el CSV y en la captura manual (V-07b). Un `-` seguido de algo que no es un número simple (`-A1`, `-1+2`) sigue cayendo en el mensaje de fórmula.
+- Máximo **1 MB** y **5000 filas** de datos, como el CSV. Las filas vacías no cuentan. Con 5001 filas ves el mismo mensaje del CSV: "El archivo tiene 5001 filas; el máximo es 5000". Con más, la lectura se corta en cuanto pasa del tope y ves "El archivo tiene más de 5001 filas; el máximo es 5000". Divide el archivo en partes de hasta 5000 filas.
+- Si ves "El archivo Excel está dañado: es demasiado grande al descomprimirlo (supera el tamaño declarado)", una parte interna del archivo no coincide con lo que declara. Ábrelo en Excel y guárdalo de nuevo como **Libro de Excel (.xlsx)**, o expórtalo a CSV UTF-8.
 - **No se aceptan** los `.xls` antiguos ni los libros con contraseña. Ves "Es un Excel antiguo (.xls) o un archivo protegido; guárdalo como libro de Excel .xlsx sin contraseña". En Excel usa *Guardar como → Libro de Excel (.xlsx)*, sin contraseña.
 - **Navegador:** Chrome o Edge 103, Firefox 113 o Safari 16.4, o posteriores. En uno más antiguo ves "Este navegador no puede leer archivos Excel; usa CSV o actualiza el navegador". El CSV sigue funcionando.
 - Si ves "El archivo Excel es demasiado grande al descomprimirlo" o "tiene demasiadas partes internas", quita hojas, imágenes o tablas dinámicas, o guárdalo como CSV UTF-8.

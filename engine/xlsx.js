@@ -15,7 +15,7 @@
 //   de la zona del navegador.
 // - Números en otras columnas se escriben como en el CSV (punto decimal).
 // - Booleanos de Excel: VERDADERO → "true", FALSO → "false".
-import { CSV_MAX_BYTES, normalizeHeader, validateMeasurementRecords } from './measurements-input.js';
+import { CSV_MAX_BYTES, CSV_MAX_ROWS, normalizeHeader, validateMeasurementRecords } from './measurements-input.js';
 import { parseXml, XmlError, firstChild, childElements, attrByLocal, textContent, localName } from './xml.js';
 import { listZipEntries, readZipEntry, looksLikeZip, buildStoredZip, ZipError } from './zip.js';
 
@@ -24,6 +24,12 @@ export const XLSX_MAX_BYTES = CSV_MAX_BYTES;
 export const XLSX_MAX_PART_BYTES = 8 * 1024 * 1024;
 /** Tope de bytes descomprimidos entre todas las partes leídas. */
 export const XLSX_MAX_TOTAL_BYTES = 20 * 1024 * 1024;
+/**
+ * Filas con datos que se leen como máximo de la hoja (cabecera + CSV_MAX_ROWS + 1).
+ * Con exactamente CSV_MAX_ROWS + 1 filas de datos se da el mismo mensaje del CSV
+ * ("tiene 5001 filas"); con más, la lectura se corta sin seguir analizando (H-V07-02).
+ */
+export const XLSX_MAX_SHEET_ROWS = CSV_MAX_ROWS + 2;
 /** Columnas como máximo con datos en la hoja. */
 export const XLSX_MAX_COLUMNS = 50;
 const EXCEL_MAX_ROW = 1048576;
@@ -44,11 +50,14 @@ const MAX_SERIAL = 2958465; // 9999-12-31
 /**
  * Fecha de serie de Excel → 'YYYY-MM-DD', o null si no es una fecha válida.
  * Sistema 1900: 1 = 1900-01-01; 60 es el inexistente 29-feb-1900 (null).
- * Sistema 1904: 0 = 1904-01-01. La parte decimal (hora) se descarta.
+ * Sistema 1904: 0 = 1904-01-01. La parte decimal (hora) se descarta tras
+ * redondear al milisegundo (QA-V07-2: 46028 - 1e-9 es 2026-01-06 00:00:00.000,
+ * como lo muestra Excel, y no 2026-01-05 por error de coma flotante).
  */
 export function excelSerialToIsoDate(serial, date1904 = false) {
   if (typeof serial !== 'number' || !Number.isFinite(serial)) return null;
-  const day = Math.floor(serial);
+  if (Math.abs(serial) > MAX_SERIAL + 1) return null;
+  const day = Math.floor(Math.round(serial * DAY_MS) / DAY_MS);
   let ms;
   if (date1904) {
     if (day < 0 || day > MAX_SERIAL - 1462) return null;
@@ -144,34 +153,47 @@ const relsPathOf = (path) => `${dirOf(path)}_rels/${path.slice(path.lastIndexOf(
 
 /**
  * Celdas de una hoja.
+ * Las filas se procesan mientras se analiza el XML (al cerrarse cada <row> de
+ * la primera <sheetData>) y se sueltan del árbol; al pasar de `maxRows` filas
+ * con datos se lanza XlsxError sin analizar el resto (H-V07-02).
  * @returns {{ line: number, cells: { col: number, kind: string, value: string }[] }[]}
  *   kind: string | number | bool | date | formula | error | empty
  */
-export function parseSheet(xml, sharedStrings = []) {
-  const root = rootOf(parseXml(xml), 'worksheet');
-  const data = firstChild(root, 'sheetData');
-  if (!data) return [];
+export function parseSheet(xml, sharedStrings = [], { maxRows = XLSX_MAX_SHEET_ROWS } = {}) {
   const rows = [];
   let prevRow = 0;
-  for (const rowNode of childElements(data, 'row')) {
-    const rAttr = rowNode.attrs.r;
-    const line = rAttr === undefined ? prevRow + 1 : Number(rAttr);
-    if (!Number.isInteger(line) || line <= prevRow || line > EXCEL_MAX_ROW) throw new XlsxError('El archivo Excel está dañado (filas fuera de orden)');
-    prevRow = line;
-    const cells = [];
-    let prevCol = -1;
-    for (const c of childElements(rowNode, 'c')) {
-      const col = c.attrs.r === undefined ? prevCol + 1 : columnIndex(c.attrs.r);
-      if (col < 0 || col <= prevCol) throw new XlsxError('El archivo Excel está dañado (celdas fuera de orden)');
-      prevCol = col;
-      const cell = readCell(c, sharedStrings);
-      if (cell.kind === 'empty') continue;
-      if (col >= XLSX_MAX_COLUMNS) throw new XlsxError(`La hoja tiene datos en más de ${XLSX_MAX_COLUMNS} columnas`);
-      cells.push({ col, ...cell });
-    }
-    if (cells.length) rows.push({ line, cells });
-  }
+  const onClose = (node, stack) => {
+    // Solo filas hijas directas de la primera sheetData del elemento raíz.
+    if (stack.length !== 3 || localName(node.name) !== 'row') return;
+    const [, root, parent] = stack;
+    if (localName(root.name) !== 'worksheet' || localName(parent.name) !== 'sheetData' || firstChild(root, 'sheetData') !== parent) return;
+    const row = readRow(node, sharedStrings, prevRow);
+    prevRow = row.line;
+    parent.children.pop(); // ya procesada: no se guarda en el árbol
+    if (!row.cells.length) return;
+    rows.push(row);
+    if (rows.length > maxRows) throw new XlsxError(`El archivo tiene más de ${maxRows - 1} filas; el máximo es ${CSV_MAX_ROWS}`);
+  };
+  rootOf(parseXml(xml, { onClose }), 'worksheet');
   return rows;
+}
+
+function readRow(rowNode, sharedStrings, prevRow) {
+  const rAttr = rowNode.attrs.r;
+  const line = rAttr === undefined ? prevRow + 1 : Number(rAttr);
+  if (!Number.isInteger(line) || line <= prevRow || line > EXCEL_MAX_ROW) throw new XlsxError('El archivo Excel está dañado (filas fuera de orden)');
+  const cells = [];
+  let prevCol = -1;
+  for (const c of childElements(rowNode, 'c')) {
+    const col = c.attrs.r === undefined ? prevCol + 1 : columnIndex(c.attrs.r);
+    if (col < 0 || col <= prevCol) throw new XlsxError('El archivo Excel está dañado (celdas fuera de orden)');
+    prevCol = col;
+    const cell = readCell(c, sharedStrings);
+    if (cell.kind === 'empty') continue;
+    if (col >= XLSX_MAX_COLUMNS) throw new XlsxError(`La hoja tiene datos en más de ${XLSX_MAX_COLUMNS} columnas`);
+    cells.push({ col, ...cell });
+  }
+  return { line, cells };
 }
 
 function readCell(c, sharedStrings) {
