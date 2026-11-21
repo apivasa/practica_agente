@@ -1,7 +1,7 @@
 # Operación — runbook
 
 Dueño: arquitecto-SRE. Zona horaria de negocio: America/Guayaquil (UTC-5, sin horario de verano).
-Producción aún no existe (P-02/P-03 pendientes): la salud se prueba en CI contra Supabase local (job `integration` de `ci.yml`). `evaluacion-mensual` y `ritmo-diario` existen desde C-03/C-04 (ADR 0008), pero no hacen nada hasta que haya secretos y `vars.EVALUATION_ENABLED='true'`. `salud.yml` (V-04) vigila disponibilidad y workflows programados cada 6 h; ver «Salud del sistema».
+Producción publicada desde el 2026-11-20 (V-05, run 44838844787: migraciones aplicadas y Pages en `https://apivasa.github.io/practica_agente/`); pentest fase B en modo `anonimo` en VERDE (S-05b, run 44839422473). Mientras no exista `vars.EVALUATION_ENABLED='true'` (P-05), `evaluacion-mensual` y `ritmo-diario` terminan en verde sin evaluar, y `salud.yml` (V-04) omite los checks `pages` y `supabase`: **la producción publicada aún no se vigila ni se sondea**, y el plan gratuito puede pausar el proyecto tras 7 días sin actividad. Ver «Activación de producción (P-05)». La salud se sigue probando en CI contra Supabase local (job `integration` de `ci.yml`).
 
 Consultas útiles (solo REST, ver CLAUDE.md §5):
 - Runs de una rama: `gh api 'repos/apivasa/practica_agente/actions/runs?branch=<rama>&per_page=6' --jq '.workflow_runs[]|{id,name,event,conclusion}'`
@@ -117,6 +117,17 @@ Ver ADR 0008. Ambos usan `node scripts/evaluate.js --mode=monthly|daily --as-of=
 2. Variable de repositorio `EVALUATION_ENABLED=true` (*Settings → Secrets and variables → Actions → Variables*).
 3. Primera corrida manual de `ritmo-diario` sin `as_of`. Verificar en el log la línea JSON final con `errors: 0`.
 Mientras falte algo, el job termina en verde con `::warning::... se omite la evaluación`. Desde la activación, un warning así en un cron significa que alguien borró un secreto o la variable: es una incidencia.
+
+### Activación de producción (P-05): lista de comprobación
+Orden y compuertas según ADR 0015 (enmienda S-05b). Lo marcado *(usuario)* es compuerta del usuario.
+1. Fase B `anonimo` en VERDE (hecho, S-05b).
+2. *(usuario)* En el environment `produccion`: `SUPABASE_URL` y `SUPABASE_SECRET_KEY`. Regla de ramas `main`, **sin revisor**.
+3. `SUPABASE_URL` y `SUPABASE_PUBLISHABLE_KEY` **se quedan también a nivel de repositorio** (o la publicable como variable): `salud.yml` no declara environment (ADR 0014 punto 5) y no tiene valor por defecto para `SUPABASE_URL`. Si se borran del repositorio, con `EVALUATION_ENABLED=true` el check `supabase` falla con `falta SUPABASE_URL`. Ninguna de las dos es secreta. Las que sí se borran del repositorio: `SUPABASE_SECRET_KEY`, `SUPABASE_ACCESS_TOKEN`, `SUPABASE_DB_PASSWORD`, `SUPABASE_PROJECT_REF` (H-C03-02), después del paso 5.
+4. *(usuario)* Variable de repositorio `EVALUATION_ENABLED=true`.
+5. Corrida manual de `ritmo-diario` en `main` sin `as_of`: el paso "Evaluar" debe ejecutarse (no `skipped`) y la línea JSON final traer `errors: 0`. Con la base aún sin configuración (sin unidades ni indicadores), la corrida no escribe evaluaciones; es lo esperado.
+6. Corrida manual de `salud.yml`: `pages`, `supabase` y `ritmo-diario` en `ok`. Si sale un issue `salud`, seguir «Qué hacer ante cada alerta» y cerrarlo al quedar verde.
+7. El primer cierre mensual automático es el 2026-12-01 (noviembre). Si la gestora no cargó indicadores ni mediciones de noviembre, el cierre no produce colores; si los cargó a medias, se aplican las reglas de mínimo de muestra del diseño. Reprocesar con `--reprocess` si hace falta (ver «Reprocesar un mes»).
+8. Antes de dar de alta usuarios reales o anunciar la URL: fase B `roles` en VERDE, H-S05-01 completo en el panel y paso 3 cumplido (ADR 0015, enmienda S-05b).
 
 ### Cómo vigilarlos
 Desde V-04 lo hace `salud.yml` (ver «Salud del sistema»). A mano:
@@ -249,3 +260,4 @@ Verificado en V-04: las acciones con efecto en la BD quedan en `audit_log` con a
 
 ## Pendiente de completar
 - Restauración probada contra el Supabase de producción y medición de tiempos base de `salud.yml` y `deploy.yml` (V-05, tras el primer despliegue y la activación).
+- Cron de `salud.yml` (observado el 2026-11-20): desde su creación (02:55 UTC) solo corrió el slot de 12:41 UTC, con unas 3 h de retraso (15:44 UTC); GitHub descartó los de 06:41 y 18:41. Con producción activa, si GitHub sigue descartando crons, `ritmo-diario` (umbral 30 h) puede dar falsas alarmas `último run hace N h`: medir una semana tras P-05 antes de ajustar umbrales.

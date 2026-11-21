@@ -224,6 +224,7 @@ Con el primer despliegue cambian tres cosas: (1) el front deja de ser un build l
 | T-PROD-05 | Tampering | El despliegue aplica la semilla (cuentas con contraseña pública) o vuelca la cadena de conexión | Alto | `db push` sin `--include-seed` ni `--debug` | `preprod-s05.test.js` › db push/reset |
 | T-PROD-06 | Information disclosure / Elevation | Inyección en filtros, `order`, `select` y esquemas ocultos de PostgREST | Alto | PostgREST parametriza; `Accept-Profile` solo `public` | `api/preprod-s05.test.js` › inyección (10 tablas × 5 actores × 21 sondas), esquemas no expuestos; ZAP API scan (`s05-fase-a`) |
 | T-PROD-07 | DoS (nuestro) | El propio pentest degrada producción | — | Fase B manual, 1 hilo, retardo, duración acotada, sin escaneo activo de la API ni AJAX spider; tope de 900 peticiones | `preprod-s05.test.js` › s05-fase-b acotado |
+| T-PROD-08 | Information disclosure | GitHub Pages sirve `Access-Control-Allow-Origin: *` y no admite cabeceras de seguridad (ZAP 10098, 40040, 10020, 10021, 10055, 10063, 90004 en la fase B) | Bajo (contenido estático y público, sin cookies de sesión) | Sin secretos en el bundle; `script-src 'self'`; anti-framing (H-S04-01); aceptado (H-S05-07, H-S05-08) | `prod/fase-b.test.js` › front publicado; ZAP full scan de Pages |
 
 ## Superficie nueva (M-06)
 
@@ -340,6 +341,7 @@ Con el primer despliegue cambian tres cosas: (1) el front deja de ser un build l
 | T-CI-10 | `workflows.test.js` (caso deploy) | **Asignada a V-05** |
 | T-PROD-03, T-PROD-05 | `tests/security/preprod-s05.test.js` › VITE_ solo publicable, › db push/reset, › deploy.yml (si existe); `prod/fase-b.test.js` › sin secretos | Activa (S-05; la parte de producción, en fase B) |
 | T-PROD-06 | `tests/security/api/preprod-s05.test.js` › inyección, › esquemas no expuestos, › embebidos; `seguridad.yml` › `s05-fase-a` (ZAP API scan) | Activa (S-05) |
+| T-PROD-01, T-PROD-02, T-PROD-04, T-PROD-08 | `prod/fase-b.test.js` › Auth del proyecto real, › GraphQL anónimo; paso «environment produccion» y ZAP full scan de Pages en `s05-fase-b` | Activa en producción (S-05b, [run 44839422473](https://github.com/apivasa/practica_agente/actions/runs/44839422473): verde en modo `anonimo`; modo `roles` pendiente de cuentas de prueba) |
 
 ## Superficie nueva (M-12)
 

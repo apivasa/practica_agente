@@ -2,7 +2,7 @@
 
 Guía para la gestora de KPIs, los custodios y el comité. Explica cómo se describe un indicador, cómo se negocia un umbral, cómo se cargan las mediciones, cómo se calcula el color y qué candado recibe una unidad.
 
-> **Estado (2026-11-20).** Todo lo descrito aquí está construido y probado: pantallas de indicadores (M-02), compromisos (M-03) y mediciones (M-04), el motor (`engine/`) y la evaluación programada (C-03, C-04). La evaluación programada todavía no corre en producción: espera el despliegue (V-05). Las metas mensuales (`targets`) de los indicadores de meta acumulada sin categorías se cargan en **Metas** (`#/gestora/metas`, M-07); VULN no las necesita desde M-06. Detalle técnico: [`engine/README.md`](../engine/README.md) y [`engine/ESCALATION.md`](../engine/ESCALATION.md).
+> **Estado (2026-11-20).** Todo lo descrito aquí está construido y probado: pantallas de indicadores (M-02), compromisos (M-03) y mediciones (M-04), el motor (`engine/`) y la evaluación programada (C-03, C-04). La evaluación programada todavía no corre en producción: espera la activación (P-05). Las metas mensuales (`targets`) de los indicadores de meta acumulada sin categorías se cargan en **Metas** (`#/gestora/metas`, M-07); VULN no las necesita desde M-06. Detalle técnico: [`engine/README.md`](../engine/README.md) y [`engine/ESCALATION.md`](../engine/ESCALATION.md).
 
 ## 1. Los 7 atributos de un indicador
 

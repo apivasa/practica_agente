@@ -2,7 +2,7 @@
 
 Qué ve y qué puede hacer un líder de unidad en la app. Solo describe lo que está construido (2026-11-20).
 
-> La app todavía no está publicada en GitHub Pages (V-05). Hoy se usa en local; ver [README](../README.md#correr-en-local). En local: `lider1@example.test` (Unidad Alfa), `lider2` (Beta) o `lider3` (Gamma).
+> La app está publicada en https://apivasa.github.io/practica_agente/ desde el 2026-11-20 (V-05), pero todavía no tiene usuarios reales: el alta espera la fase B del pentest con roles (ADR 0015). Hoy se usa en local; ver [README](../README.md#correr-en-local). En local: `lider1@example.test` (Unidad Alfa), `lider2` (Beta) o `lider3` (Gamma).
 
 ## Tu rol
 
