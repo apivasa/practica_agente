@@ -87,7 +87,7 @@ function withEmail(db, { emails = EMAIL_OF, failMark = false } = {}) {
 }
 
 /**
- * F-11 (H-C06-01): runEmailStep exige a la BD los tres métodos de C-06. Se añaden a la BD
+ * F-11 (H-C06-01) y F-13: runEmailStep exige a la BD los tres métodos de C-06 y la RPC de F-12. Se añaden a la BD
  * simulada: el destinatario es unit_leader vigente de la(s) unidad(es) de sus alertas, no
  * hay alertas vencidas y marcar como omitida no hace nada.
  */
@@ -100,6 +100,9 @@ function withC06(db, emails = EMAIL_OF) {
   });
   db.expiredEmailAlerts = async () => [];
   db.markAlertsEmailSkipped = async () => [];
+  // F-13 (H-F12-01): runEmailStep también exige la RPC atómica de `expired`; aquí no hay
+  // vencidas, así que no marca nada.
+  db.markAlertsEmailExpired = async () => [];
   return db;
 }
 

@@ -250,7 +250,9 @@ const runLink = (r) => (r?.html_url ? ` — ${r.html_url}` : '');
  * - Último completado en success, o sin runs: pasa.
  * - Último completado cancelado: aviso (warn), salvo que el despliegue anterior no
  *   cancelado haya fallado, porque la cancelación no lo corrige: entonces falla.
- * - Último completado en failure (o timed_out, startup_failure...): falla.
+ * - Último completado en failure (o timed_out, startup_failure...): falla, salvo que haya
+ *   un run más nuevo pendiente dentro de maxPendingMin (F-13, H-ARQ-F12-02: rojo esperado
+ *   H-F11-06): entonces aviso (warn) y decide ese run.
  * @param {typeof DEPLOY_RULE} rule
  * @param {{ workflow: any, runs: any[], now: Date }} data
  * @returns {Result}
@@ -287,12 +289,45 @@ export function assessDeploy(rule, { workflow, runs, now }) {
         return result(rule.check, 'warn', `último despliegue cancelado, sin uno posterior en success${runLink(latest)}`);
       }
     } else {
+      // F-13 (H-ARQ-F12-02): rojo esperado (H-F11-06). Si hay un run más nuevo todavía
+      // pendiente y dentro de maxPendingMin, él decide: se avisa sin fallar. Si ese run se
+      // atasca (stuck) o termina en fallo, la siguiente corrida sí alerta.
+      const covering = problems.length === 0 ? newerPendingRun(relevant, latest, nowMs, rule.maxPendingMin) : null;
+      if (covering) {
+        return result(
+          rule.check,
+          'warn',
+          `último despliegue terminó en ${latest.conclusion}${runLink(latest)}; hay uno más nuevo en ${covering.status} que lo cubre (rojo esperado H-F11-06)${runLink(covering)}`,
+        );
+      }
       problems.push(`último despliegue terminó en ${latest.conclusion}${runLink(latest)}`);
     }
   }
   if (problems.length > 0) return result(rule.check, 'fail', problems.join('; '));
   if (!latest) return result(rule.check, 'ok', 'sin despliegues completados en main');
   return result(rule.check, 'ok', `último despliegue ${latest.conclusion}${runLink(latest)}`);
+}
+
+/**
+ * F-13 (H-ARQ-F12-02): run pendiente creado después de `failed` y que aún no supera
+ * maxPendingMin, o null.
+ * @param {any[]} runs
+ * @param {any} failed
+ * @param {number} nowMs
+ * @param {number} maxPendingMin
+ */
+export function newerPendingRun(runs, failed, nowMs, maxPendingMin) {
+  const failedMs = Date.parse(failed?.created_at);
+  if (!Number.isFinite(failedMs)) return null;
+  return (
+    (runs ?? []).find((r) => {
+      if (!PENDING_STATUSES.has(r?.status)) return false;
+      const created = Date.parse(r.created_at);
+      if (!Number.isFinite(created) || created <= failedMs) return false;
+      const since = Date.parse(r.run_started_at || r.created_at);
+      return Number.isFinite(since) && (nowMs - since) / 60_000 <= maxPendingMin;
+    }) ?? null
+  );
 }
 
 /** Comprobación del último despliegue en main con la API de Actions. */

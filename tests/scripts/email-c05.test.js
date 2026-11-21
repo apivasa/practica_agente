@@ -84,6 +84,9 @@ function withC06(db, emails = EMAILS) {
   });
   db.expiredEmailAlerts = async () => [];
   db.markAlertsEmailSkipped = async () => [];
+  // F-13 (H-F12-01): runEmailStep también exige la RPC atómica de `expired`; sin vencidas
+  // no marca nada.
+  db.markAlertsEmailExpired = async () => [];
   return db;
 }
 

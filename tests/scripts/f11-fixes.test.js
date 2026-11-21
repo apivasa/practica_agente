@@ -373,6 +373,8 @@ function c05OnlyDb() {
     recipientAccess: async () => ({ email: 'lider@example.test', bannedUntil: null, deletedAt: null, roles: [{ role: 'unit_leader', unit_id: 'u1' }] }),
     expiredEmailAlerts: async () => [],
     markAlertsEmailSkipped: async () => [],
+    // F-13 (H-F12-01): runEmailStep también exige la RPC atómica de `expired`.
+    markAlertsEmailExpired: async () => [],
   };
 }
 

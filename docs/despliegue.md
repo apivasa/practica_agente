@@ -77,7 +77,7 @@ Desde F-12 el disparo manual sigue la misma regla, con y sin `--strict`. Un disp
 
 `migrate` y `deploy-pages` repiten la comprobación al empezar, en modo `--strict`: ahí un run superado falla siempre, también en el primer intento. Así *Re-run failed jobs* de un run viejo no aplica migraciones ni publica cuando ya entró un commit con código. `migrate-plan` no la repite: solo hace un dry-run.
 
-**Rojo esperado (H-F11-06).** Si entra un merge con código mientras un run espera la aprobación de `migrate` o está migrando, `deploy-pages` (o `migrate`) falla en el primer intento. El error dice «Rojo esperado (H-F11-06)» y «no relances este run». No es un defecto y no se toca producción en ese job. **No lo relances.** El run del commit nuevo está en cola (concurrencia `despliegue-produccion`): aplica las migraciones y publica el front juntos. Comprueba que ese run termina en `success`. Si mientras tanto `salud.yml` abre un issue `deploy-main`, ciérralo cuando la punta termine en verde (ver `docs/operacion.md`).
+**Rojo esperado (H-F11-06).** Si entra un merge con código mientras un run espera la aprobación de `migrate` o está migrando, `deploy-pages` (o `migrate`) falla en el primer intento. El error dice «Rojo esperado (H-F11-06)» y «no relances este run». No es un defecto y no se toca producción en ese job. **No lo relances.** El run del commit nuevo está en cola (concurrencia `despliegue-produccion`): aplica las migraciones y publica el front juntos. Comprueba que ese run termina en `success`. Desde F-13, mientras ese run más nuevo está pendiente (hasta 90 min), `salud.yml` muestra `deploy-main` como aviso y no abre issue. Si la punta falla o pasa de 90 min sin terminar, la corrida siguiente de `salud.yml` sí abre el issue (ver `docs/operacion.md`).
 
 El `status` que devuelve la API de comparación se sanea a letras minúsculas y `_` antes de imprimirlo en el mensaje de error (H-F11-05).
 
@@ -107,7 +107,7 @@ Sin `supabase link` y sin token de cuenta (H-V05-01). Cada paso de migración ca
 
 ## Vigilancia
 
-`salud.yml` revisa cada 6 h el último run de `deploy.yml` en `main` (check `deploy-main`, V-04b). Si falló o lleva más de 90 min sin terminar (antes 60; la suma de timeouts de los jobs ronda 75 min desde V-05c), abre o comenta el issue `salud`. Un despliegue solo cancelado deja un aviso sin issue. Qué hacer ante cada alerta: `docs/operacion.md` › Salud del sistema.
+`salud.yml` revisa cada 6 h el último run de `deploy.yml` en `main` (check `deploy-main`, V-04b). Si falló o lleva más de 90 min sin terminar (antes 60; la suma de timeouts de los jobs ronda 75 min desde V-05c), abre o comenta el issue `salud`. Un despliegue solo cancelado deja un aviso sin issue. Desde F-13, un despliegue fallido con un run más nuevo pendiente desde hace 90 min o menos también deja un aviso sin issue (rojo esperado H-F11-06). Qué hacer ante cada alerta: `docs/operacion.md` › Salud del sistema.
 
 ## Cómo revertir
 

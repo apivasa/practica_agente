@@ -219,6 +219,8 @@ describe('[P3] runEmailStep falla cerrado (código 2) sin los métodos de C-06',
     recipientAccess: async () => ({ email: 'destino@example.test', bannedUntil: null, deletedAt: null, roles: [{ role: 'unit_leader', unit_id: 'u-1' }] }),
     expiredEmailAlerts: async () => [],
     markAlertsEmailSkipped: async () => [],
+    // F-13 (H-F12-01): runEmailStep también exige la RPC atómica de `expired`.
+    markAlertsEmailExpired: async () => [],
   };
   const okFetch = (sent) => async () => { sent.push(1); return new Response(JSON.stringify({ id: 'm' }), { status: 200 }); };
   const step = (db, sent, lines) => runEmailStep({
@@ -237,7 +239,8 @@ describe('[P3] runEmailStep falla cerrado (código 2) sin los métodos de C-06',
     assert.ok(!lines.join('\n').includes(KEY));
   });
 
-  for (const only of ['recipientAccess', 'expiredEmailAlerts', 'markAlertsEmailSkipped']) {
+  // F-13: markAlertsEmailExpired se suma a los exigidos (mismo fail-closed, sin leer la BD).
+  for (const only of ['recipientAccess', 'expiredEmailAlerts', 'markAlertsEmailSkipped', 'markAlertsEmailExpired']) {
     test(`solo falta ${only} → 2 y nada se envía`, async () => {
       const calls = []; const sent = []; const lines = [];
       const db = { ...c05Db(calls), ...c06 };
@@ -267,6 +270,7 @@ describe('[P3] runEmailStep falla cerrado (código 2) sin los métodos de C-06',
       recipientAccess() { return c06.recipientAccess(); }
       expiredEmailAlerts() { return c06.expiredEmailAlerts(); }
       markAlertsEmailSkipped() { return c06.markAlertsEmailSkipped(); }
+      markAlertsEmailExpired() { return c06.markAlertsEmailExpired(); }
     }
     const sent = []; const lines = [];
     const r = await step(new Db(), sent, lines);

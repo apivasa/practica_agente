@@ -17,6 +17,7 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { join } from 'node:path';
 import { createFakeDb, seedScenario, IDS } from './fake-db.js';
+import { withExpiredRpc } from './expired-rpc-fake.js';
 import { runMonthly } from '../../scripts/lib/run.js';
 import { sendAlertEmails, runEmailStep, readEmailConfig, sanitizeError, EMAIL_ACTOR, MAX_ATTEMPTS } from '../../scripts/lib/email.js';
 import { WORKFLOW_RULES, assessWorkflow, DEFAULT_PAGES_URL } from '../../scripts/health/lib.js';
@@ -109,7 +110,9 @@ function withEmail(db) {
     const a = ensure(t.alerts.find((x) => x.id === id));
     if (a.emailed_at === null) a.email_attempts = attempts;
   };
-  return db;
+  // F-13 (H-F12-01): runEmailStep exige la RPC atómica de `expired`; la simulada marca y
+  // audita como la real (tests/scripts/expired-rpc-fake.js).
+  return withExpiredRpc(db);
 }
 
 function resend(respond = (_c, n) => ({ status: 200, body: { id: `msg-${n}` } })) {
