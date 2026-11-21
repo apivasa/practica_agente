@@ -216,9 +216,10 @@ describe('S-05 fase B · producción (no destructiva)', { skip }, () => {
       // Sin privilegio INSERT para anon (hardening.sql): PostgreSQL rechaza antes de
       // tocar filas. El cuerpo usa columnas reales (S-05c, H-QA-S05b-01) para que
       // PostgREST no responda 400 PGRST204 antes del chequeo de privilegios; solo
-      // vale 401/403 con 42501. Si prosperara, es un hallazgo crítico: las FK a ids
-      // inexistentes lo impiden en exceptions/user_roles y en units/audit_log la
-      // fila lleva la marca s05-fase-b para borrarla (pentest-preproduccion.md).
+      // vale 401/403 con 42501 «permission denied». Aunque anon tuviera INSERT, cada
+      // sonda lleva una violación garantizada (FK inexistente, CHECK en blanco o
+      // NOT NULL a null): respondería 23xxx, la prueba falla y no queda fila
+      // (audit_log es append-only: una fila ahí no se podría borrar).
       test(`${t}: escritura anónima denegada por privilegio (42501)`, async () => {
         const r = await api(`/rest/v1/${t}`, { method: 'POST', body, headers: { Prefer: 'return=minimal' } });
         const problem = privilegeDenialProblem(r.status, r.json);

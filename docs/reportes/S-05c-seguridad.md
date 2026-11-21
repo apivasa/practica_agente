@@ -10,7 +10,7 @@ Superficie nueva: ninguna. El constructor es seguridad y el ítem solo endurece 
   - `audit_log {actor, action, entity}`
   - `user_roles {user_id, role:'kpi_manager'}`
 
-  Las FK de `exceptions` y `user_roles` apuntan a ids inexistentes. El módulo también tiene `privilegeDenialProblem`, que solo acepta como denegación 401/403 con `code = 42501`. Rechaza cualquier `PGRST*`, los `22xxx`/`23xxx` y los 401/403 sin 42501.
+  Las FK de `exceptions` y `user_roles` apuntan a ids inexistentes. El módulo también tiene `privilegeDenialProblem`, que solo acepta como denegación 401/403 con `code = 42501`. Desde el intento 2 también exige `message` ~ `permission denied` (H-QA-S05c-02: un 42501 de RLS no demuestra que falte el GRANT). Rechaza cualquier `PGRST*`, los `22xxx`/`23xxx` y los 401/403 sin 42501.
 - `tests/security/prod/fase-b.test.js`:
   - Cat. 1: 4 casos endurecidos («escritura anónima denegada por privilegio (42501)»). Antes aceptaban `400` genérico.
   - Cat. 2: 1 caso nuevo en la suite `roles`. Compara el login de la gestora de prueba con clave errónea frente a un correo inexistente: estado, `code`, `error_code`, `error`, mensaje y claves del cuerpo, y exige 400 en ambos. Son 2 intentos fallidos en total, sin fuerza bruta. El caso del modo `anonimo` no cambia.
@@ -19,7 +19,7 @@ Superficie nueva: ninguna. El constructor es seguridad y el ítem solo endurece 
   - Cobertura de las 4 tablas.
   - Por tabla: solo columnas existentes (para que no haya PGRST204) y todas las columnas NOT NULL sin default.
   - Los enums `exception_scope` y `app_role` son válidos (para que no haya 22P02).
-  - No destructiva: los ids de las FK no están en `seed.sql` y las filas llevan la marca `s05-fase-b`.
+  - Sin efecto aunque `anon` tuviera INSERT (intento 2, A-1 de arquitectura): cada sonda lleva una violación garantizada y comprobada contra el esquema. `units.name` y `exceptions.reason` van en blanco y chocan con el `CHECK length(trim(...)) > 0`. `audit_log.actor` va a null y choca con `NOT NULL` (sin default ni trigger BEFORE INSERT). `exceptions.unit_id` y `user_roles.user_id` apuntan a ids que no existen, y `user_roles` lleva `unit_leader` sin `unit_id`, que choca con el `CHECK user_roles_scope`. Ningún trigger reescribe esas columnas, y los ids de las FK no están en `seed.sql`.
   - Tabla de verdad de `privilegeDenialProblem`: antes pasaban `400 PGRST204`, `400 22P02`, `400` sin cuerpo, `401` sin 42501 y `23xxx`, y ahora fallan.
   - `fase-b.test.js` importa las sondas y no contiene `{name:'s05-fase-b'}` ni `[400, 401, 403]`.
   - La suite `roles` tiene la comparación de enumeración y no hay `skip`/`only`/`todo` fijos.
@@ -35,6 +35,8 @@ Ninguna prueba se debilitó ni se desactivó. La suite `roles` sigue saltándose
 - La fase B contra producción **no se lanzó** (lo indicó el orquestador). La primera ejecución posterior confirma en producción las sondas endurecidas: se espera `401 42501` en las 4 tablas. Si da `PGRST204` o `401` sin 42501, la prueba falla y el hallazgo es real.
 
 ## Hallazgos
+Intento 2: se corrige A-1 de `docs/reportes/S-05c-arquitectura.md`. En el intento 1, las sondas de `units` y `audit_log` habrían creado filas reales si `anon` hubiera tenido INSERT, y la de `audit_log` no se podría borrar porque la tabla es solo de inserción. Ahora ninguna sonda puede crear filas. El comentario del módulo y `pentest-preproduccion.md` › «Si algo sale mal» ya lo dicen bien. H-QA-S05c-02 queda aplicado.
+
 Ninguno nuevo. Se cierran como corregidos en `docs/seguridad/hallazgos.md`:
 - **H-QA-S05b-01** (Baja · 1 · RLS). Queda pendiente confirmarlo en la próxima fase B.
 - **H-QA-S05b-02** (Info · 2 · Auth). Se ejecuta cuando exista `S05_TEST_USERS`.

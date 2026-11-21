@@ -11,7 +11,7 @@ import { readFileSync, readdirSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
-  ANON_WRITE_PROBES, PROBE_ENUMS, MISSING_UNIT, MISSING_USER, privilegeDenialProblem,
+  ANON_WRITE_PROBES, GUARANTEED_VIOLATIONS, PROBE_ENUMS, MISSING_UNIT, MISSING_USER, privilegeDenialProblem,
 } from './prod/anon-write-probes.js';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
@@ -123,13 +123,80 @@ for (const [col, [type, value]] of Object.entries(PROBE_ENUMS)) {
   });
 }
 
-test('sondas no destructivas: FK a ids que no existen en la semilla; marcas reconocibles', () => {
+// --- Sin efecto aunque anon tuviera INSERT (A-1 de S-05c-arquitectura) -------
+// audit_log es append-only: una fila creada por una sonda no se podría borrar.
+// Cada sonda debe llevar al menos una violación de restricción que el esquema
+// real garantiza; ningún trigger BEFORE INSERT puede reescribir esa columna.
+const columnLine = (table, column) => {
+  const m = sql.match(new RegExp(`create\\s+table\\s+public\\.${table}\\s*\\(([\\s\\S]*?)\\n\\);`, 'i'));
+  return m?.[1].split('\n').map((l) => l.trim()).find((l) => new RegExp(`^${column}\\s`, 'i').test(l));
+};
+const beforeInsertTriggers = (table) => [...sql.matchAll(
+  new RegExp(`before\\s+insert[^;]*?\\son\\s+public\\.${table}\\b`, 'gi'),
+)];
+
+test('audit_log es append-only en el esquema (por eso ninguna sonda puede crear filas)', () => {
+  assert.match(sql, /create trigger audit_log_append_only\s+before update or delete on public\.audit_log/i);
+});
+
+test('las 4 sondas llevan una violación garantizada', () => {
+  assert.deepEqual(Object.keys(GUARANTEED_VIOLATIONS).sort(), Object.keys(ANON_WRITE_PROBES).sort());
+  for (const [t, vs] of Object.entries(GUARANTEED_VIOLATIONS)) assert.ok(vs.length > 0, `${t} sin violación garantizada`);
+});
+
+test('las sondas ya no llevan filas «válidas» con marca (no hay nada que limpiar)', () => {
+  assert.equal(ANON_WRITE_PROBES.units.name.trim(), '');
+  assert.equal(ANON_WRITE_PROBES.exceptions.reason.trim(), '');
+  assert.equal(ANON_WRITE_PROBES.audit_log.actor, null);
+});
+
+for (const [table, vs] of Object.entries(GUARANTEED_VIOLATIONS)) {
+  for (const v of vs) {
+    test(`sonda ${table}: violación garantizada ${v.kind} en ${v.column}`, () => {
+      const body = ANON_WRITE_PROBES[table];
+      assert.ok(v.column in body, `la sonda no fija ${v.column}`);
+      const line = columnLine(table, v.column);
+      assert.ok(line, `columna ${table}.${v.column} no encontrada en create table`);
+      // Ningún trigger puede reescribir la columna que garantiza el fallo.
+      assert.doesNotMatch(sql, new RegExp(`new\\.${v.column}\\s*:=`, 'i'), `un trigger reescribe new.${v.column}`);
+      if (v.kind === 'not_null') {
+        assert.equal(body[v.column], null);
+        assert.match(line, /not null/i);
+        assert.doesNotMatch(line, /default|serial/i, 'un default rellenaría el null');
+        assert.equal(beforeInsertTriggers(table).length, 0, `trigger BEFORE INSERT en ${table}`);
+      } else if (v.kind === 'blank_check') {
+        assert.equal(typeof body[v.column], 'string');
+        assert.equal(body[v.column].trim(), '', 'debe ser solo espacios');
+        assert.match(line, new RegExp(`check\\s*\\(\\s*length\\s*\\(\\s*trim\\s*\\(\\s*${v.column}\\s*\\)\\s*\\)\\s*>\\s*0\\s*\\)`, 'i'));
+        assert.doesNotMatch(sql, new RegExp(`drop\\s+constraint\\s+(?:if\\s+exists\\s+)?${table}_${v.column}_check\\b`, 'i'), `se borra el CHECK de ${table}.${v.column}`);
+      } else if (v.kind === 'missing_fk') {
+        assert.match(line, new RegExp(`references\\s+${v.references.replace('.', '\\.')}\\s*\\(\\s*id\\s*\\)`, 'i'));
+        // Si la FK se redefine (hardening.sql lo hace con exceptions_unit_id_fkey),
+        // debe volver a crearse sobre la misma columna y tabla.
+        const fk = `${table}_${v.column}_fkey`;
+        const drops = sql.match(new RegExp(`drop\\s+constraint\\s+(?:if\\s+exists\\s+)?${fk}\\b`, 'gi')) ?? [];
+        const readds = sql.match(new RegExp(`add\\s+constraint\\s+${fk}\\s+foreign\\s+key\\s*\\(\\s*${v.column}\\s*\\)\\s*references\\s+${v.references.replace('.', '\\.')}\\s*\\(\\s*id\\s*\\)`, 'gi')) ?? [];
+        assert.ok(readds.length >= drops.length, `${fk} se borra sin recrearse sobre ${v.references}`);
+        assert.match(body[v.column], /^00000000-0000-4000-8000-0000000005e[0-9a-f]$/);
+        assert.ok(!read('supabase/seed.sql').includes(body[v.column]), `${body[v.column]} existe en la semilla`);
+      } else if (v.kind === 'scope_check') {
+        // unit_leader exige unit_id no nulo (user_roles_scope) y la sonda no lo envía.
+        assert.match(sql, new RegExp(`constraint\\s+${v.constraint}\\s+check`, 'i'));
+        assert.match(sql, /when 'unit_leader' then unit_id is not null and indicator_id is null/);
+        assert.equal(body.role, 'unit_leader');
+        assert.ok(!('unit_id' in body));
+      } else {
+        assert.fail(`tipo de violación desconocido: ${v.kind}`);
+      }
+    });
+  }
+}
+
+test('sondas no destructivas: FK a ids que no existen en la semilla', () => {
   const seed = read('supabase/seed.sql');
   for (const id of [MISSING_UNIT, MISSING_USER]) assert.ok(!seed.includes(id), `${id} existe en la semilla`);
   assert.equal(ANON_WRITE_PROBES.exceptions.unit_id, MISSING_UNIT);
   assert.equal(ANON_WRITE_PROBES.user_roles.user_id, MISSING_USER);
-  assert.equal(ANON_WRITE_PROBES.units.name, 's05-fase-b');
-  assert.equal(ANON_WRITE_PROBES.audit_log.action, 's05-fase-b');
 });
 
 test('veredicto estricto: solo 401/403 con 42501 cuenta como denegación por privilegio', () => {
@@ -145,6 +212,8 @@ test('veredicto estricto: solo 401/403 con 42501 cuenta como denegación por pri
   assert.notEqual(privilegeDenialProblem(400, { code: '23502' }), null);
   assert.notEqual(privilegeDenialProblem(201, null), null);
   assert.notEqual(privilegeDenialProblem(400, perm), null);
+  // H-QA-S05c-02: 42501 de RLS no demuestra la falta de GRANT.
+  assert.notEqual(privilegeDenialProblem(401, { code: '42501', message: 'new row violates row-level security policy for table "units"' }), null);
 });
 
 test('fase-b.test.js usa las sondas compartidas y no acepta 400 genérico', () => {
