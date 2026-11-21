@@ -1,9 +1,9 @@
 # F-19 — Informe de arquitectura y salud
-Veredicto: ROJO
+Veredicto: VERDE (intento 2; en el intento 1 fue ROJO por H-ARQ-F19-01)
 Alineado al diseño: sí. El cambio es solo de `scripts/health/lib.js` (salud, dueño SRE), sigue el patrón fail-closed de F-15..F-18 y no toca `engine/`, el modelo de datos ni las reglas de escalada. No duplica lógica: `pickWorkflowCandidate` sustituye la elección inline de `assessWorkflow` y la de `checkWorkflows`, que antes no coincidían.
 Requiere decisión del usuario: no
 ADR creados o actualizados: ninguno. Es una corrección de un hallazgo (H-ARQ-F18-01), no una decisión nueva.
-Salud: CI de `item/F-19` (a4b1f79) **en rojo**: run 44914379298, job `build`, paso `npm run test:unit`. Seguridad en verde (44914379418). En `main`: último `salud.yml` (44881327607, 07:40 UTC) verde con producción activa. `ritmo-diario` ok, `evaluacion-mensual` ok (creado este mes), `correo-alertas` ok (gracia), `deploy-main` ok. No hay issues `salud` abiertos.
+Salud: intento 2: CI 44914838287 y Seguridad 44914838415 en `success` sobre d9b4ab6 (build/lint/unit, pgTAP, e2e, integración, gitleaks, semgrep, DAST, pentest, CodeQL). Intento 1: CI de `item/F-19` (a4b1f79) en rojo: run 44914379298, job `build`, paso `npm run test:unit`. Seguridad en verde (44914379418). En `main`: último `salud.yml` (44881327607, 07:40 UTC) verde con producción activa. `ritmo-diario` ok, `evaluacion-mensual` ok (creado este mes), `correo-alertas` ok (gracia), `deploy-main` ok. No hay issues `salud` abiertos.
 
 ## Verificación contra la API real (2026-11-21)
 - `ritmo-diario.yml` en `main`: 3 runs. El último success es 44864590732 (`workflow_dispatch`, 04:08:17Z → 04:08:31Z, `run_attempt` 1). `/jobs?per_page=100&page=1` devuelve `total_count` 1, y el job 136725307825 trae `run_id` 44864590732, igual al run. El paso se llama exactamente `Evaluar` (`success`). `created_at`, `run_started_at` y `updated_at` cumplen `API_TIME_RE` y `parseApiTime`.
@@ -19,4 +19,7 @@ Salud: CI de `item/F-19` (a4b1f79) **en rojo**: run 44914379298, job `build`, pa
 - **H-ARQ-F19-03 (informativo):** el corte de paginación (`batch.length < 100 || jobs.length >= total`, máximo 5 páginas) está bien. Los workflows vigilados tienen 1 job, así que en la práctica siempre se pide una sola página. No hay alertas de CI intermitentes nuevas.
 - **Runbook:** actualicé `docs/operacion.md`. El párrafo de fechas de «Salud del sistema» ahora describe el comportamiento de F-19 (duración validada, run evaluado compartido, paso requerido presente, paginación) y quita la nota obsoleta de H-ARQ-F18-01. En «Qué hacer ante cada alerta» añadí las alertas nuevas: `paso "<x>" no aparece en el último run`, `sin jobs del último run`, `los jobs recibidos no son del último run` y `duración no verificable`.
 
-El código de `scripts/health/lib.js` queda aprobado tal como está. El veredicto pasa a VERDE en cuanto CI esté en verde tras corregir los fixtures (H-ARQ-F19-01).
+## Intento 2
+- **H-ARQ-F19-01 resuelto** en 736012a (tester). Revisé el diff: no toca `scripts/health/lib.js`, no quita ni relaja ninguna aserción y no cambia ningún `fail` esperado por `ok`. Solo añade jobs con la forma real de la API (`run_id` del run evaluado y paso requerido `success`) donde el caso esperaba `ok`, en `health.test.js`, `qa-c06.test.js`, `qa-f18.test.js` y `qa-v04.test.js`. El `fakeFetch` de punta a punta ahora devuelve por defecto los jobs del run pedido, con `total_count`. Las pruebas que pasan `jobs` explícitamente siguen igual. Además añade `qa-f19.test.js`.
+- H-ARQ-F19-02 y H-ARQ-F19-03 siguen como no bloqueantes.
+- Veredicto: VERDE.
