@@ -253,6 +253,9 @@ const runLink = (r) => (r?.html_url ? ` — ${r.html_url}` : '');
  * - Último completado en failure (o timed_out, startup_failure...): falla, salvo que haya
  *   un run más nuevo pendiente dentro de maxPendingMin (F-13, H-ARQ-F12-02: rojo esperado
  *   H-F11-06): entonces aviso (warn) y decide ese run.
+ *   F-14 (H-F13-01): ese aviso solo vale para un fallo aislado. Si el despliegue completado
+ *   anterior al fallo (sin contar cancelados) tampoco terminó en success, es una cadena de
+ *   fallos y se falla aunque haya un run nuevo pendiente. Ver isolatedFailure.
  * @param {typeof DEPLOY_RULE} rule
  * @param {{ workflow: any, runs: any[], now: Date }} data
  * @returns {Result}
@@ -292,7 +295,9 @@ export function assessDeploy(rule, { workflow, runs, now }) {
       // F-13 (H-ARQ-F12-02): rojo esperado (H-F11-06). Si hay un run más nuevo todavía
       // pendiente y dentro de maxPendingMin, él decide: se avisa sin fallar. Si ese run se
       // atasca (stuck) o termina en fallo, la siguiente corrida sí alerta.
-      const covering = problems.length === 0 ? newerPendingRun(relevant, latest, nowMs, rule.maxPendingMin) : null;
+      // F-14 (H-F13-01): una cadena de fallos no queda oculta por un run pendiente.
+      const covering =
+        problems.length === 0 && isolatedFailure(done, latest) ? newerPendingRun(relevant, latest, nowMs, rule.maxPendingMin) : null;
       if (covering) {
         return result(
           rule.check,
@@ -309,22 +314,63 @@ export function assessDeploy(rule, { workflow, runs, now }) {
 }
 
 /**
+ * F-14 (H-F13-01): ¿el fallo `failed` es aislado? Lo es si el despliegue completado anterior
+ * a él (el siguiente en `done`, que va de más nuevo a más viejo, saltando cancelados) terminó
+ * en success, o si no hay ninguno anterior (primer despliegue o historial fuera de la página).
+ * Si el anterior también falló (failure, timed_out, startup_failure...) es una cadena: false.
+ * Nota: no se usa la antigüedad del fallo como alternativa (sugerencia de H-F13-01), porque
+ * con dos fallos seguidos el más reciente suele tener menos de maxPendingMin y la cadena
+ * volvería a quedar en warn (justo el caso que reproduce el hallazgo).
+ * @param {any[]} done runs completados relevantes, ordenados de más nuevo a más viejo
+ * @param {any} failed el último completado, que no terminó en success
+ * @returns {boolean}
+ */
+export function isolatedFailure(done, failed) {
+  const list = done ?? [];
+  const i = list.indexOf(failed);
+  if (i < 0) return false;
+  const previous = list.slice(i + 1).find((r) => r?.conclusion !== 'cancelled');
+  return !previous || previous.conclusion === 'success';
+}
+
+/** F-14 (H-F13-02): margen para relojes desfasados; un timestamp más allá de now + esto se rechaza. */
+export const FUTURE_SKEW_MIN = 5;
+
+/**
+ * F-14 (H-F13-02): instante en ms de un timestamp de la API, o NaN si no es texto, no se
+ * puede leer o está más de FUTURE_SKEW_MIN minutos en el futuro respecto a nowMs.
+ * (Date.parse acepta no-strings: 12 sería el año 2001; un futuro haría negativa la espera.)
+ * @param {unknown} value
+ * @param {number} nowMs
+ * @returns {number}
+ */
+export function parseApiTime(value, nowMs) {
+  if (typeof value !== 'string' || value.trim() === '') return NaN;
+  const ms = Date.parse(value);
+  if (!Number.isFinite(ms) || !Number.isFinite(nowMs)) return NaN;
+  return ms > nowMs + FUTURE_SKEW_MIN * 60_000 ? NaN : ms;
+}
+
+/**
  * F-13 (H-ARQ-F12-02): run pendiente creado después de `failed` y que aún no supera
  * maxPendingMin, o null.
+ * F-14 (H-F13-02): los timestamps (created_at del fallo y del pendiente, run_started_at del
+ * pendiente) deben ser texto y no estar más de FUTURE_SKEW_MIN min en el futuro; si no, no
+ * cubren. run_started_at vacío o ausente usa created_at, como antes.
  * @param {any[]} runs
  * @param {any} failed
  * @param {number} nowMs
  * @param {number} maxPendingMin
  */
 export function newerPendingRun(runs, failed, nowMs, maxPendingMin) {
-  const failedMs = Date.parse(failed?.created_at);
+  const failedMs = parseApiTime(failed?.created_at, nowMs);
   if (!Number.isFinite(failedMs)) return null;
   return (
     (runs ?? []).find((r) => {
       if (!PENDING_STATUSES.has(r?.status)) return false;
-      const created = Date.parse(r.created_at);
+      const created = parseApiTime(r.created_at, nowMs);
       if (!Number.isFinite(created) || created <= failedMs) return false;
-      const since = Date.parse(r.run_started_at || r.created_at);
+      const since = r.run_started_at ? parseApiTime(r.run_started_at, nowMs) : created;
       return Number.isFinite(since) && (nowMs - since) / 60_000 <= maxPendingMin;
     }) ?? null
   );
