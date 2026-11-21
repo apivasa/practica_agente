@@ -206,6 +206,7 @@ describe('formatAlertEmail resiste inyección', () => {
   test('asunto sin CR/LF, separadores Unicode ni bidi (sin inyección de cabeceras)', () => {
     const evil = 'Alfa\r\nBcc: victima@example.test\r\n\r\n<b>x</b>\u2028X-Hdr: 1\u202eabc\u0000\u0085';
     const { subject, text } = formatAlertEmail({ kind: 'color_change', payload: { unit_name: evil, message: evil, severity: 'high' } });
+    // eslint-disable-next-line no-control-regex -- la prueba busca justamente caracteres de control
     assert.doesNotMatch(subject, /[\r\n\u0000-\u001f\u007f-\u009f\u2028\u2029\u202a-\u202e\u2066-\u2069]/);
     assert.ok(subject.length <= 160);
     assert.ok(subject.startsWith('[Urgente] '));
