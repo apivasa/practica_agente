@@ -23,8 +23,9 @@ const run = (id, { createdMin = -60, durMin = 1, conclusion = 'success', event =
   html_url: `https://github.com/apivasa/practica_agente/actions/runs/${id}`,
   ...extra,
 });
-const jobsWith = (rule, conclusion = 'success', runId) => [
-  { ...(runId === undefined ? {} : { run_id: runId }), steps: [{ name: 'Checkout', conclusion: 'success' }, { name: rule.requiredStep, conclusion }] },
+// F-20 (QA): por defecto, run_id del run candidato (id 1), como lo devuelve la API de GitHub.
+const jobsWith = (rule, conclusion = 'success', runId = 1) => [
+  { id: runId * 100, run_id: runId, status: 'completed', conclusion: 'success', steps: [{ name: 'Checkout', conclusion: 'success' }, { name: rule.requiredStep, conclusion }] },
 ];
 const assess = (rule, runs, jobs, productionEnabled = true) => assessWorkflow(rule, { workflow: WF, runs, jobs, now: NOW, productionEnabled });
 
@@ -88,7 +89,7 @@ describe('H-F18-02: paso requerido del candidato', () => {
       assert.match(r.detail, /sin jobs/);
     });
     test(`${rule.check}: paso requerido ausente (renombrado) → fail`, () => {
-      const r = assess(rule, [run(1)], [{ steps: [{ name: 'Otro nombre', conclusion: 'success' }] }]);
+      const r = assess(rule, [run(1)], [{ id: 100, run_id: 1, status: 'completed', conclusion: 'success', steps: [{ name: 'Otro nombre', conclusion: 'success' }] }]);
       assert.equal(r.status, 'fail');
       assert.match(r.detail, /no aparece/);
     });

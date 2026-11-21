@@ -553,7 +553,10 @@ describe('[H] H-ARQ-C05-01: salud.yml vigila correo-alertas.yml', () => {
   });
 
   test('con producción, el paso «Enviar correos» omitido (falta un secreto) falla', () => {
-    const jobs = [{ steps: [{ name: rule.requiredStep, conclusion: 'skipped' }] }];
-    assert.equal(assessWorkflow(rule, { workflow, runs: [run(2)], jobs, now: at, productionEnabled: true }).status, 'fail');
+    // F-20 (QA): run_id del run candidato (id 7) para que la prueba siga probando el motivo «omitido».
+    const jobs = [{ id: 700, run_id: 7, status: 'completed', conclusion: 'success', steps: [{ name: rule.requiredStep, conclusion: 'skipped' }] }];
+    const r = assessWorkflow(rule, { workflow, runs: [run(2)], jobs, now: at, productionEnabled: true });
+    assert.equal(r.status, 'fail');
+    assert.match(r.detail, /omitido/);
   });
 });
