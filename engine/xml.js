@@ -58,9 +58,13 @@ export function decodeEntities(s) {
  *   { name, attrs, children: (nodo | string)[] }
  * La raíz devuelta es un nodo '#document' cuyo único elemento es el raíz real.
  * @param {string} text
- * @param {{ maxElements?: number, maxDepth?: number }} [limits]
+ * @param {{ maxElements?: number, maxDepth?: number, onClose?: (node: object, stack: object[]) => void }} [limits]
+ *   onClose: se llama al cerrarse cada elemento (también los autocerrados) con
+ *   el nodo y la pila de ancestros (`stack.at(-1)` es el padre). Puede lanzar
+ *   para cortar el análisis o quitar el nodo del padre para liberar memoria
+ *   (V-07b: la hoja se procesa fila a fila y se corta al pasar del tope).
  */
-export function parseXml(text, { maxElements = XML_MAX_ELEMENTS, maxDepth = XML_MAX_DEPTH } = {}) {
+export function parseXml(text, { maxElements = XML_MAX_ELEMENTS, maxDepth = XML_MAX_DEPTH, onClose } = {}) {
   if (typeof text !== 'string') throw new XmlError('XML: el contenido no es texto');
   const n = text.length;
   const doc = { name: '#document', attrs: Object.create(null), children: [] };
@@ -109,6 +113,7 @@ export function parseXml(text, { maxElements = XML_MAX_ELEMENTS, maxDepth = XML_
       const name = text.slice(lt + 2, end).trim();
       const top = stack.pop();
       if (stack.length === 0 || top.name !== name) throw new XmlError('XML mal formado: etiquetas que no cierran en orden');
+      if (onClose) onClose(top, stack);
       i = end + 1;
       continue;
     }
@@ -149,7 +154,7 @@ export function parseXml(text, { maxElements = XML_MAX_ELEMENTS, maxDepth = XML_
     if (!selfClosing) {
       stack.push(node);
       if (stack.length - 1 > maxDepth) throw new XmlError('El archivo es demasiado complejo (anidamiento XML excesivo)');
-    }
+    } else if (onClose) onClose(node, stack);
     i = j + 1;
   }
   if (stack.length !== 1) throw new XmlError('XML mal formado: elementos sin cerrar');

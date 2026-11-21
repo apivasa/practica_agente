@@ -8,8 +8,8 @@
 // - Tope de entradas y nombres repetidos rechazados.
 // - Tope de bytes descomprimidos por entrada, comprobado contra el tamaño
 //   declarado ANTES de descomprimir y contra el real DESPUÉS (el `inflate`
-//   también debe cortar al superar el tope); el tamaño real debe coincidir con
-//   el declarado y el CRC-32 debe cuadrar.
+//   también debe cortar al superar el tope, que es min(tope, tamaño declarado));
+//   el tamaño real debe coincidir con el declarado y el CRC-32 debe cuadrar.
 
 export const ZIP_MAX_ENTRIES = 1000;
 
@@ -125,9 +125,14 @@ export async function readZipEntry(bytes, entry, inflate, maxBytes) {
     out = data.slice();
   } else if (entry.method === 8) {
     if (typeof inflate !== 'function') throw new ZipError('No hay descompresor disponible en este navegador', 'unsupported');
+    // H-V07-01: el tope es el tamaño declarado si es menor: una entrada que
+    // declara 2 KB no se descomprime más allá de 2 KB (+ lo que entregue el
+    // último bloque del descompresor).
+    const cap = Math.min(maxBytes, entry.size);
     try {
-      out = await inflate(data, maxBytes);
+      out = await inflate(data, cap);
     } catch (err) {
+      if (err?.code === 'limit' && cap < maxBytes) throw new ZipError('El archivo Excel está dañado: es demasiado grande al descomprimirlo (supera el tamaño declarado)', 'invalid');
       if (err?.code === 'limit') throw new ZipError('El archivo Excel es demasiado grande al descomprimirlo', 'limit');
       if (err?.code === 'unsupported') throw new ZipError(String(err.message), 'unsupported');
       throw damaged('no se pudo descomprimir');

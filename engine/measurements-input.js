@@ -35,6 +35,9 @@ const FALSE_VALUES = ['no', 'false', '0', 'no cumple'];
 const FORMULA_RE = /^[=+\-@\t\r]/;
 const NUMBER_RE = /^\d+(?:[.,]\d+)?$/;
 const INTEGER_RE = /^\d+$/;
+// Número negativo simple (-5, -0,5): en `valor` se avisa que debe ser ≥ 0 en
+// vez de "posible fórmula" (QA-V07-1). Se sigue rechazando igual.
+const NEGATIVE_NUMBER_RE = /^-\d+(?:[.,]\d+)?$/;
 const APP_ID_RE = /^[A-Za-z0-9][A-Za-z0-9._:/-]{0,99}$/;
 const CATEGORY_MAX = 50;
 
@@ -155,7 +158,11 @@ export function validateMeasurementInput(indicator, fields, ctx = {}) {
   const raw = {};
   for (const k of ['fecha', 'unidad', 'valor', 'app_id', 'cumple', 'categoria', 'tipo']) {
     raw[k] = get(k);
-    if (isFormulaLike(raw[k])) {
+    if (k === 'valor' && NEGATIVE_NUMBER_RE.test(raw[k])) {
+      const what = type === 'cumulative_target' ? 'un entero' : 'un número';
+      err(k, `valor: "${raw[k]}" debe ser ${what} ≥ 0 (no se aceptan negativos ni fórmulas)`);
+      raw[k] = null;
+    } else if (isFormulaLike(raw[k])) {
       err(k, `${k}: la celda empieza con =, +, -, @ o un carácter de control (posible fórmula); no se acepta`);
       raw[k] = null;
     }
