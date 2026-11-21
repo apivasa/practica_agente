@@ -106,7 +106,7 @@ El umbral negociado reemplaza los umbrales generales. No cambia los umbrales por
 
 ## 4. Carga de mediciones
 
-El custodio carga en **Mediciones** (`#/custodio/mediciones`): a mano, de a una, o con un archivo CSV. Solo para los indicadores activos que custodia.
+El custodio carga en **Mediciones** (`#/custodio/mediciones`): a mano, de a una, o con un archivo CSV o Excel `.xlsx` (V-07). Solo para los indicadores activos que custodia.
 
 ### Captura manual
 
@@ -187,6 +187,19 @@ Errores frecuentes (la fila 1 es la cabecera):
 | `cumple: "..." debe ser sí o no` | Valor no reconocido. |
 | `Comillas sin cerrar` | Una comilla doble abierta sin cerrar. |
 | `El archivo supera 1 MB` / `... el máximo es 5000` | Divide el archivo. |
+
+### Excel (.xlsx)
+
+El mismo control acepta un `.xlsx`. Usa las mismas columnas, valores, límites (1 MB, 5000 filas), mensajes y regla de todo o nada que el CSV. Diferencias:
+
+- Se lee solo la primera hoja. La fila 1 es la cabecera.
+- En `fecha` vale una fecha de Excel (sistemas 1900 y 1904) o un texto `AAAA-MM-DD`. La hora se descarta.
+- Fórmulas y errores de Excel se rechazan con fila y columna (`Fila N: Columna C: la celda tiene una fórmula; ...`). Pega solo los valores.
+- No acepta `.xls` antiguos ni libros con contraseña.
+- Requiere Chrome/Edge 103, Firefox 113 o Safari 16.4 o posteriores.
+- El botón **Descargar plantilla Excel (.xlsx)** baja un libro con la cabecera del tipo de medición.
+
+Detalle para el custodio: [manual del custodio](manual-custodio.md). Decisión técnica: [ADR 0018](adr/0018-importacion-excel-sin-dependencias.md).
 
 ## 5. Cómo se decide el color
 
