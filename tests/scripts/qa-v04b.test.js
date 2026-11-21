@@ -6,6 +6,7 @@
 //   [E] "cancelled solo → warning sin fallar"
 //   [F] Decisiones del desarrollador: cancelado tras fallo falla; `waiting` >60 min falla; 20 runs
 //   [G] CLAUDE.md §4 / V-04: mensajes sin secretos (acaban en un issue público)
+//   F-13 criterio 2: failure + run más nuevo pendiente en la ventana → warn (H-ARQ-F12-02)
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtempSync, readFileSync } from 'node:fs';
@@ -61,9 +62,15 @@ describe('QA V-04b assessDeploy: bordes del umbral de 90 min [C][F]', () => {
   test('atascado sin html_url: falla igual', () => {
     assert.equal(assess([r(1, { status: 'in_progress', ageMs: 2 * 60 * MIN, url: false })]).status, 'fail');
   });
-  test('pendiente reciente + último completado success: pasa; + failure: falla', () => {
+  // F-13 (H-ARQ-F12-02, criterio 2): un failure seguido de un run más nuevo pendiente dentro
+  // de maxPendingMin es el rojo esperado (H-F11-06): aviso, no fallo. Si el pendiente es más
+  // viejo que el failure, el failure sigue fallando.
+  test('pendiente reciente + último completado success: pasa; + failure: aviso (F-13); pendiente más viejo que el failure: falla', () => {
     assert.equal(assess([r(1), r(2, { status: 'queued', ageMs: 5 * MIN })]).status, 'ok');
-    assert.equal(assess([r(1, { conclusion: 'failure' }), r(2, { status: 'queued', ageMs: 5 * MIN })]).status, 'fail');
+    const covered = assess([r(1, { conclusion: 'failure' }), r(2, { status: 'queued', ageMs: 5 * MIN })]);
+    assert.equal(covered.status, 'warn');
+    assert.ok(covered.detail.includes(link(1)) && covered.detail.includes(link(2)), covered.detail);
+    assert.equal(assess([r(1, { conclusion: 'failure', ageMs: 5 * MIN }), r(2, { status: 'queued', ageMs: 10 * MIN })]).status, 'fail');
   });
 });
 
@@ -230,5 +237,53 @@ describe('QA V-04b check.js: código de salida [B][E]', () => {
   test('ningún log contiene el token', async () => {
     const o = await runMain([r(1, { conclusion: 'failure' })]);
     assert.ok(!o.lines.join('\n').includes(TOKEN) && !o.summary.includes(TOKEN));
+  });
+  // F-13 criterio 2 (ver describe QA F-13 más abajo): «no abre issue» = código 0 y failures vacío.
+  test('check.js: failure cubierto → código 0, failures vacío (no abre issue) y ::warning::', async () => {
+    const o = await runMain([r(1, { conclusion: 'failure', ageMs: 2 * 60 * MIN }), r(2, { status: 'queued', ageMs: 5 * MIN })]);
+    assert.equal(o.code, 0, o.lines.join('\n'));
+    assert.equal(o.output, 'failures=\n');
+    assert.ok(o.lines.some((l) => l.startsWith('::warning::aviso deploy-main') && l.includes(link(1))), o.lines.join('\n'));
+    assert.match(o.summary, /\| deploy-main \| warn \|/);
+  });
+  test('check.js: el pendiente fuera de la ventana → código 1 y failures=deploy-main (abre issue)', async () => {
+    const o = await runMain([r(1, { conclusion: 'failure', ageMs: 2 * 60 * MIN }), r(2, { status: 'queued', ageMs: (DEPLOY_RULE.maxPendingMin + 1) * MIN })]);
+    assert.equal(o.code, 1);
+    assert.equal(o.output, 'failures=deploy-main\n');
+  });
+});
+
+// F-13 (H-ARQ-F12-02), criterio 2: "un failure de deploy.yml en main seguido de un run más
+// nuevo pendiente dentro de maxPendingMin da warn (no abre issue); fuera de la ventana, o si
+// el nuevo falla, o es más viejo, sí falla". salud.yml abre el issue solo si `failures` no
+// está vacío, así que «no abre issue» = código 0 y failures vacío.
+describe('QA F-13 deploy-main: failure cubierto por un run más nuevo pendiente', () => {
+  const max = DEPLOY_RULE.maxPendingMin;
+  const fail1 = (extra = {}) => r(1, { conclusion: 'failure', ageMs: 2 * 60 * MIN, ...extra });
+
+  test('dentro de la ventana (queued, in_progress, waiting): warn con ambos enlaces', () => {
+    for (const status of ['queued', 'in_progress', 'waiting']) {
+      const res = assess([fail1(), r(2, { status, ageMs: 10 * MIN })]);
+      assert.equal(res.status, 'warn', status);
+      assert.ok(res.detail.includes(link(1)) && res.detail.includes(link(2)), res.detail);
+    }
+  });
+  test('borde: exactamente maxPendingMin todavía es warn; maxPendingMin + 1 s falla', () => {
+    assert.equal(assess([fail1(), r(2, { status: 'in_progress', ageMs: max * MIN })]).status, 'warn');
+    const out = assess([fail1(), r(2, { status: 'in_progress', ageMs: max * MIN + 1000 })]);
+    assert.equal(out.status, 'fail');
+    assert.ok(out.detail.includes(link(1)), 'el fallo original sigue en el detalle');
+  });
+  test('si el nuevo terminó en failure (sin otro pendiente), falla con su enlace', () => {
+    const res = assess([fail1(), r(2, { conclusion: 'failure', ageMs: 10 * MIN })]);
+    assert.equal(res.status, 'fail');
+    assert.ok(res.detail.includes(link(2)));
+  });
+  test('pendiente más viejo que el failure, o con el mismo created_at: falla', () => {
+    assert.equal(assess([fail1({ ageMs: 10 * MIN }), r(2, { status: 'queued', ageMs: 20 * MIN })]).status, 'fail');
+    assert.equal(assess([fail1({ ageMs: 10 * MIN }), r(2, { status: 'queued', ageMs: 10 * MIN })]).status, 'fail');
+  });
+  test('un pendiente de pull_request no cubre el failure de push', () => {
+    assert.equal(assess([fail1({ event: 'push' }), r(2, { status: 'queued', event: 'pull_request', ageMs: 5 * MIN })]).status, 'fail');
   });
 });

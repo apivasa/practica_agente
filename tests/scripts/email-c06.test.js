@@ -19,6 +19,7 @@ import {
   MAX_ATTEMPTS,
 } from '../../scripts/lib/email.js';
 import { createDb } from '../../scripts/lib/db.js';
+import { withExpiredRpc } from './expired-rpc-fake.js';
 
 const KEY = 're_C06TESTKEY_do_not_leak_1234';
 const NOW = new Date('2027-03-10T12:00:00Z');
@@ -51,12 +52,15 @@ const row = (id, unit, recipient, extra = {}) => ({
   ...extra,
 });
 
-/** BD en memoria con el contrato EmailDb completo (C-05 + C-06). */
+/**
+ * BD en memoria con el contrato EmailDb completo (C-05 + C-06 + F-12). F-13 (H-F12-01): la
+ * ruta `expired` solo existe por la RPC atómica; la simulada marca y audita como la real.
+ */
 function fakeDb(alerts, { users = USERS, accessError = null } = {}) {
   const t = { alerts: structuredClone(alerts), audit_log: [] };
   const lookups = [];
   const open = (a) => a.emailed_at === null && a.email_skipped_at === null;
-  return {
+  return withExpiredRpc({
     t,
     lookups,
     async pendingEmailAlerts({ since, maxAttempts }) {
@@ -98,7 +102,7 @@ function fakeDb(alerts, { users = USERS, accessError = null } = {}) {
     async insertAudit(rows) {
       t.audit_log.push(...structuredClone(rows));
     },
-  };
+  });
 }
 
 function fakeResend(respond = () => ({ status: 200, body: { id: 'msg' } })) {

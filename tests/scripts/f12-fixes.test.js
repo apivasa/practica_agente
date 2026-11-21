@@ -11,7 +11,7 @@ import { spawnSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { join } from 'node:path';
-import { sendAlertEmails, EMAIL_ACTOR, MAX_ATTEMPTS } from '../../scripts/lib/email.js';
+import { sendAlertEmails, runEmailStep, EMAIL_ACTOR, MAX_ATTEMPTS } from '../../scripts/lib/email.js';
 import { createDb } from '../../scripts/lib/db.js';
 
 const ROOT = fileURLToPath(new URL('../../', import.meta.url));
@@ -223,13 +223,42 @@ test('H-ARQ-C06-04: sin vencidas no se llama a la RPC', async () => {
   assert.equal(db.calls.rpc.length, 0);
 });
 
-test('H-ARQ-C06-04: sin la RPC (BD simulada de C-06) se mantiene la ruta anterior', async () => {
+// F-13 (H-F12-01, criterio 1): ya no existe la ruta no atómica. Sin la RPC, sendAlertEmails
+// no marca ni audita vencidas por otra vía (registra un error) y runEmailStep falla cerrado.
+test('H-ARQ-C06-04/F-13: sin la RPC no hay ruta anterior: ni markAlertsEmailSkipped ni insertAudit para expired', async () => {
   const db = dbWithRpc({ skipped: [A1] });
   delete db.markAlertsEmailExpired;
   const s = await sendAlertEmails(db, { config: CONFIG, fetchImpl: async () => assert.fail('no envía'), now: () => NOW });
-  assert.equal(s.expired, 1);
-  assert.equal(db.calls.skipped, 1);
-  assert.equal(db.calls.audit, 1);
+  assert.equal(s.expired, 0);
+  assert.equal(db.calls.skipped, 0);
+  assert.equal(db.calls.audit, 0);
+  assert.equal(s.errors.length, 1);
+  assert.match(s.errors[0], /alertas fuera de la ventana: .*markAlertsEmailExpired/);
+});
+
+test('F-13: sin la RPC, runEmailStep termina con código 2 sin leer la BD ni llamar a Resend', async () => {
+  const db = dbWithRpc({ skipped: [A1] });
+  delete db.markAlertsEmailExpired;
+  const touched = [];
+  for (const k of Object.keys(db)) {
+    if (typeof db[k] === 'function') {
+      const f = db[k];
+      db[k] = async (...a) => { touched.push(k); return f(...a); };
+    }
+  }
+  const lines = [];
+  const r = await runEmailStep({
+    env: { RESEND_API_KEY: CONFIG.apiKey, ALERT_EMAIL_FROM: CONFIG.from },
+    fetchImpl: async () => assert.fail('no llama a Resend'),
+    makeDb: async () => db,
+    readSupabaseConfig: () => ({}),
+    log: (l) => lines.push(l),
+    now: () => NOW,
+  });
+  assert.equal(r.code, 2);
+  assert.equal(r.summary, null);
+  assert.deepEqual(touched, []);
+  assert.ok(lines.some((l) => l.startsWith('::error::') && l.includes('markAlertsEmailExpired')), lines.join('\n'));
 });
 
 test('H-ARQ-C06-04: createDb.markAlertsEmailExpired llama a la RPC con los parámetros p_* y devuelve los ids', async () => {
