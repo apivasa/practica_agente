@@ -61,7 +61,7 @@ Tipos de alerta:
 | Ingreso de P0/P1 | Cuando entran P0/P1 nuevas que cambian la meta del trimestre. |
 | Vencimiento de excepción | El día que vence una excepción y cuando ya venció. |
 
-Las alertas solo se ven dentro de la app. No hay correo ni otro canal externo todavía (C-05, espera Q-04). Hoy se generan solo en local: la evaluación programada se activa en producción después del despliegue (V-05).
+Las alertas solo se ven dentro de la app. No hay correo ni otro canal externo todavía (C-05, espera Q-04). Hoy se generan solo en local: la app ya está desplegada, pero la evaluación programada se activa en producción cuando se encienda `EVALUATION_ENABLED` (P-05).
 
 ### Excepciones (`#/comite/excepciones`)
 

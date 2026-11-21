@@ -18,12 +18,12 @@ Lo que existe hoy en `main` y pasó CI:
   - Comité: matriz unidad × indicador con alertas (V-02) y aprobación y revocación de excepciones (C-02).
   - Líder: sus indicadores, color, meta, ritmo, restricciones y alertas (V-01).
 - **Motor** (`engine/`): color (M-01), escalada y excepciones (C-01, C-02), vulnerabilidades: paquete, ritmo y metas (M-05) y color mensual por criticidad, P0/P1 y P2/P3 (M-06).
-- **Evaluación programada y alertas** (C-03, C-04): workflows mensual y diario. Hoy no hacen nada en producción: esperan el despliegue (ver "Workflows").
+- **Evaluación programada y alertas** (C-03, C-04): workflows mensual y diario. Hoy no hacen nada en producción: esperan la variable `EVALUATION_ENABLED = true` (P-05, ver "Workflows").
 - **Seguridad** (S-01 a S-04): pipeline de seguridad, modelo de amenazas, pentest de API y RLS, CSP, anti-framing y DAST con ZAP.
 - **Salud del sistema** (V-04): `salud.yml` corre cada 6 h, revisa la web, Supabase y los workflows programados, y abre o actualiza un issue si algo falla. Ver [`docs/operacion.md`](docs/operacion.md).
-- **Despliegue manual** (V-05): `deploy.yml` aplica migraciones y publica en GitHub Pages solo cuando el usuario lo dispara a mano. La app **todavía no está publicada**. Ver [`docs/despliegue.md`](docs/despliegue.md).
+- **Despliegue continuo** (V-05, V-05b): `deploy.yml` aplica las migraciones y publica en GitHub Pages en cada push a `main` que no sea solo documentación, y también a mano con `confirm` = `desplegar`. La app está publicada en `https://apivasa.github.io/practica_agente/` (primer despliegue de V-05). Ver [`docs/despliegue.md`](docs/despliegue.md).
 
-Todavía **no** existen: la primera publicación en GitHub Pages y las migraciones en Supabase real (el usuario dispara `deploy.yml`), la fase B del pentest previo a producción (S-05, tras el primer despliegue), correo u otro canal externo de alertas (C-05, espera Q-04) y fuentes automáticas de mediciones (V-07, espera Q-02). Ver [`docs/plan-maestro.md`](docs/plan-maestro.md).
+Todavía **no** existen: la evaluación programada activa en producción (espera `EVALUATION_ENABLED`, P-05), la fase B del pentest contra producción (S-05b), correo u otro canal externo de alertas (C-05, espera Q-04) y fuentes automáticas de mediciones (V-07, espera Q-02). Ver [`docs/plan-maestro.md`](docs/plan-maestro.md).
 
 ## Manuales por rol
 
@@ -114,7 +114,7 @@ Las pruebas de `tests/security/api/` se omiten en `test:unit` a propósito. En C
 | `evaluacion-mensual.yml` | Día 1 de cada mes, 06:07 Guayaquil; manual con `as_of` y `reprocess` | Cierra el mes anterior: colores, candados, auditoría y alertas `color_change` y de excepciones. |
 | `ritmo-diario.yml` | Cada día, 06:23 Guayaquil; manual con `as_of` | Ritmo de vulnerabilidades, ingreso de P0/P1 y vencimiento de excepciones. Genera alertas. |
 | `salud.yml` | Cada 6 h (00:41, 06:41, 12:41 y 18:41 UTC); manual | Comprueba Pages, Supabase, los workflows programados y CI de `main`. Si algo falla, abre o comenta un issue con la etiqueta `salud`. Sin producción activa, los checks de Pages y Supabase salen como omitidos. |
-| `deploy.yml` | Solo manual, desde `main`, con `confirm` = `desplegar` | `verify`, `build-pages`, `migrate-plan`, `migrate`, `deploy-pages` y `smoke`. Ver [`docs/despliegue.md`](docs/despliegue.md). |
+| `deploy.yml` | Push a `main` salvo cambios solo en `docs/**` o `*.md`; manual desde `main` con `confirm` = `desplegar` | `verify`, `build-pages`, `migrate-plan`, `migrate`, `deploy-pages` y `smoke`. Ver [`docs/despliegue.md`](docs/despliegue.md). |
 | `lockfile.yml` | Push a `item/**` o `fix/**` que cambie `package.json`; manual (nunca en `main`) | Regenera y sube `package-lock.json` y relanza CI y Seguridad. |
 
 Los jobs que levantan Supabase local (tres en `ci.yml` y tres en `seguridad.yml`) usan `scripts/ci/supabase-start.sh`: si el arranque falla (por ejemplo, puerto ocupado), detiene Supabase, espera 10 s y reintenta, hasta 3 intentos en total. Si se agotan, el job falla con el código del último intento. Detalle en [`docs/operacion.md`](docs/operacion.md).
