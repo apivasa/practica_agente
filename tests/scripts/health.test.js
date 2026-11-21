@@ -61,7 +61,11 @@ function healthyActions() {
   };
 }
 
-const evalJobs = (stepConclusion = 'success') => [{ steps: [{ name: 'Verificar configuración', conclusion: 'success' }, { name: 'Evaluar', conclusion: stepConclusion }] }];
+// F-20 (QA): forma real de GET /actions/runs/{id}/jobs: cada job trae id, run_id del run y sus pasos.
+const evalJobs = (stepConclusion = 'success', runId = 1) => [{
+  id: runId * 100, run_id: runId, status: 'completed', conclusion: 'success',
+  steps: [{ name: 'Verificar configuración', conclusion: 'success' }, { name: 'Evaluar', conclusion: stepConclusion }],
+}];
 
 /**
  * F-19 (QA): jobs como los devuelve la API para el run `runId`: run_id del propio run y el paso
@@ -220,7 +224,7 @@ describe('assessWorkflow (pura)', () => {
     assert.match(r.detail, /terminó en failure/);
   });
   test('runs cancelados no cuentan', () => {
-    const r = assessWorkflow(daily, { ...base, runs: [run(1, { conclusion: 'cancelled' }), run(2, { hours: 3 })], jobs: evalJobs() });
+    const r = assessWorkflow(daily, { ...base, runs: [run(1, { conclusion: 'cancelled' }), run(2, { hours: 3 })], jobs: evalJobs('success', 2) });
     assert.equal(r.status, 'ok');
   });
   test('duración mayor a 5 min: falla', () => {
@@ -328,7 +332,7 @@ test('checkWorkflows consulta los jobs solo con producción activa', async () =>
   const github = {
     getWorkflow: async () => ({ state: 'active', created_at: '2026-11-19T00:00:00Z' }),
     listRuns: async () => [run(1, { hours: 1 })],
-    listJobs: async (id) => (calls.push(id), evalJobs()),
+    listJobs: async (id) => (calls.push(id), evalJobs('success', id)),
   };
   await checkWorkflows({ env: { EVALUATION_ENABLED: 'false' }, github, now: NOW });
   assert.equal(calls.length, 0);
@@ -341,7 +345,10 @@ describe('C-06 regla de correo-alertas', () => {
   const rule = WORKFLOW_RULES.find((r) => r.file === 'correo-alertas.yml');
   const wf = { state: 'active', created_at: '2026-11-19T00:00:00Z' };
   const base = { workflow: wf, now: NOW, productionEnabled: true };
-  const mailJobs = (c = 'success') => [{ steps: [{ name: 'Verificar configuración', conclusion: 'success' }, { name: 'Enviar correos', conclusion: c }] }];
+  const mailJobs = (c = 'success', runId = 1) => [{
+    id: runId * 100, run_id: runId, status: 'completed', conclusion: 'success',
+    steps: [{ name: 'Verificar configuración', conclusion: 'success' }, { name: 'Enviar correos', conclusion: c }],
+  }];
 
   test('fila: exige producción, 30 h, paso "Enviar correos" y 10 min; el archivo y el paso existen', () => {
     assert.ok(rule);
