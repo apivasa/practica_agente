@@ -25,6 +25,9 @@ El orquestador solo escribe aquí cuando algo **de verdad** te necesita (ver reg
 - **P-09 · Clave de Resend para los correos de alerta (C-05).** (1) Crea una cuenta en resend.com y una API key con permiso *Sending access*. (2) Guárdala como secreto `RESEND_API_KEY` en el environment `produccion` de GitHub. (3) Sin dominio propio, Resend solo envía a tu propio correo; para que lleguen a todos los usuarios hay que verificar un dominio en Resend y decirme la dirección remitente (por ejemplo `alertas@tudominio.com`). Mientras no exista el secreto, el envío queda apagado sin romper nada.
   Respuesta:
 
+- **P-10 · Publicar en la web lo nuevo (Excel y correo).** V-07 (#48) y C-05 (#49) ya están en `main`, pero la web sigue con la versión anterior: el despliegue a producción no es automático hasta fusionar V-05b (P-07) y la sesión no tiene permiso para lanzarlo. Lánzalo tú: GitHub → Actions → **Despliegue** → *Run workflow* en `main`, `confirm` = `desplegar`. Aplica la migración aditiva de C-05 (`alerts.emailed_at`, `email_attempts`). Antes de anunciar la plantilla a los custodios, ábrela una vez en Microsoft Excel (solo se probó con LibreOffice). Si prefieres, responde "creada" en P-07 y el despliegue será automático desde entonces.
+  Respuesta:
+
 ### Decisiones de negocio (no bloquean el avance; el sistema usa el valor por defecto indicado)
 
 - **Q-01 · Lógica de disponibilidad, tiempo de ciclo, MTTR, continuidad y observabilidad.** Por defecto: disponibilidad y MTTR y tiempo de ciclo = promedio en ventana de 30 días; continuidad y observabilidad = cobertura (% de aplicaciones que cumplen). Umbrales de ejemplo en semillas.
