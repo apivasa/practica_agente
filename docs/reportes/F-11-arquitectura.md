@@ -1,9 +1,32 @@
 # F-11 — Informe de arquitectura y salud
-Veredicto: ROJO
-Alineado al diseño: sí (stack, orden de jobs del ADR 0015 y motor puro intactos). Lo que falla es operativo: el paso nuevo convierte una carrera inofensiva entre merges en un run rojo, y la comprobación se puede saltar con `rerun-failed-jobs`. Las dos cosas se corrigen dentro del ítem.
+Veredicto: VERDE (intento 2, cabeza ed73630). H-ARQ-F11-01 a 05 están cerrados. Dos rojos de CI impiden fusionar, pero quedan fuera del código del desarrollador: H-ARQ-F11-06 es del tester y H-ARQ-F11-07, de seguridad. Ver «Intento 2».
+Alineado al diseño: sí. Se mantienen el stack, el orden de jobs del ADR 0015 y el motor puro. El único `if:` de la cadena depende de una salida de `verify`, no del evento.
 Requiere decisión del usuario: no
-ADR creados o actualizados: `docs/adr/0015-despliegue-manual-primero.md` (punto 8 nuevo: commit vigente en `main`, una sola lista de «solo documentación», carrera entre merges seguidos, comprobación antes de los efectos, timeouts)
-Salud: el CI de `item/F-11` (e5a34ce) está en **rojo**. Fallan 4 pruebas de `build`: `runEmailStep` («fallos de Resend: ::warning:: y código 0», «errores de la BD: código 1») y `C-05 QA reintentos y errores de Resend` (dos subpruebas). Esas pruebas usan BD falsas sin los métodos de C-06, y el nuevo fail-closed (H-C06-01) las corta con código 2. Seguridad sale en verde en e5a34ce. En `main`, la cabeza 6980452 está en curso y el anterior (3c9d350) salió verde en CI, Seguridad y Despliegue. La suma de timeouts de `deploy.yml` es 25+10+10+15+10+5 = 75 ≤ 90 (`DEPLOY_RULE.maxPendingMin`), y la prueba P3 la fija. El paso nuevo añade unos 30 s en el peor caso (3×10 s) dentro de los 25 min de `verify`.
+ADR creados o actualizados: `docs/adr/0015-despliegue-manual-primero.md`. El punto 8 se escribió en el intento 1. En el intento 2 se detalla la implementación: salida `deploy`, `if` solo en `build-pages`, modo `--strict` en `migrate` y `deploy-pages`, y por qué `migrate-plan` no lo lleva.
+Salud: el CI de `item/F-11` (ed73630) está en **rojo** en dos jobs. (1) En `build` falla 1 de 2874 pruebas: `tests/workflows/deploy.test.js:247`, «ningún paso de la cadena se salta por evento», ve el `if:` nuevo de `build-pages` (H-ARQ-F11-06). (2) En Seguridad, `gitleaks` encuentra la clave ficticia que cita el informe de seguridad en el commit a9fecda (H-ARQ-F11-07). Los demás jobs están en verde: db, integración, CodeQL, semgrep, DAST, pentest, npm audit y pruebas de seguridad. Las 4 pruebas C-05/C-06 del intento 1 ya pasan (H-ARQ-F11-05 cerrado). En `main`, 6980452 salió verde en CI y en Seguridad; acce1f9 está en curso. Los timeouts de `deploy.yml` siguen sumando 75 ≤ 90. El paso `--strict` añade como mucho unos 30 s dentro de `migrate` (15 min) y de `deploy-pages` (10 min).
+
+## Intento 2 (cabeza ed73630)
+
+### Verificación de H-ARQ-F11-01..05
+- **01, cerrado.** Primer intento superado por código: `::warning::`, `deploy=false` y salida 0. Si falta `GITHUB_OUTPUT`, falla cerrado. Un intento > 1 o desconocido da `::error::` y 1. `behind`, `diverged`, `unknown` y la API caída fallan siempre. Solo `build-pages` lleva `if: needs.verify.outputs.deploy == 'true'`, y `migrate-plan`, `migrate`, `deploy-pages` y `smoke` se saltan por `needs`: la conclusión del run es `success`. `workflow_dispatch`, la punta y «solo docs» escriben `deploy=true`. Hay pruebas para cada caso y una que fija el `if` único y la cadena de `needs`. `assessDeploy` da ok a un run `success` con jobs saltados, también con prueba. Revisé que, si `verify` falla, la salida no queda escrita y nada corre.
+- **02, cerrado.** `migrate` y `deploy-pages` hacen checkout sin credenciales persistidas y su segundo paso es `check-main-tip.sh --strict`, antes de `setup-cli` o `deploy-pages`. En `--strict` no se escribe en `$GITHUB_OUTPUT` y un run superado falla siempre. `contents: read` en `deploy-pages` es el permiso mínimo para el checkout y la consulta. No le pongo reparo a que `migrate-plan` no tenga el paso: solo hace un dry-run.
+- **03, cerrado.** El filtro `doc` se aplica a `filename` y también a `previous_filename` cuando existe. Un `previous_filename` que no sea string cuenta como código. Si `files` no es arreglo, pasa de 300 entradas o tiene una entrada sin nombre, el resultado es `unknown` y falla cerrado en cualquier intento.
+- **04, cerrado.** La constante `DOC_PATHS_IGNORE` está comentada con su traducción a predicados. La prueba compara la constante, `paths-ignore` y el número de predicados del filtro.
+- **05, cerrado.** El tester completó las BD falsas (5b44639) y esas pruebas pasan en CI.
+- **`wait-ci.sh`.** Ahora exige `head_sha == $sha` y `event == "push"`, sin valores por defecto: un run sin esos campos no cuenta. Es correcto (H-QA-V05c-03).
+- Ejecuté localmente (node 22) las suites de F-11, la de QA de F-11 y las de seguridad de V-05c y F-11: 229/229 en verde.
+
+### H-ARQ-F11-06 (bloquea el merge; área del tester): una prueba de V-05b contradice H-ARQ-F11-01
+`tests/workflows/deploy.test.js:247` prohíbe cualquier `if:` en `verify`, `build-pages`, `migrate-plan` y `migrate`. La regla que protege (ADR 0015, V-05b) es que ningún job se salte **según el evento**, porque eso volvería a abrir el camino sin confirmación ni puerta de CI. El `if` de `build-pages` lo pedí yo en H-ARQ-F11-01 y no depende del evento. El cambio va en la prueba, no en el workflow, y el desarrollador no puede tocarla (CLAUDE.md §1). Corrección para el tester: en esos cuatro jobs, prohibir los `if:` que nombren `github.event`, `github.event_name`, `inputs.` o `github.ref`, y permitir solo, y exactamente, `if: needs.verify.outputs.deploy == 'true'` en `build-pages`. La prueba H-ARQ-F11-01 de `tests/scripts/f11-fixes.test.js` ya fija que ese es el único `if` de nivel job.
+
+### H-ARQ-F11-07 (bloquea el merge; área de seguridad): gitleaks del historial completo
+La línea 69 de `docs/reportes/F-11-seguridad.md`, en el commit a9fecda, cita literalmente la clave ficticia (`re_TESTKEY_...`) para justificar la entrada de `.gitleaksignore`, y esa cita genera una huella nueva: `a9fecdafc152454404ef864e9e228972f5e81130:docs/reportes/F-11-seguridad.md:generic-api-key:69`. El commit ya está publicado en la rama, así que no se puede reescribir. Corrección para seguridad: añadir esa huella exacta a `.gitleaksignore` con su justificación y, en la punta, reescribir la cita sin el literal (por ejemplo, «la clave ficticia de la línea 178»). Así el informe no vuelve a generar la huella en commits futuros. No es un secreto real.
+
+### Cambios del arquitecto en el intento 2
+- `docs/operacion.md`, caso «Falla `verify`, paso Commit vigente en main». El primer intento superado ahora es un **aviso** con run `success` (ya no hay «mientras tanto»). Un relanzamiento superado da error y no se relanza más. El error de `--strict` en `migrate` o `deploy-pages` tiene su propio procedimiento. Hay un caso nuevo para `unknown` (lista de archivos ausente o truncada), y se mencionan los renombrados y la prueba que ata las dos listas.
+- `docs/adr/0015-despliegue-manual-primero.md`, punto 8: los detalles de implementación descritos arriba.
+
+## Intento 1 (cabeza e5a34ce): veredicto ROJO
 
 ## Hallazgos
 
