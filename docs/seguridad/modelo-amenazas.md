@@ -456,3 +456,10 @@ No abre endpoints ni tablas. Cambia dos decisiones de automatización: `runEmail
 | T-F13-01 | Repudiation | Una capa de BD sin la RPC atómica marca alertas `expired` sin su fila de auditoría (H-F12-01) | Muy bajo | `runEmailStep` devuelve 2 sin enviar ni marcar si `markAlertsEmailExpired` no es función; `sendAlertEmails` sin la RPC no marca y registra el error; sin fallback `markAlertsEmailSkipped + insertAudit` | `tests/security/automation-c06.test.js` › F-13 (fail-closed, valores no función, RPC que falla con secreto) |
 | T-F13-02 | Tampering / Repudiation | El `warn` de `deploy-main` oculta un despliegue fallido real: run nuevo atascado, de otro evento, creado antes del fallo, o con timestamps ilegibles | Bajo | Solo cubre un run de `push`/`workflow_dispatch`, con `created_at` posterior al fallo, pendiente y con `run_started_at` dentro de `maxPendingMin`; cualquier atasco anula el aviso; timestamps que `Date.parse` rechaza → fail; el detalle solo lleva `status`, `conclusion` y `html_url`. Residual: fallos consecutivos tapados si siempre hay un run nuevo pendiente (H-F13-01), y `created_at` futuro o no string coaccionado por `Date.parse` (H-F13-02) | `tests/security/health-deploy-f13.test.js` |
 
+## Superficie nueva (F-14)
+
+No abre endpoints, tablas ni permisos. Endurece el `warn` de `deploy-main` (T-F13-02): `isolatedFailure` limita el aviso a un fallo aislado y `parseApiTime` rechaza timestamps que no son texto o pasan de `now` + `FUTURE_SKEW_MIN` (5 min).
+
+| ID | STRIDE | Amenaza | Riesgo | Control | Prueba |
+|---|---|---|---|---|---|
+| T-F14-01 | Tampering / Repudiation | Una cadena de despliegues fallidos, o un pendiente con timestamps futuros o de tipo raro, deja `deploy-main` en `warn` u `ok` sin abrir issue | Muy bajo | El aviso exige que el anterior completado no cancelado (sin `skipped`/`neutral`) sea `success` o que no haya anterior; `parseApiTime` falla cerrado; entradas nulas → `checkDeploy` da `fail`. Residual: orden y `stuck` con `Date.parse` crudo (H-F14-01) | `tests/security/health-deploy-f14.test.js` |
