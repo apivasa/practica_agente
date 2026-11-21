@@ -154,8 +154,8 @@ El orquestador toma el **primer ítem `Pendiente`** cuyas dependencias estén `H
 | 26s | S-05c | Hecho | 1 | #47 | Confirmado en producción: fase B anónima run 44845769345, 4 tablas → 42501.  H-QA-S05b-01/02: en `tests/security/prod/fase-b.test.js` las sondas de escritura anónima usan columna `name` (400 PGRST204 antes del chequeo de privilegio en exceptions, audit_log, user_roles): usar columnas reales y exigir 401/403/42501; login sin enumeración comparado con cuenta existente en modo roles. Constructor: seguridad |
 | 26t | V-04b | Hecho | 2 | #46 | Reintentos por lint y gitleaks en prueba de seguridad (token ficticio; huellas en `.gitleaksignore`).  H-ARQ-V05b-02: `salud.yml` vigila el último run de `Despliegue` en main (check `deploy-main` en `scripts/health/`) |
 | 26u | V-05c | Pendiente | 0 | | Espera V-05b (P-07).  H-ARQ-V05b-01 / H-V05b-01 / H-V05b-02: en push, `verify` espera a que CI del mismo SHA termine en success (`actions: read`); `{ set +x; }` dentro de `supabase_db_url`. Depende de V-05b |
-| 27 | C-05 | Pendiente | 0 | | Q-04 resuelto: Resend, a cada destinatario. Envío real requiere P-09 (secreto), el código no |
-| 28 | V-07 | Pendiente | 0 | | Q-02 resuelto: importación Excel (.xlsx). Paralelizable con C-05 |
+| 27 | C-05 | En curso | 0 | | Q-04 resuelto: Resend, a cada destinatario. Envío real requiere P-09 (secreto), el código no |
+| 28 | V-07 | En curso | 0 | | Q-02 resuelto: importación Excel (.xlsx). Paralelizable con C-05 |
 
 Estados válidos: `Pendiente`, `En curso`, `En revisión`, `Hecho`, `Bloqueado`.
 
