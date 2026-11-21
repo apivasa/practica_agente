@@ -22,15 +22,14 @@ El orquestador solo escribe aquí cuando algo **de verdad** te necesita (ver reg
 - **P-08 · Antes de dar de alta usuarios reales (ADR 0015, enmienda S-05b).** Faltan: fase B del pentest en modo `roles` (requiere 4 cuentas de prueba ficticias en producción y el secreto `S05_TEST_USERS`), los ajustes del panel de P-07 (4) y que no quede `SUPABASE_SECRET_KEY` a nivel de repositorio. No bloquea el avance del orquestador.
   Respuesta:
 
+- **P-09 · Clave de Resend para los correos de alerta (C-05).** (1) Crea una cuenta en resend.com y una API key con permiso *Sending access*. (2) Guárdala como secreto `RESEND_API_KEY` en el environment `produccion` de GitHub. (3) Sin dominio propio, Resend solo envía a tu propio correo; para que lleguen a todos los usuarios hay que verificar un dominio en Resend y decirme la dirección remitente (por ejemplo `alertas@tudominio.com`). Mientras no exista el secreto, el envío queda apagado sin romper nada.
+  Respuesta:
+
 ### Decisiones de negocio (no bloquean el avance; el sistema usa el valor por defecto indicado)
 
 - **Q-01 · Lógica de disponibilidad, tiempo de ciclo, MTTR, continuidad y observabilidad.** Por defecto: disponibilidad y MTTR y tiempo de ciclo = promedio en ventana de 30 días; continuidad y observabilidad = cobertura (% de aplicaciones que cumplen). Umbrales de ejemplo en semillas.
   Respuesta:
-- **Q-02 · Fuentes automáticas de mediciones.** ¿De qué sistemas vendrían los datos (por ejemplo, herramienta de escaneo, monitoreo, ITSM) y con qué formato? Por defecto: captura manual + CSV.
-  Respuesta:
 - **Q-03 · ¿Amarillo en el mes 2 escala igual que rojo?** Por defecto: no; amarillo en mes 2 mantiene la restricción del mes 1 (no change nuevo). Es configurable.
-  Respuesta:
-- **Q-04 · Canal externo de alertas.** Por defecto: bandeja dentro de la app (los issues de GitHub se descartaron porque el repo es público, ADR 0008 punto 7). Opciones: correo (requiere un proveedor como Resend con su API key), Microsoft Teams (webhook) u otro.
   Respuesta:
 
 - **Q-05 · Confirmar interpretaciones de escalada (ADR 0003).** El diseño no las cubre; el sistema ya las aplica por defecto: (a) la racha de meses fuera de verde se reinicia en cada trimestre; (b) un mes sin evaluar corta la racha; (c) un mes 3 en amarillo tras dos en rojo baja de congelado a restringido; (d) una excepción "arrancar algo urgente" con la unidad congelada no levanta el congelamiento, solo autoriza ese inicio. Responde "ok" o indica cuál cambiar.
@@ -45,6 +44,9 @@ El orquestador solo escribe aquí cuando algo **de verdad** te necesita (ver reg
   Respuesta:
 
 ## Resueltos
+
+- **Q-04 · Canal externo de alertas** — resuelto el 2026-11-20: correo con Resend, a cada destinatario (las mismas alertas de su bandeja). Desbloquea C-05; el secreto queda en P-09.
+- **Q-02 · Fuentes de mediciones** — resuelto el 2026-11-20: por ahora todo llega en un archivo de Excel. V-07 pasa a importación .xlsx.
 
 - **P-03 · GitHub Pages** — resuelto el 2026-11-19. Repo público y Pages activado (verificado por API: `visibility: public`, `has_pages: true`). Fuente elegida por el usuario: GitHub Actions; si el primer `deploy.yml` falla por la fuente, revisar Settings → Pages. URL esperada: `https://apivasa.github.io/practica_agente/`.
 - **P-02 · Proyecto Supabase propio** — resuelto el 2026-11-19. Proyecto `KPIs` (ref `oehtspdtpwdhfhhhkgao`, us-east-2), separado de Café & Tinta. El usuario cargó en GitHub los 6 secretos: `SUPABASE_URL`, `SUPABASE_PROJECT_REF`, `SUPABASE_PUBLISHABLE_KEY`, `SUPABASE_SECRET_KEY`, `SUPABASE_ACCESS_TOKEN`, `SUPABASE_DB_PASSWORD`. Las sesiones de Claude no pueden leer secretos: `deploy.yml` (V-05) debe verificar que existen y fallar con un mensaje claro si falta alguno.

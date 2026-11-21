@@ -29,7 +29,7 @@ No se vigila si alguien trabaja en change (Jira no lo garantiza). Se mide si el 
 4. **Umbrales:** verde, amarillo, rojo; opcionalmente por categoría.
 5. **Frecuencia de evaluación:** ej. mensual.
 6. **Mínimo de muestra:** ej. MTTR solo se evalúa con un número mínimo de incidentes.
-7. **Fuente de datos:** automática o captura manual.
+7. **Fuente de datos:** captura manual, CSV o **archivo Excel (.xlsx)**. Sin integraciones automáticas por ahora (Q-02, 2026-11-20).
 
 ## Caso: vulnerabilidades
 - Seguridad hace triaje y asigna un paquete trimestral por unidad (ej. 2.000), entregado a fines de diciembre / inicios de enero, para resolver enero a marzo.
@@ -50,6 +50,7 @@ El comité puede aprobar excepciones (ej. arrancar algo urgente estando en rojo)
 ## Alertas
 - Destinatarios: líder de unidad y comité de delivery.
 - Disparadores: cambio de color, atraso frente al ritmo esperado, ingreso de P0/P1 que recalcula la meta, vencimiento de excepciones.
+- Canales: bandeja en la app y **correo vía Resend** a cada destinatario (las mismas alertas de su bandeja). Decidido por la usuaria el 2026-11-20 (Q-04).
 
 ## Stack técnico (versión académica)
 - **Front:** web estática publicada en GitHub Pages (URL de GitHub, sin costo).
@@ -72,10 +73,10 @@ El comité puede aprobar excepciones (ej. arrancar algo urgente estando en rojo)
 
 ## Pendientes por definir (ver `docs/pendientes-usuario.md`)
 - Lógica detallada de disponibilidad, tiempo de ciclo, MTTR, continuidad y observabilidad (Q-01).
-- Integraciones con fuentes automáticas y flujo de captura manual (Q-02).
 - Si el color amarillo tiene la misma escalada que rojo en el mes 2 (Q-03).
 
 ## Registro de cambios del diseño
 | Fecha | Cambio | Origen |
 |---|---|---|
 | 2026-11-19 | Copia inicial | Doc del usuario |
+- 2026-11-20: Q-04 → alertas también por correo con Resend, a cada destinatario. Q-02 → las mediciones llegan por archivo Excel (.xlsx); sin fuentes automáticas por ahora.
