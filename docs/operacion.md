@@ -336,6 +336,8 @@ La lectura del .xlsx ocurre entera en el navegador del custodio. No hay workflow
 - **«La celda tiene una fórmula»**: copiar la hoja y usar *Pegar valores*. Las fórmulas se rechazan a propósito.
 - **Fecha incorrecta o «fecha futura»**: en la columna `fecha` un número se lee como fecha de Excel. Si se escribió `20261120` como número, hay que cambiarlo a texto `2026-11-20` o a formato de fecha.
 - **«El archivo Excel es demasiado grande al descomprimirlo» o «tiene demasiadas partes internas»**: el archivo supera los topes de ADR 0018 punto 6. Hay que quitar hojas, imágenes o tablas dinámicas, o exportar a CSV. Si el archivo es legítimo y aun así choca con los topes, se abre un ítem para revisarlos (con revisión de seguridad).
+- **«El archivo Excel está dañado: es demasiado grande al descomprimirlo (supera el tamaño declarado)»** (V-07b): una parte comprimida produce más bytes de los que declara. El descompresor se corta en el tamaño declarado (ADR 0018, actualización V-07b). Puede ser un archivo corrupto o manipulado. Hay que volver a guardarlo desde Excel o exportar a CSV.
+- **«El archivo tiene más de 5001 filas; el máximo es 5000»** (V-07b): la hoja se lee fila a fila y la lectura se corta al pasar del tope, sin analizar el resto. Con exactamente 5001 filas sale el mensaje del CSV («tiene 5001 filas»). Hay que dividir el archivo.
 - Nada se guarda si hay errores (todas o ninguna). Corregir un archivo ya importado sigue el flujo normal de mediciones (M-04).
 
 ## Pendiente de completar
