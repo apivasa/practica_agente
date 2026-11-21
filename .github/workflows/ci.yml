@@ -12,9 +12,13 @@ on:
 permissions:
   contents: read
 
+# V-05c (H-QA-V05c-01, H-ARQ-V05b-08): en main cada commit tiene su propio
+# grupo y nunca se cancela, porque deploy.yml (verify) exige el CI del SHA del
+# merge en success y el commit de docs siguiente no redespliega. En el resto
+# de ramas se cancela el run anterior, como antes.
 concurrency:
-  group: ci-${{ github.ref }}
-  cancel-in-progress: true
+  group: ci-${{ github.ref == 'refs/heads/main' && github.sha || github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 # Acciones fijadas por SHA de commit (H-001); Dependabot propone las subidas.
 # Instalación con --ignore-scripts (H-004): solo esbuild se reconstruye a mano.

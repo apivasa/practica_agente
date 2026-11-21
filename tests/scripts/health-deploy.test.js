@@ -25,11 +25,11 @@ function run(id, { min = 120, status = 'completed', conclusion = 'success', even
 const assess = (runs, workflow = WF) => assessDeploy(DEPLOY_RULE, { workflow, runs, now: NOW });
 
 describe('assessDeploy (pura)', () => {
-  test('regla: deploy.yml, check deploy-main, push y workflow_dispatch, 60 min; fuera de WORKFLOW_RULES', () => {
+  test('regla: deploy.yml, check deploy-main, push y workflow_dispatch, 90 min; fuera de WORKFLOW_RULES', () => {
     assert.equal(DEPLOY_RULE.file, 'deploy.yml');
     assert.equal(DEPLOY_RULE.check, 'deploy-main');
     assert.deepEqual([...DEPLOY_RULE.events], ['push', 'workflow_dispatch']);
-    assert.equal(DEPLOY_RULE.maxPendingMin, 60);
+    assert.equal(DEPLOY_RULE.maxPendingMin, 90);
     assert.ok(!WORKFLOW_RULES.some((r) => r.file === 'deploy.yml'));
   });
 
@@ -84,22 +84,22 @@ describe('assessDeploy (pura)', () => {
     assert.equal(assess([run(1, { min: 300, conclusion: 'failure' }), run(2, { conclusion: 'skipped' })]).status, 'fail');
   });
 
-  test('in_progress, queued o waiting más de 60 min: falla con enlace; menos: pasa', () => {
+  test('in_progress, queued o waiting más de 90 min: falla con enlace; menos: pasa', () => {
     for (const status of ['in_progress', 'queued', 'waiting']) {
-      const r = assess([run(1, { min: 600 }), run(2, { status, min: 61 })]);
+      const r = assess([run(1, { min: 600 }), run(2, { status, min: 91 })]);
       assert.equal(r.status, 'fail', status);
-      assert.match(r.detail, new RegExp(`61 min en ${status} \\(máximo 60\\)`));
+      assert.match(r.detail, new RegExp(`91 min en ${status} \\(máximo 90\\)`));
       assert.ok(r.detail.includes(url(2)));
-      assert.equal(assess([run(1, { min: 600 }), run(2, { status, min: 59 })]).status, 'ok', status);
+      assert.equal(assess([run(1, { min: 600 }), run(2, { status, min: 89 })]).status, 'ok', status);
     }
   });
 
   test('atascado y último cancelado: falla (no se degrada a aviso)', () => {
-    assert.equal(assess([run(1, { conclusion: 'cancelled' }), run(2, { status: 'queued', min: 90 })]).status, 'fail');
+    assert.equal(assess([run(1, { conclusion: 'cancelled' }), run(2, { status: 'queued', min: 120 })]).status, 'fail');
   });
 
   test('atascado y último failure: ambos problemas en el detalle', () => {
-    const r = assess([run(1, { conclusion: 'failure' }), run(2, { status: 'in_progress', min: 90 })]);
+    const r = assess([run(1, { conclusion: 'failure' }), run(2, { status: 'in_progress', min: 120 })]);
     assert.equal(r.status, 'fail');
     assert.ok(r.detail.includes(url(1)) && r.detail.includes(url(2)));
   });

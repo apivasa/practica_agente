@@ -34,8 +34,10 @@ export const WORKFLOW_RULES = Object.freeze([
  * Despliegue (V-04b, H-ARQ-V05b-02): último run de `Despliegue` en main, con disparo
  * `push` o `workflow_dispatch`. Fuera de WORKFLOW_RULES porque no es programado.
  * - maxPendingMin: un run sin terminar (queued, in_progress, waiting...) no puede llevar más.
+ *   90 min (H-ARQ-V05b-09): la suma de timeouts de deploy.yml ronda 75 min desde
+ *   V-05c (verify espera el CI hasta 20 min), y 60 daría falsas alarmas.
  */
-export const DEPLOY_RULE = Object.freeze({ file: 'deploy.yml', check: 'deploy-main', events: Object.freeze(['push', 'workflow_dispatch']), maxPendingMin: 60 });
+export const DEPLOY_RULE = Object.freeze({ file: 'deploy.yml', check: 'deploy-main', events: Object.freeze(['push', 'workflow_dispatch']), maxPendingMin: 90 });
 
 /** @typedef {{ check: string, status: 'ok' | 'fail' | 'skip' | 'warn', detail: string }} Result */
 

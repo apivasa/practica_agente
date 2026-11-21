@@ -107,6 +107,6 @@ Desde M-08 la base de datos también revisa cada medición de un indicador de me
 
 ## Cuándo cuentan tus datos
 
-- La evaluación mensual corre el día 1 a las 06:07 (Guayaquil) y cierra el mes anterior. Carga antes de esa hora. Hoy todavía no corre en producción: espera la activación (P-05).
+- La evaluación mensual corre el día 1 a las 06:07 (Guayaquil) y cierra el mes anterior. Carga antes de esa hora. Hoy todavía no corre en producción: se activa cuando se encienda `EVALUATION_ENABLED` (P-05).
 - Si cargas tarde o corriges un dato, el mes se puede reprocesar a mano (lo hace operación, ver [docs/operacion.md](operacion.md#reprocesar-un-mes)).
 - La gestora ve en su tablero de completitud qué unidades te faltan.

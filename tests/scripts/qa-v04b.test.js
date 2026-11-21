@@ -35,21 +35,21 @@ function r(id, { ageMs = 3 * 60 * MIN, status = 'completed', conclusion = 'succe
 }
 const assess = (runs, workflow = WF) => assessDeploy(DEPLOY_RULE, { workflow, runs, now: NOW });
 
-describe('QA V-04b assessDeploy: bordes del umbral de 60 min [C][F]', () => {
-  test('exactamente 60 min en in_progress: pasa (el criterio dice "más de 60")', () => {
-    assert.equal(assess([r(1, { status: 'in_progress', ageMs: 60 * MIN })]).status, 'ok');
+describe('QA V-04b assessDeploy: bordes del umbral de 90 min [C][F]', () => {
+  test('exactamente 90 min en in_progress: pasa (el criterio dice "más de 90")', () => {
+    assert.equal(assess([r(1, { status: 'in_progress', ageMs: 90 * MIN })]).status, 'ok');
   });
-  test('60 min y 1 s en queued: falla con enlace', () => {
-    const res = assess([r(1, { status: 'queued', ageMs: 60 * MIN + 1000 })]);
+  test('90 min y 1 s en queued: falla con enlace', () => {
+    const res = assess([r(1, { status: 'queued', ageMs: 90 * MIN + 1000 })]);
     assert.equal(res.status, 'fail');
     assert.ok(res.detail.includes(link(1)));
   });
-  test('waiting más de 60 min: falla (decisión del desarrollador)', () => {
-    assert.equal(assess([r(1, { status: 'waiting', ageMs: 90 * MIN })]).status, 'fail');
+  test('waiting más de 90 min: falla (decisión del desarrollador)', () => {
+    assert.equal(assess([r(1, { status: 'waiting', ageMs: 120 * MIN })]).status, 'fail');
   });
   test('run_started_at ausente: usa created_at', () => {
-    assert.equal(assess([r(1, { status: 'queued', ageMs: 61 * MIN, started: undefined })]).status, 'fail');
-    assert.equal(assess([r(2, { status: 'queued', ageMs: 59 * MIN, started: null })]).status, 'ok');
+    assert.equal(assess([r(1, { status: 'queued', ageMs: 91 * MIN, started: undefined })]).status, 'fail');
+    assert.equal(assess([r(2, { status: 'queued', ageMs: 89 * MIN, started: null })]).status, 'ok');
   });
   test('run_started_at reciente prevalece sobre created_at viejo (re-ejecución)', () => {
     assert.equal(assess([r(1, { status: 'in_progress', ageMs: 5 * 60 * MIN, started: ago(10 * MIN) })]).status, 'ok');

@@ -3,12 +3,16 @@ name: Despliegue
 # V-05: aplica las migraciones a Supabase de producción y publica dist/ en
 # GitHub Pages. Procedimiento, verificación y reversión en docs/despliegue.md.
 #
-# El primer despliegue a producción es compuerta del usuario (CLAUDE.md §3):
-# por eso solo se dispara a mano, escribiendo `desplegar` en el input confirm.
-# Tras la primera publicación aprobada, para desplegar en cada merge a main,
-# descomentar el bloque push (y quitar la condición de confirm en verify o
-# aceptar `github.event_name == 'push'`). Ningún job de este workflow lee
-# SUPABASE_SECRET_KEY (H-S05-06): solo la usan los workflows de evaluación.
+# V-05b (ADR 0015 punto 5, fase 2): despliegue continuo en cada push a main
+# (merge de un PR). El disparo manual sigue disponible y exige escribir
+# `desplegar` en el input confirm. En los dos casos `verify` exige la rama
+# main, los secretos, el origen de producción y el registro cerrado.
+# Ningún job de este workflow lee SUPABASE_SECRET_KEY (H-S05-06) ni
+# SUPABASE_ACCESS_TOKEN (H-V05-01): las migraciones van por --db-url al pooler
+# de sesión con la contraseña de la BD (scripts/ci/db-url.sh).
+#
+# V-05c: en push, `verify` espera al CI (ci.yml) del mismo commit y exige
+# success (scripts/ci/wait-ci.sh) antes de build, migraciones y Pages.
 #
 # Orden (ADR 0014): verify → build-pages → migrate-plan → migrate →
 # deploy-pages → smoke. Lo barato y reversible (build, verificación de dist/)
@@ -20,12 +24,19 @@ on:
         description: 'Escribe exactamente "desplegar" para publicar en producción.'
         required: true
         default: ''
-  # push:
-  #   branches: [main]
+  # Los cambios solo de documentación (el candado y el latido de docs/estado.md
+  # se suben a main a menudo) no cambian ni dist/ ni las migraciones.
+  push:
+    branches: [main]
+    paths-ignore:
+      - 'docs/**'
+      - '**/*.md'
 
 permissions:
   contents: read
 
+# Un despliegue en curso nunca se cancela: un db push a medias es peor que
+# esperar. Si llegan varios merges, GitHub deja en cola solo el más reciente.
 concurrency:
   group: despliegue-produccion
   cancel-in-progress: false
@@ -34,25 +45,32 @@ jobs:
   verify:
     name: verificar configuración
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    # V-05c: incluye la espera al CI del commit (tope 20 min en wait-ci.sh).
+    timeout-minutes: 25
     # H-C03-02: los secretos de producción se leen desde el environment
     # `produccion` (regla de ramas de despliegue = main).
     environment: produccion
+    # actions: read solo para consultar el run de CI del mismo commit (V-05c).
     permissions:
       contents: read
+      actions: read
     steps:
+      # GITHUB_EVENT_NAME lo pone el runner. Solo `push` (a main, por el filtro
+      # de on.push) se exime de confirm; cualquier otro evento lo exige.
       - name: Confirmación, rama y secretos
         env:
           CONFIRM: ${{ inputs.confirm }}
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
           SUPABASE_PUBLISHABLE_KEY: ${{ secrets.SUPABASE_PUBLISHABLE_KEY }}
-          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
           SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+          SUPABASE_DB_POOLER_HOST: ${{ vars.SUPABASE_DB_POOLER_HOST }}
         # Solo se comprueba si cada variable está vacía; nunca se imprime su valor.
         run: |
           set -euo pipefail
-          if [ "${CONFIRM}" != "desplegar" ]; then
+          if [ "${GITHUB_EVENT_NAME:-}" = "push" ]; then
+            echo "Despliegue continuo: push a main."
+          elif [ "${CONFIRM}" != "desplegar" ]; then
             echo "::error::Despliegue no confirmado: el input confirm debe valer exactamente 'desplegar'."
             exit 1
           fi
@@ -61,11 +79,20 @@ jobs:
             exit 1
           fi
           missing=()
-          for name in SUPABASE_URL SUPABASE_PROJECT_REF SUPABASE_PUBLISHABLE_KEY SUPABASE_ACCESS_TOKEN SUPABASE_DB_PASSWORD; do
+          for name in SUPABASE_URL SUPABASE_PROJECT_REF SUPABASE_PUBLISHABLE_KEY SUPABASE_DB_PASSWORD; do
             if [ -z "${!name:-}" ]; then missing+=("$name"); fi
           done
           if [ "${#missing[@]}" -gt 0 ]; then
             echo "::error::Faltan secretos de producción: ${missing[*]}. Cárgalos en el environment 'produccion' o en los secretos del repositorio (P-02)."
+            exit 1
+          fi
+          # Host del pooler de sesión (no es secreto): Supabase → Connect → Session pooler.
+          if [ -z "${SUPABASE_DB_POOLER_HOST:-}" ]; then
+            echo "::error::Falta la variable SUPABASE_DB_POOLER_HOST (host del pooler de sesión, p. ej. aws-0-us-east-1.pooler.supabase.com) en el environment 'produccion' o en las variables del repositorio."
+            exit 1
+          fi
+          if ! [[ "${SUPABASE_DB_POOLER_HOST}" =~ ^aws-[0-9]+-[a-z]{2}-[a-z]+-[0-9]+\.pooler\.supabase\.com$ ]]; then
+            echo "::error::SUPABASE_DB_POOLER_HOST no es un host de pooler de Supabase (aws-N-<región>.pooler.supabase.com)."
             exit 1
           fi
           case "${SUPABASE_PUBLISHABLE_KEY}" in
@@ -116,6 +143,15 @@ jobs:
             exit 1
           fi
           echo "Registro de usuarios cerrado (disable_signup = true)."
+      # V-05c (H-ARQ-V05b-01, H-V05b-01, H-V05b-02): en push a main, espera a
+      # que el CI (ci.yml) del mismo SHA termine y exige success antes de
+      # build, migraciones y Pages. Con disparo manual no espera (lo decide
+      # quien confirma). Sin if: por evento: lo decide el script.
+      - name: CI del mismo commit en verde
+        env:
+          GH_TOKEN: ${{ github.token }}
+          HEAD_SHA: ${{ github.sha }}
+        run: bash scripts/ci/wait-ci.sh
 
   build-pages:
     name: build del front
@@ -194,26 +230,24 @@ jobs:
       - uses: supabase/setup-cli@689adcfb80d947100a1eab127289b97d1fb07b13 # v3.2.0
         with:
           version: 3.2.0
-      - name: Vincular proyecto
-        env:
-          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
-          SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
-          SUPABASE_PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
-        run: supabase link --project-ref "$SUPABASE_PROJECT_REF"
-      # CLI 3.x: sin --remote el destino por defecto es el stack local
-      # (127.0.0.1:54322). La contraseña llega por env SUPABASE_DB_PASSWORD.
+      # H-V05-01: sin `supabase link` ni token de cuenta. Cada paso construye
+      # la cadena del pooler (scripts/ci/db-url.sh, enmascarada, nunca impresa)
+      # y la pasa con --db-url: destino remoto explícito, nunca el stack local.
       # H-F03-07: nunca la opción de incluir la semilla. Sin --debug: podría
       # volcar la cadena de conexión.
       - name: Migraciones pendientes (dry-run)
         env:
-          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
           SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+          SUPABASE_PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
+          SUPABASE_DB_POOLER_HOST: ${{ vars.SUPABASE_DB_POOLER_HOST }}
         run: |
           set -euo pipefail
+          . scripts/ci/db-url.sh
+          supabase_db_url
           echo "Migraciones en el repositorio:"
           ls -1 supabase/migrations
           echo "Migraciones que se aplicarán:"
-          supabase db push --remote --dry-run
+          supabase db push --db-url "$SUPABASE_DB_URL" --dry-run
 
   migrate:
     name: migraciones (Supabase)
@@ -230,35 +264,42 @@ jobs:
       - uses: supabase/setup-cli@689adcfb80d947100a1eab127289b97d1fb07b13 # v3.2.0
         with:
           version: 3.2.0
-      - name: Vincular proyecto
-        env:
-          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
-          SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
-          SUPABASE_PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
-        run: supabase link --project-ref "$SUPABASE_PROJECT_REF"
       # H-F03-07: nunca la opción de incluir la semilla (seed.sql tiene cuentas locales con
       # contraseña común). Sin --debug: podría volcar la cadena de conexión.
       # Se repite el dry-run justo antes de aplicar: la aprobación del revisor
       # puede llegar tiempo después de migrate-plan.
       - name: Migraciones pendientes (dry-run)
         env:
-          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
           SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+          SUPABASE_PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
+          SUPABASE_DB_POOLER_HOST: ${{ vars.SUPABASE_DB_POOLER_HOST }}
         run: |
           set -euo pipefail
+          . scripts/ci/db-url.sh
+          supabase_db_url
           echo "Migraciones que se aplicarán:"
-          supabase db push --remote --dry-run
+          supabase db push --db-url "$SUPABASE_DB_URL" --dry-run
       - name: Aplicar migraciones
         env:
-          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
           SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
-        run: supabase db push --remote --yes
+          SUPABASE_PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
+          SUPABASE_DB_POOLER_HOST: ${{ vars.SUPABASE_DB_POOLER_HOST }}
+        run: |
+          set -euo pipefail
+          . scripts/ci/db-url.sh
+          supabase_db_url
+          supabase db push --db-url "$SUPABASE_DB_URL" --yes
       # Evidencia en el log de las migraciones aplicadas (criterio de V-05).
       - name: Migraciones aplicadas
         env:
-          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
           SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
-        run: supabase migration list --remote
+          SUPABASE_PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
+          SUPABASE_DB_POOLER_HOST: ${{ vars.SUPABASE_DB_POOLER_HOST }}
+        run: |
+          set -euo pipefail
+          . scripts/ci/db-url.sh
+          supabase_db_url
+          supabase migration list --db-url "$SUPABASE_DB_URL"
 
   deploy-pages:
     name: publicar en Pages
