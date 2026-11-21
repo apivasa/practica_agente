@@ -28,7 +28,18 @@ Regresión local: `tests/scripts/f14-fixes.test.js`, `health-deploy-f13.test.js`
 
 ## Resultados del pipeline
 
-Run de Seguridad sobre el commit de este informe: ver la sección de runs del PR. Al escribir este informe, los runs sobre 637a7a2 estaban cancelados porque llegó un push más nuevo, y había un run en curso sobre 0db1978: https://github.com/apivasa/practica_agente/actions/runs/44901345436. El job de `tests/security` incluye el archivo nuevo. gitleaks, semgrep, CodeQL, npm audit y ZAP no se ven afectados: no hay dependencias, secretos ni front nuevos.
+Run de Seguridad sobre 2cf70c8, que ya incluye `health-deploy-f14.test.js`: https://github.com/apivasa/practica_agente/actions/runs/44901648291. Los runs anteriores sobre 637a7a2 y e8c0961 se cancelaron porque llegaron pushes más nuevos.
+
+| Paso | Resultado |
+|---|---|
+| pruebas de seguridad (`tests/security`) | success |
+| gitleaks (historial completo) | success |
+| semgrep (JS, secretos, Actions, SQL) | success |
+| CodeQL (actions, javascript-typescript) | success |
+| npm audit (producción) | success |
+| pentest API (PostgREST/Auth, Supabase local) | success |
+| DAST (e2e de seguridad + ZAP baseline) | success |
+| S-05 fases A y B | skipped (no se disparan en este evento) |
 
 ## Hallazgos
 
