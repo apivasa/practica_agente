@@ -228,12 +228,21 @@ function readCell(c, sharedStrings) {
   }
 }
 
-/** Texto de un número de celda, con punto decimal y sin notación científica innecesaria. */
+/**
+ * Texto de un número de celda, con punto decimal y sin notación científica innecesaria.
+ * F-11 (QA V-07b): un negativo que solo se puede escribir con exponente (-1E+21,
+ * -9.99E-8) se expande a decimal ("-1000000000000000000000", "-0.0000001"), para que la
+ * validación común (validateMeasurementInput) lo trate como negativo, "≥ 0", y no como
+ * posible fórmula. Se rechaza igual; el texto escrito a mano en CSV no cambia.
+ * @param {string} raw
+ */
 function numberText(raw) {
   const n = Number(raw);
   if (!Number.isFinite(n)) return raw.trim();
   const s = String(n);
-  return /e/i.test(s) ? raw.trim() : s;
+  if (!/e/i.test(s)) return s;
+  if (n < 0) return n.toLocaleString('en-US', { useGrouping: false, maximumFractionDigits: 20 });
+  return raw.trim();
 }
 
 /**
