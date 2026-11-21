@@ -97,10 +97,19 @@ for (const [k, v] of [['TIP_RETRIES', '0'], ['TIP_RETRIES', '-1'], ['TIP_RETRIES
   });
 }
 
-test('sec check-main-tip: workflow_dispatch se exime sin consultar la API (lo decide quien confirma)', () => {
-  const r = tip({}, { GITHUB_EVENT_NAME: 'workflow_dispatch' });
-  assert.equal(r.code, 0, r.out);
-  assert.equal(r.args, '');
+// F-12 (H-F11-02): el disparo manual ya no se exime; sigue la regla de punta
+// de main igual que push (casos detallados en deploy-f12.test.js).
+test('sec check-main-tip: workflow_dispatch aplica la regla de punta (F-12, H-F11-02)', () => {
+  const ev = { GITHUB_EVENT_NAME: 'workflow_dispatch', GITHUB_RUN_ATTEMPT: '2' };
+  // Sin API simulada: falla cerrado (antes salía 0 sin consultar nada).
+  const down = tip({}, ev);
+  assert.equal(down.code, 1, down.out);
+  assert.match(down.args, /commits\/main/, 'debe consultar la punta de main');
+  // Punta = commit: 0.
+  assert.equal(tip({ [COMMITS]: tipBody(SHA) }, ev).code, 0);
+  // Re-run de un disparo viejo superado por código: 1.
+  const old = tip(newerWith(cmp('ahead', ['src/main.js'])), ev);
+  assert.equal(old.code, 1, old.out);
 });
 
 // ------------------------------------------------- 5 · camino feliz y consultas
