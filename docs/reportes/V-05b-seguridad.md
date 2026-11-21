@@ -139,3 +139,83 @@ Verificado sin hallazgos:
 - **Permisos:** mínimos. `actions: read` solo en `verify`, y ninguna escritura salvo Pages.
 - **Expresiones `${{ }}`:** ninguna en `run:`.
 - **Acciones:** fijadas por SHA (sin cambios).
+
+---
+
+## Intento 2 — Re-revisión de V-05c (SHA 9b4a34a)
+Veredicto: VERDE
+Requiere cambiar alcance: no
+Superficie nueva:
+- `wait-ci.sh` guarda el stderr de `gh` en un temporal y muestra en el log su primera línea saneada (`clean_error`: token → `***`, `::` → `: :`, 200 caracteres).
+- `wait-ci.sh` solo exime `workflow_dispatch`; cualquier otro evento distinto de `push` falla.
+- El filtro jq vuelve a comprobar `head_sha` y `event` en cada run.
+- `ci.yml` agrupa por SHA en `main` y no cancela allí; en las demás ramas sigue agrupando por ref y cancelando.
+- `DEPLOY_RULE.maxPendingMin` sube de 60 a 90 min.
+
+Pruebas de seguridad añadidas: `tests/security/deploy-v05c-2.test.js`, con 48 casos de categoría 5. Ejecutan `wait-ci.sh` con bash y un `gh` falso que escribe stderr hostil byte a byte.
+- **El token no se filtra (9 casos):**
+  - Cinco formas de token en el stderr de un `gh` que falla: normal, con `&` (bash 5.2 tiene `patsub_replacement` activo), con comodines de glob, con barra invertida y con barra. Ninguna aparece en el log y en su lugar sale `***`.
+  - Un token en la segunda línea no se muestra.
+  - Un token pegado al límite de 200 caracteres se enmascara antes del recorte, y no sobrevive ningún prefijo suyo de más de 8 caracteres.
+  - El texto mostrado nunca pasa de 200 caracteres.
+  - Un stderr vacío muestra el texto por defecto.
+- **No se inyectan comandos de workflow (12 casos):**
+  - Payloads probados: `::error::`, `::add-mask::`, `::stop-commands::`, `:::`, `::::`, `\r::error::`, `\r   ::error::`, `\r\n`, comando en la segunda línea, `::group::`/`::endgroup::` y `%0A::debug::`.
+  - Cada línea de la salida se parte como lo hace el runner (`\n`, `\r\n` y `\r` suelto). Ninguna línea que empiece por `::` es ajena a los prefijos del propio script.
+  - Un cuerpo no JSON con comandos y el token no se vuelca al log.
+- **Eventos (14 casos):** con `pull_request`, `pull_request_target`, `schedule`, `workflow_run`, `repository_dispatch`, `release`, `merge_group`, vacío, `PUSH`, `push `, `workflow_dispatch ` y `Workflow_dispatch`, el script sale con 1 sin llamar a `gh`. Solo `workflow_dispatch` exacto sale con 0. Un nombre de evento con salto de línea falla cerrado.
+- **Filtro jq (8 casos):** no cuentan como CI del commit un success con otro `head_sha` ni con `event` `pull_request`, `workflow_dispatch`, `pull_request_target` o `PUSH`. Un success con id mayor de otro SHA o de `pull_request` no tapa el failure real. Tampoco coincide un `head_sha` en mayúsculas o con espacios.
+- **Concurrencia de `ci.yml` (2 casos):** la expresión exacta del grupo y de `cancel-in-progress`. El grupo no depende de `head_ref`, `github.event.*` ni `inputs.*`. Siguen sin estar `pull_request_target` y `workflow_run`, y no hay permisos de escritura.
+- **Umbral de `deploy-main` (3 casos):** `maxPendingMin` cubre la suma de los `timeout-minutes` de `deploy.yml` (75) y no pasa de 120. Un despliegue atascado 91 min falla, con el último terminado en verde y también con un cancelado más reciente.
+
+Valoraciones:
+- **Saneado del error de `gh`:** correcto.
+  - El patrón va entre comillas (`"$GH_TOKEN"`), así que es literal: los comodines no actúan y `&` no se expande en el reemplazo `***`.
+  - Se enmascara antes de recortar.
+  - Solo sale la primera línea.
+  - El `\r` sobrevive, y el runner lo trata como salto de línea. Aun así, ninguna línea nueva puede empezar por `::`: cada pareja `::` se reemplaza de izquierda a derecha por `: :`, y cualquier `::` que quede va precedido de `: `. Es un detalle de endurecimiento (H-V05c-03), no un fallo.
+  - Además, el runner enmascara `github.token` en el log por sí solo; el saneado es una segunda capa.
+- **Filtro jq permisivo con campos ausentes (`.head_sha // $sha`, `.event // "push"`):**
+  - Lo acepto como Info.
+  - La API real siempre trae los dos campos y la consulta ya filtra por `head_sha`, `event=push` y `branch=main`.
+  - Para que falten los campos habría que falsificar la respuesta de `api.github.com`, y con eso cualquier comprobación caería.
+  - No se compara `head_branch`.
+  - Endurecimiento opcional: comparación estricta de los tres campos (H-V05c-02 b).
+  - No fijo el comportamiento permisivo en las pruebas, para no impedir ese endurecimiento.
+- **Concurrencia por SHA en `main`:** no abre superficie.
+  - El grupo de `main` es `ci-<40 hex>` y el de cualquier otra rama o PR es `ci-refs/...`, así que no pueden coincidir. Un PR o un push a `item/**` no puede cancelar el CI de un commit de `main`.
+  - El coste en minutos solo lo controla quien tiene escritura en `main`.
+  - Si llega un tercer run del mismo SHA (por ejemplo, dos `workflow_dispatch`), reemplaza al que está pendiente. Si ese era el de push, el despliegue falla cerrado (Info).
+- **Cambio de 90 a 120 en mi prueba `health-deploy-v04b.test.js`:** válido.
+  - La prueba busca que un cancelado no tape un run atascado por encima del umbral. Con `maxPendingMin: 90` y la comparación estricta `>`, 90 min ya no se considera atascado, así que el caso exigía un valor por encima.
+  - 120 conserva la intención. No se debilitó ninguna aserción: sigue siendo `status === 'fail'`.
+  - Lo refuerzo con los casos de frontera a 91 min y con la cota superior de 120 en `deploy-v05c-2.test.js`.
+- **Exención de solo `workflow_dispatch`:** corrige H-V05c-02 (a).
+
+Resultados del pipeline:
+- **Local:** `tests/security`, `tests/scripts` y `tests/workflows`: 1586 pruebas, 0 fallan. Hay 2 omitidas por falta de `dist/` y 1 `todo` (H-C04-QA-01); las tres son previas y se ejecutan en `seguridad.yml`.
+- **Sobre 9b4a34a:**
+  - Seguridad (gitleaks, semgrep, npm audit, ZAP, pentest RLS/API): success, https://github.com/apivasa/practica_agente/actions/runs/44872300552
+  - CI: success, https://github.com/apivasa/practica_agente/actions/runs/44872300486
+- El run sobre el commit de este informe queda en la rama.
+- No se lanzó nada contra producción.
+
+Hallazgos:
+- **H-V05c-01 · Baja · sigue abierto.**
+  - No hay cambios en `verify`.
+  - El nuevo mensaje de `wait-ci.sh` ante un CI en rojo recomienda relanzar el despliegue de ese commit. Si entretanto entró otro commit con código, eso republica un front anterior.
+  - Corrección sugerida: comprobar la punta de `main` en `verify`, o matizar el mensaje.
+- **H-V05c-02 · Info:** (a) corregido; (b) corregido en parte (ver valoración). Aceptado.
+- **H-V05c-03 · Info · nuevo · aceptado.**
+  - (a) `clean_error` no quita `\r`.
+  - (b) El mensaje de evento no admitido repite `GITHUB_EVENT_NAME`, que lo pone el runner.
+  - (c) Un run pendiente del mismo SHA se reemplaza y el despliegue falla cerrado.
+
+Verificado sin hallazgos:
+- **Fugas:** el token no llega al log desde el error de `gh`.
+- **Inyección:** no se inyectan comandos de workflow.
+- **Eventos:** solo `push` espera y solo `workflow_dispatch` se exime.
+- **Filtro:** no cuentan como CI del commit los runs de otro SHA ni de otro evento.
+- **Concurrencia:** no se puede cancelar desde fuera de `main`.
+- **Umbral:** coherente con los timeouts.
+- **Permisos:** sin cambios, y siguen siendo mínimos.
