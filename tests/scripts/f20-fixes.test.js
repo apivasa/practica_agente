@@ -26,7 +26,8 @@ for (const rule of STEP_RULES) {
       assert.equal(assess(rule, [job(rule, 'success'), job(rule, 'success')]).status, 'ok');
     });
     test('H-F19-01: job sin run_id o con run_id no entero/distinto → fail', () => {
-      const { run_id: _omit, ...noRunId } = job(rule, 'success');
+      const noRunId = job(rule, 'success');
+      delete noRunId.run_id;
       for (const jobs of [[noRunId], [job(rule, 'success', 8)], [job(rule, 'success', '7')], [job(rule, 'success', 7.5)],
         [job(rule, 'success'), job(rule, 'success', 8)], [job(rule, 'success'), null]]) {
         const r = assess(rule, jobs);
