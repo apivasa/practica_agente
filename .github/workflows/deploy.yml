@@ -14,6 +14,9 @@ name: Despliegue
 # V-05c: en push, `verify` espera al CI (ci.yml) del mismo commit y exige
 # success (scripts/ci/wait-ci.sh) antes de build, migraciones y Pages.
 # F-11: y que el commit siga siendo la punta de main (scripts/ci/check-main-tip.sh).
+# Si un merge más nuevo con código lo superó en el primer intento, verify da
+# deploy=false y el run termina en success sin publicar; migrate y deploy-pages
+# repiten la comprobación (--strict) por si se relanzan solo los jobs fallidos.
 #
 # Orden (ADR 0014): verify → build-pages → migrate-plan → migrate →
 # deploy-pages → smoke. Lo barato y reversible (build, verificación de dist/)
@@ -55,6 +58,11 @@ jobs:
     permissions:
       contents: read
       actions: read
+    # F-11 (H-ARQ-F11-01): 'false' si un merge más nuevo con código superó a
+    # este run en su primer intento; build-pages y los siguientes se saltan y
+    # el run termina en success sin publicar.
+    outputs:
+      deploy: ${{ steps.tip.outputs.deploy }}
     steps:
       # GITHUB_EVENT_NAME lo pone el runner. Solo `push` (a main, por el filtro
       # de on.push) se exime de confirm; cualquier otro evento lo exige.
@@ -157,7 +165,9 @@ jobs:
       # main (o solo seguirlo commits de documentación): un Re-run de un run
       # viejo no republica un front ni migra desde un commit anterior. Con
       # disparo manual no aplica. Sin if: por evento: lo decide el script.
+      # Si lo superó un merge más nuevo en el primer intento: deploy=false.
       - name: Commit vigente en main
+        id: tip
         env:
           GH_TOKEN: ${{ github.token }}
           HEAD_SHA: ${{ github.sha }}
@@ -166,6 +176,9 @@ jobs:
   build-pages:
     name: build del front
     needs: verify
+    # F-11 (H-ARQ-F11-01): única condición de la cadena; migrate-plan, migrate,
+    # deploy-pages y smoke se saltan con él. No depende del evento.
+    if: needs.verify.outputs.deploy == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     environment: produccion
@@ -271,6 +284,13 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+      # F-11 (H-ARQ-F11-02): rerun-failed-jobs no repite verify. Antes de
+      # cualquier efecto se vuelve a comprobar la punta; superado = falla.
+      - name: Commit vigente en main
+        env:
+          GH_TOKEN: ${{ github.token }}
+          HEAD_SHA: ${{ github.sha }}
+        run: bash scripts/ci/check-main-tip.sh --strict
       - uses: supabase/setup-cli@689adcfb80d947100a1eab127289b97d1fb07b13 # v3.2.0
         with:
           version: 3.2.0
@@ -319,12 +339,24 @@ jobs:
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
+    # contents: read solo para el checkout y la comprobación de la punta.
     permissions:
+      contents: read
       pages: write
       id-token: write
     outputs:
       page_url: ${{ steps.deployment.outputs.page_url }}
     steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      # F-11 (H-ARQ-F11-02): un rerun-failed-jobs de un run viejo nunca publica
+      # si ya entró un commit más nuevo con código.
+      - name: Commit vigente en main
+        env:
+          GH_TOKEN: ${{ github.token }}
+          HEAD_SHA: ${{ github.sha }}
+        run: bash scripts/ci/check-main-tip.sh --strict
       - id: deployment
         uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346 # v5.0.1
 

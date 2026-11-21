@@ -62,12 +62,12 @@ fi
 url="repos/${repo}/actions/runs?head_sha=${sha}&event=push&branch=main&per_page=100"
 # Último run (id mayor) de ci.yml para ese commit: "id status conclusion".
 # La ruta puede venir como ".github/workflows/ci.yml" o con sufijo "@ref".
-# Defensa en profundidad (H-V05c-02): aunque la consulta ya filtra, se
-# descarta cualquier run cuyo head_sha o event no sean los esperados. La API
-# real siempre trae los dos campos.
+# Defensa en profundidad (H-V05c-02, H-QA-V05c-03): aunque la consulta ya
+# filtra, se descarta cualquier run cuyo head_sha o event no sean exactamente
+# los esperados; un run sin esos campos no cuenta.
 filter='[.workflow_runs[]?
     | select(.path == $p or (.path | startswith($p + "@")))
-    | select((.head_sha // $sha) == $sha and (.event // "push") == "push")]
+    | select(.head_sha == $sha and .event == "push")]
   | sort_by(.id) | last
   | if . == null then "" else "\(.id) \(.status) \(.conclusion // "none")" end'
 
