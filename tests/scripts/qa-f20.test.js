@@ -82,7 +82,8 @@ for (const rule of STEP_RULES) {
       }
     });
     test('(1) candidate sin id → fail', () => {
-      const { id: _omit, ...noId } = run();
+      const noId = run();
+      delete noId.id;
       const r = assess(rule, [job(rule)], { runs: [noId] });
       assert.equal(r.status, 'fail');
       assert.match(r.detail, /id verificable/);
