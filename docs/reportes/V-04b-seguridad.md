@@ -14,6 +14,14 @@ Resultados locales: `node --test 'tests/security/*.test.js' 'tests/scripts/*.tes
 
 Resultados del pipeline: gitleaks · semgrep · npm audit · ZAP · pentest RLS/API corren en `seguridad.yml` sobre el PR de `item/V-04b`. El ítem no toca BD, front ni dependencias: el riesgo para esos jobs es nulo y la revisión de este informe se basa en las pruebas locales anteriores.
 
+Intento 1 en CI (commit 743f2cc): la prueba de esta revisión rompió dos jobs; ambos se corrigieron sin desactivar nada.
+- Lint `no-regex-spaces` en cuatro regex de `health-deploy-v04b.test.js`: los espacios repetidos se escriben ahora como ` {n}`. El significado de las regex no cambia y los 28 casos siguen pasando.
+- gitleaks `generic-api-key` (job 136658634246) en `const TOKEN = 'ghs_SECRETO_DE_PRUEBA_V04b_0123456789'`.
+  - Es un valor ficticio que escribió el propio agente de seguridad para comprobar que el token no se filtra. No es un token real de GitHub: los `ghs_` reales tienen 36 caracteres alfanuméricos aleatorios, sin guiones bajos ni palabras, y este nunca se usó contra la API, porque la prueba corre con `fetch` simulado.
+  - Se reemplazó por `ghs_tokenficticioseguridad`, de baja entropía, que sigue el patrón de `tests/scripts/qa-v04b.test.js`.
+  - El commit 5743e00 ya está publicado en la rama y no se reescribe historia, así que su huella exacta se añadió a `.gitleaksignore`: `5743e0083ae926ca09a0e74e1a55b1b181a6f4a6:tests/security/health-deploy-v04b.test.js:generic-api-key:18`. Es una sola huella, de un commit y una línea, y la regla sigue activa para todo lo demás.
+  - Con el merge squash ese commit no llega a `main`.
+
 Hallazgos:
 - H-V04b-01 · Baja · 5 · `scripts/health/check.js:47` y `assessDeploy` en `scripts/health/lib.js`: el detalle se imprime sin quitar CR/LF ni `::`. Con un `conclusion` o `html_url` simulado que traiga `\n::error::x`, la línea inyectada llega al log como comando de workflow. Hoy no es explotable porque GitHub genera esos campos (valores enumerados y URL con id numérico) y los campos que controla un atacante no se usan. Corrección sugerida: sanear `detail` en `result()` (CR/LF → espacio, neutralizar `::` y `%`) y validar `html_url` contra `^https://github\.com/<owner>/<repo>/actions/runs/\d+$`. Registrado en `docs/seguridad/hallazgos.md`.
 

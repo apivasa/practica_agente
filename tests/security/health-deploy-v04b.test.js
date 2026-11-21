@@ -15,7 +15,7 @@ import { main } from '../../scripts/health/check.js';
 const ROOT = new URL('../../', import.meta.url);
 const NOW = new Date('2027-03-10T15:00:00Z');
 const WF = { state: 'active', created_at: '2026-11-19T00:00:00Z' };
-const TOKEN = 'ghs_SECRETO_DE_PRUEBA_V04b_0123456789';
+const TOKEN = 'ghs_tokenficticioseguridad';
 const minAgo = (m) => new Date(NOW.getTime() - m * 60_000).toISOString();
 const PAYLOAD = 'x\n::error::INYECTADO\n%0A::add-mask::y | ](javascript:alert(1)) <img src=x onerror=alert(1)>';
 
@@ -168,12 +168,12 @@ describe('cat. 5 · permisos de salud.yml', () => {
     return m[1];
   };
   const perms = (block) => {
-    const m = block.match(/\n    permissions:\n((?:      [\w-]+: \w+\n)+)/);
+    const m = block.match(/\n {4}permissions:\n((?: {6}[\w-]+: \w+\n)+)/);
     assert.ok(m, 'permissions explícitos en el job');
     return Object.fromEntries(m[1].trim().split('\n').map((l) => l.trim().split(/:\s*/)));
   };
   test('raíz: solo contents: read', () => {
-    assert.match(yml, /\npermissions:\n  contents: read\n\n/);
+    assert.match(yml, /\npermissions:\n {2}contents: read\n\n/);
   });
   test('check: contents y actions en lectura, nada más (deploy-main no requiere más)', () => {
     assert.deepEqual(perms(job('check')), { contents: 'read', actions: 'read' });
@@ -184,10 +184,10 @@ describe('cat. 5 · permisos de salud.yml', () => {
   test('sin pull_request_target ni clave secreta de Supabase; disparos solo schedule y dispatch', () => {
     assert.ok(!/pull_request/.test(yml));
     assert.ok(!/SUPABASE_SECRET_KEY|sb_secret_/.test(yml));
-    assert.match(yml, /\non:\n  schedule:\n[\s\S]*?\n  workflow_dispatch:\n\npermissions:/);
+    assert.match(yml, /\non:\n {2}schedule:\n[\s\S]*?\n {2}workflow_dispatch:\n\npermissions:/);
   });
   test('el job alert no recibe detalles: solo FAILURES y RUN_URL además del token', () => {
-    const envBlock = job('alert').match(/\n        env:\n((?:          .+\n)+)/)[1];
+    const envBlock = job('alert').match(/\n {8}env:\n((?: {10}.+\n)+)/)[1];
     const keys = envBlock.trim().split('\n').map((l) => l.trim().split(':')[0]).sort();
     assert.deepEqual(keys, ['FAILURES', 'GITHUB_TOKEN', 'RUN_URL']);
   });
