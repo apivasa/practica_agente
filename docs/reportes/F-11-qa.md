@@ -1,8 +1,54 @@
 # F-11 — Informe QA
 
-Veredicto: **ROJO** (dos hallazgos bajos en el punto 1; los demás puntos se cumplen)
+Veredicto: **VERDE** (intento 2; QA-F11-01, QA-F11-02 y QA-F11-03 cerrados)
 
-Rama: `item/F-11` · commit revisado: `e5a34ce`
+Rama: `item/F-11` · commit revisado: `ed73630` (intento 2) · intento 1: `e5a34ce` (ROJO)
+
+## Intento 2
+
+### Criterio de aceptación
+
+| # | Punto | Estado |
+|---|---|---|
+| 1 | H-V05c-01: punta de main en `verify`, salvo que lo posterior sea solo docs | **Cumplido.** Vuelvo a probar los dos bordes del intento 1: un renombrado `src/x.js → docs/x.md` cuenta como código (QA-F11-01) y un compare sin `files`, o con `files` que no es arreglo, falla cerrado (QA-F11-02). La carrera de dos merges seguidos (H-ARQ-F11-01) se resuelve así: si un merge más nuevo con código supera al run en su primer intento, `verify` emite `::warning::`, escribe exactamente `deploy=false`, sale con 0 y el run termina en verde sin publicar. Con `GITHUB_RUN_ATTEMPT` igual a `2`, `3`, vacío, `01`, `1 ` o `abc`, sale con `::error::` y 1 y no escribe `deploy=`. Con lista truncada, sin `files`, `behind`, `diverged` o la API caída, falla aunque sea el intento 1: esos casos no se tratan como la carrera prevista. Sin `GITHUB_OUTPUT`, también falla. Con la punta exacta, con solo docs detrás o con `workflow_dispatch`, escribe una sola línea `deploy=true`. `--strict` en `migrate` y `deploy-pages` (H-ARQ-F11-02, cierra QA-F11-03): si el run está superado, falla también en el intento 1 y nunca escribe en `GITHUB_OUTPUT`. Corre antes de `setup-cli` y antes de `actions/deploy-pages`. Un argumento desconocido o de más falla sin consultar la API. |
+| 2 | H-V05c-03a: `clean_error` quita `\r` | **Cumplido** (sin cambios desde el intento 1). Además, el filtro de `wait-ci.sh` ya no cuenta un run sin `head_sha` o sin `event`, ni uno con `head_sha` nulo, de otro commit o con `event` `pull_request`. |
+| 3 | H-C06-01: fail-closed | **Cumplido** (sin cambios). |
+| 4 | P3: suma de timeouts ≤ `maxPendingMin` | **Cumplido** (75 ≤ 90; los jobs no cambiaron de timeout). |
+| 5 | QA V-07b: negativo en notación científica | **Cumplido** (sin cambios). |
+
+### Prueba propia ajustada
+
+`tests/workflows/deploy.test.js` tenía la prueba «ningún paso de la cadena se salta por evento». Prohibía todo `if:` en `verify`, `build-pages`, `migrate-plan` y `migrate`, y chocaba con el `if:` que pidió arquitectura (H-ARQ-F11-01). La intención se mantiene y la prueba queda más estricta que antes:
+
+- Ahora recorre **todos** los jobs (antes eran 4) y mira los `if:` de job y de paso.
+- Solo admite un `if:` en `build-pages`, a nivel de job y con el texto exacto `if: needs.verify.outputs.deploy == 'true'`.
+- Ningún `if:` puede depender de `github.event*`, `github.run_attempt`, `github.ref` ni `github.actor`.
+
+### Pruebas añadidas (intento 2)
+
+- `tests/scripts/qa-f11.test.js`: 26 casos nuevos, 59 en total.
+  - [P1-a] carrera de merges y salida `deploy` (16 casos).
+  - [P1-b] `--strict` (4 casos).
+  - [P1-c] filtro estricto de `wait-ci.sh` (6 casos).
+  - `withFakeGh` acepta ahora argumentos para el script.
+- `tests/workflows/deploy.test.js`: 1 caso reescrito (el descrito arriba).
+
+### Resultado local
+
+`npm run test:unit`: 2900 pruebas, 2897 pasan y ninguna falla. Hay 2 omitidas (pentest-api sin Supabase local; corren en `seguridad.yml`) y 1 `TODO` previo y conocido (H-C04-QA-01). CI: ver los runs de la cabeza de `item/F-11` tras este commit.
+
+### Cobertura engine/ (intento 2)
+
+Líneas: 100 % en todos los archivos menos `commitment.js` (99,35 %). La meta es ≥ 95 %.
+
+### Hallazgos (intento 2)
+
+- Ninguno bloqueante. QA-F11-01, QA-F11-02 y QA-F11-03 quedan cerrados.
+- **Informativo:** con `deploy=false` el run aparece en verde aunque no publicó. Lo indica el `::warning::` de `verify` y los jobs aparecen como saltados. El arquitecto lo aceptó (H-ARQ-F11-01) y la salud lo trata como `ok`.
+
+---
+
+## Intento 1 (histórico)
 
 ## Criterio de aceptación
 
