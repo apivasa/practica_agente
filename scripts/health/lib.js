@@ -133,7 +133,10 @@ export function assessWorkflow(rule, { workflow, runs, jobs = [], now, productio
     .filter((r) => !rule.event || r.event === rule.event)
     .sort((a, b) => Date.parse(b.created_at) - Date.parse(a.created_at));
   const nowMs = now.getTime();
-  const createdMs = Date.parse(workflow.created_at ?? '') || 0;
+  // F-17 (H-ARQ-F16-03): misma validación que los runs de despliegue. Inválida o futura → 0
+  // (época), que es fail-closed: no cuenta como «reciente» ni como «creado este mes».
+  const parsedCreated = parseApiTime(workflow.created_at, nowMs);
+  const createdMs = Number.isFinite(parsedCreated) ? parsedCreated : 0;
 
   let candidate = done[0];
   if (rule.monthly) {
@@ -256,9 +259,12 @@ const runLink = (r) => (r?.html_url ? ` — ${r.html_url}` : '');
  *   F-14 (H-F13-01): ese aviso solo vale para un fallo aislado. Si el despliegue completado
  *   anterior al fallo (sin contar cancelados) tampoco terminó en success, es una cadena de
  *   fallos y se falla aunque haya un run nuevo pendiente. Ver isolatedFailure.
- * - F-15 (H-F14-01): un run completado con fecha inválida o futura (ver parseApiTime) hace
- *   fallar el check: no se puede saber si es el más reciente. Los pendientes con fecha
- *   inválida se descartan (ni cubren ni cuentan como atascados).
+ * - F-15 (H-F14-01): un run completado con created_at inválido o futuro (ver parseApiTime)
+ *   hace fallar el check: no se puede saber si es el más reciente. Un pendiente con
+ *   created_at inválido se descarta (ni cubre ni cuenta como atascado). F-16 (H-F15-03): si
+ *   solo su run_started_at es inválido, se conserva y el atasco se mide con created_at.
+ * - F-16/F-17: con el mismo created_at el orden lo fija compareSameTime (id desc; sin id
+ *   entero, fail-closed).
  * @param {typeof DEPLOY_RULE} rule
  * @param {{ workflow: any, runs: any[], now: Date }} data
  * @returns {Result}
@@ -273,13 +279,13 @@ export function assessDeploy(rule, { workflow, runs, now }) {
   // en el futuro). Los runs con fecha inválida o futura no se ordenan con los demás.
   // - Completado (no omitido) con created_at inválido: podría ser el más reciente y decidir
   //   el resultado, así que no se puede dar ok ni warn: problema → fail.
-  // - Pendiente con created_at o run_started_at inválido: se descarta. No puede dar ok por sí
-  //   solo, no cubre un fallo (newerPendingRun ya lo rechaza) y no cuenta como atascado (lado
-  //   seguro; lo exige qa-v04b «sin fechas válidas: no se considera atascado ni lanza»).
-  //   F-16 (H-F15-03): si solo run_started_at es ilegible o futuro y created_at es válido, el
-  //   pendiente se conserva y el atasco se mide con created_at (newerPendingRun sigue sin
-  //   dejar que cubra un fallo).
-  // - F-16 (H-F15-02): con el mismo created_at, desempata el id numérico (mayor = más reciente).
+  // - Pendiente con created_at inválido: se descarta. No puede dar ok por sí solo, no cubre un
+  //   fallo (newerPendingRun ya lo rechaza) y no cuenta como atascado (lado seguro; lo exige
+  //   qa-v04b «sin fechas válidas: no se considera atascado ni lanza»).
+  // - F-16 (H-F15-03): pendiente con created_at válido y run_started_at ilegible o futuro: se
+  //   conserva y el atasco se mide con created_at (sinceOf); newerPendingRun sigue sin dejar
+  //   que cubra un fallo.
+  // - F-16 (H-F15-02) / F-17 (H-F16-01): con el mismo created_at decide compareSameTime.
   const relevantAll = (runs ?? []).filter((r) => rule.events.includes(r?.event));
   const timeOf = (r) => parseApiTime(r.created_at, nowMs);
   const sinceOf = (r) => {
@@ -288,7 +294,7 @@ export function assessDeploy(rule, { workflow, runs, now }) {
   };
   const validTimes = (r) => Number.isFinite(timeOf(r));
   const invalid = relevantAll.filter((r) => !validTimes(r) && r.status === 'completed' && !IGNORED_CONCLUSIONS.has(r.conclusion));
-  const relevant = relevantAll.filter(validTimes).sort((a, b) => timeOf(b) - timeOf(a) || compareIdDesc(a, b));
+  const relevant = relevantAll.filter(validTimes).sort((a, b) => timeOf(b) - timeOf(a) || compareSameTime(a, b));
 
   const problems = [];
   if (invalid.length > 0) {
@@ -355,13 +361,34 @@ export function isolatedFailure(done, failed) {
 }
 
 /**
- * F-16 (H-F15-02): orden por id numérico descendente (mayor = más reciente). Si alguno no
- * tiene id entero, empate (0): se conserva el orden de entrada.
+ * F-16 (H-F15-02) / F-17 (H-F16-01): orden entre runs con el mismo created_at. Es un orden
+ * lexicográfico por una clave fija, así que es total y transitivo, y el resultado no depende
+ * del orden de entrada. Clave (ascendente = va antes = se trata como más reciente):
+ *   1. rango 0: sin id entero seguro y no success (failure, cancelled, pendiente...);
+ *      rango 1: con id entero seguro (Number.isSafeInteger);
+ *      rango 2: sin id entero seguro y success.
+ *   2. rango 1: id descendente (mayor = más reciente, como da la API).
+ *      rangos 0 y 2: conclusion y luego String(id), solo para que el orden sea determinista.
+ * Fail-closed: si el id no permite saber cuál es más reciente, un run no-success empatado
+ * nunca queda detrás de un success, así que el empate no puede dar ok.
  */
-function compareIdDesc(a, b) {
-  const ia = a?.id;
-  const ib = b?.id;
-  return Number.isSafeInteger(ia) && Number.isSafeInteger(ib) ? ib - ia : 0;
+function compareSameTime(a, b) {
+  const ra = sameTimeRank(a);
+  const rb = sameTimeRank(b);
+  if (ra !== rb) return ra - rb;
+  if (ra === 1) return b.id - a.id;
+  return cmpText(a?.conclusion, b?.conclusion) || cmpText(a?.id, b?.id);
+}
+
+function sameTimeRank(r) {
+  if (Number.isSafeInteger(r?.id)) return 1;
+  return r?.conclusion === 'success' ? 2 : 0;
+}
+
+function cmpText(x, y) {
+  const a = String(x ?? '');
+  const b = String(y ?? '');
+  return a < b ? -1 : a > b ? 1 : 0;
 }
 
 /**
