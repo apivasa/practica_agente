@@ -32,6 +32,28 @@ Verificación manual de los puntos de impresión de `scripts/health/` (completa)
 - `issue.js:11`: número saneado.
 - El cuerpo del issue (`issueBody`) ya filtraba los checks con `^[a-z0-9-]{1,40}$` y `RUN_URL` con una regex anclada de URL de run. No cambia.
 
+Reintento 1 (commit 2591cfc, punta revisada 0ff2fcb). Si el valor supera 300 y termina en ` — <enlace>`, `sanitizeLogValue` conserva el enlace completo. Lo hace solo si se cumplen todas estas condiciones:
+- El enlace es `https:` válido según `new URL`.
+- No tiene ningún carácter de espacio (`trim`) ni de control (C0, DEL, C1 con NEL, U+2028/2029).
+- Quedan al menos 20 caracteres de texto previo.
+
+Revisión:
+- El texto previo sale de los caracteres ya saneados y el enlace se valida sobre el valor crudo. Cualquier control en el enlace lo descarta y se aplica el recorte normal sobre el valor saneado, así que la rama nueva nunca emite un control. El total sigue en 300 o menos: el presupuesto es `limit - 3 - longitud del enlace` y `clip` respeta ese presupuesto.
+- `%0A` y `%0D%0A` quedan como texto literal y no se decodifican.
+- `|` en el enlace sale tal cual en el log, que es una sola línea, y en el resumen `cell()` lo cambia por `/` después de sanear.
+- Un «enlace» metido en `conclusion` es texto como cualquier otro. Solo cuenta el último ` — `. Si el enlace es hostil o no cabe, se recorta de forma normal.
+- `javascript:`, `http:`, un sustituto suelto o un enlace de más de 277 caracteres no se conservan.
+- Conclusión: la rama no reabre la inyección `::` ni rompe la tabla.
+
+Pruebas añadidas en el reintento a `tests/security/health-log-f21.test.js` (20 casos más, 44 en total):
+- 16 enlaces hostiles por 4 longitudes de texto: `|`, `%0A`, `%0D%0A`, LF, CR solo, NEL, CSI de C1, U+2028, U+2029, NUL, NBSP, sustituto suelto, URL de 400 caracteres, `javascript:` y `http:`.
+- Un enlace con controles nunca se conserva crudo.
+- El enlace legítimo se conserva completo y el total es exactamente 300.
+- Un «enlace» inyectado en `conclusion`, también con `max` de 1, 5, 21, 25 y 40.
+- `check.js` de extremo a extremo con `conclusion` de más de 400 caracteres y `html_url` con `|` o `%0A`: el log sale saneado y la tabla queda intacta.
+
+En local, `node --test tests/security/health-log-f21.test.js 'tests/scripts/*f21*.test.js' 'tests/security/health-*.test.js'` da 656 de 656. Las pruebas del primer intento siguen pasando sin cambios.
+
 Resultados del pipeline:
 - Commit f79ae8a (desarrollador): Seguridad `success`, https://github.com/apivasa/practica_agente/actions/runs/44924911200. CI `cancelled` (sustituido por el push siguiente), https://github.com/apivasa/practica_agente/actions/runs/44924911210.
 - Commits f707c85 (arquitectura) y 2ddce69 (estas pruebas): runs `cancelled`, sustituidos por el push siguiente.

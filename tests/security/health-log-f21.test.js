@@ -167,6 +167,94 @@ describe('F-21 seguridad: issue.js con número de issue hostil', () => {
   }
 });
 
+describe('F-21 reintento 1 seguridad: recorte que conserva el enlace final (2591cfc)', () => {
+  const SEP = ' — ';
+  const body = (n) => `último run terminó en ${'x'.repeat(n)}`;
+  const assertOneSafeLine = (out, max = LOG_VALUE_MAX) => {
+    assert.equal(splitLines(out).length, 1, JSON.stringify(out));
+    assert.ok(!hasControl(out), JSON.stringify(out));
+    assert.ok(Array.from(out).length <= max, String(Array.from(out).length));
+  };
+  // Enlaces hostiles: ninguno puede salir con salto, control o pasarse del máximo.
+  const links = [
+    'https://github.com/o/r/actions/runs/1',
+    'https://github.com/o/r/actions/runs/1|col|col',
+    'https://github.com/o/r/actions/runs/1%0A::add-mask::x',
+    'https://github.com/o/r/actions/runs/1%0D%0A::stop-commands::t',
+    'https://github.com/o/r/actions/runs/1\n::add-mask::x',
+    'https://github.com/o/r/actions/runs/1\r::stop-commands::t',
+    'https://github.com/o/r/actions/runs/1\u0085::error::z',
+    'https://github.com/o/r/actions/runs/1\u009b31m',
+    'https://github.com/o/r/actions/runs/1\u2028::error::z',
+    'https://github.com/o/r/actions/runs/1\u2029::error::z',
+    'https://github.com/o/r/actions/runs/1\u0000x',
+    'https://github.com/o/r/actions/runs/1\u00A0::x',
+    'https://github.com/o/r/\ud800x',
+    `https://github.com/${'p'.repeat(400)}`,
+    'javascript:alert(1)',
+    'http://github.com/o/r/actions/runs/1',
+  ];
+  for (const [i, link] of links.entries()) {
+    test(`enlace hostil ${i}: una línea, sin controles, <= ${LOG_VALUE_MAX}`, () => {
+      for (const n of [0, 10, 300, 1000]) {
+        const input = `${body(n)}${SEP}${link}`;
+        const out = sanitizeLogValue(input);
+        assertOneSafeLine(out);
+        // Con recorte, si no termina en «…» es que se conservó el enlace: https, sin controles ni espacios.
+        if (Array.from(input).length > LOG_VALUE_MAX && !out.endsWith('…')) {
+          assert.ok(out.includes(`${SEP}https://`), JSON.stringify(out));
+          const kept = out.slice(out.lastIndexOf(SEP) + SEP.length);
+          assert.ok(!/\s/.test(kept), JSON.stringify(kept));
+        }
+      }
+    });
+  }
+  test('enlace con controles nunca se conserva crudo (se sanea con el resto)', () => {
+    const out = sanitizeLogValue(`${body(400)}${SEP}https://github.com/o/r/actions/runs/1\n::add-mask::x`);
+    assert.ok(!out.includes('\n'));
+    assert.ok(out.endsWith('…'));
+  });
+  test('enlace legítimo se conserva completo y el total queda acotado', () => {
+    const link = 'https://github.com/apivasa/practica_agente/actions/runs/44925653549';
+    const out = sanitizeLogValue(`${body(1000)}${SEP}${link}`);
+    assert.ok(out.endsWith(`${SEP}${link}`));
+    assert.equal(Array.from(out).length, LOG_VALUE_MAX);
+  });
+  test('"enlace" inyectado en conclusion (separador en medio y al final): una línea, acotado', () => {
+    const conc = `failure${SEP}https://evil.example/a\n::add-mask::b${SEP}https://evil.example/${'q'.repeat(50)}`;
+    for (const n of [0, 400]) assertOneSafeLine(sanitizeLogValue(`${body(n)} ${conc}`));
+    for (const max of [1, 5, 21, 25, 40]) assertOneSafeLine(sanitizeLogValue(`${body(400)}${SEP}https://github.com/o/r`, max), max);
+  });
+  test('check.js de extremo a extremo con html_url largo y con | o %0A: tabla intacta', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'f21sec-r1-'));
+    try {
+      const summary = join(dir, 'summary.md');
+      writeFileSync(summary, '');
+      const lines = [];
+      const urls = ['https://github.com/o/r/actions/runs/77|a|b', 'https://github.com/o/r/actions/runs/77%0A::add-mask::x'];
+      let k = 0;
+      const fetchImpl = async (url) => {
+        const u = String(url);
+        if (/\/actions\/workflows\/[^/]+\/runs/.test(u)) {
+          const html_url = urls[k++ % urls.length];
+          return json({ workflow_runs: [{ id: 77, status: 'completed', conclusion: `failure${'z'.repeat(400)}`, event: /deploy/.test(u) ? 'push' : 'schedule', created_at: at(-60), run_started_at: at(-60), updated_at: at(-59), html_url }] });
+        }
+        if (/\/actions\/workflows\/[^/]+$/.test(u)) return json({ state: 'active', created_at: '2025-01-01T00:00:00Z' });
+        return json({ total_count: 0, jobs: [] });
+      };
+      const { results } = await checkMain({
+        argv: ['--only=workflows'],
+        env: { GITHUB_TOKEN: 't', GITHUB_REPOSITORY: 'o/r', EVALUATION_ENABLED: 'true', GITHUB_STEP_SUMMARY: summary },
+        fetchImpl, now: NOW, log: (s) => lines.push(s),
+      });
+      assertSafeLines(lines);
+      assertSafeSummary(readFileSync(summary, 'utf8'), results.length);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+});
+
 describe('F-21 seguridad: inventario estático de puntos de impresión en scripts/health', () => {
   const SINKS = /\b(log|console\.(log|error|warn|info|debug)|appendFileSync|writeFileSync|process\.(stdout|stderr)\.write)\(/;
   // Interpolaciones permitidas sin sanear: valores construidos solo con constantes del propio script.
