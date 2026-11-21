@@ -92,7 +92,7 @@ Reglas del trigger `enforce_exception_rules` (solo para usuarios finales):
 - Revocar: se marca `revoked_at`; la hora y el autor los pone el servidor. Una revocada ya no se edita.
 
 ### `alerts` — qué se notificó, a quién y cuándo
-`id`, `unit_id`, `recipient_user_id`, `kind`, `payload` (JSON con `message`, `severity` y datos del disparador), `dedupe_key` (única), `sent_at`, `read_at`, `emailed_at`, `email_attempts`.
+`id`, `unit_id`, `recipient_user_id`, `kind`, `payload` (JSON con `message`, `severity` y datos del disparador), `dedupe_key` (única), `sent_at`, `read_at`, `emailed_at`, `email_attempts`, `email_skipped_at`, `email_skip_reason`.
 
 `kind` admite solo `color_change`, `pace_behind`, `critical_intake` y `exception_expired`. `dedupe_key` evita duplicar una alerta por disparador y destinatario. Solo la inserta el backend; el usuario solo puede cambiar `read_at` de las suyas.
 
@@ -103,13 +103,19 @@ Envío por correo (C-05, migración `20261129120000_alert_email_c05.sql`, ADR [0
 - Las escribe solo el backend (`scripts/send-alert-emails.js`). RLS y privilegios no cambian: ningún usuario puede marcar ni desmarcar un envío.
 - El correo del destinatario no se guarda en el modelo: el backend lo lee de Supabase Auth en cada envío.
 
+Omisión del correo (C-06, migración `20261201120000_alert_email_c06.sql`):
+- `email_skipped_at` (`timestamptz`, nula = no omitida): cuándo se decidió no enviar el correo. Una alerta omitida no se reintenta.
+- `email_skip_reason` (`text`): `expired` (pasaron 7 días sin enviarse), `recipient_missing` (el usuario ya no existe), `recipient_banned` (bloqueado en Auth) o `recipient_no_role` (ya no es líder de la unidad de la alerta ni comité).
+- CHECK `alerts_email_skip_reason_allowed`: solo esos cuatro motivos. CHECK `alerts_email_skip_pair`: las dos columnas van juntas (ambas nulas o ambas con valor). CHECK `alerts_email_sent_or_skipped`: una alerta no puede estar enviada y omitida a la vez.
+- Las escribe solo el backend. `authenticated` sigue con `UPDATE` solo sobre `read_at`; `anon` no tiene acceso. El destinatario ve la omisión de sus alertas pero no puede marcarla ni desmarcarla.
+
 ### `audit_log` — auditoría
 `id`, `actor` (uuid del usuario o `system:<rol>`; las Actions usan `system:evaluate` y, en el correo, `system:alert-email`), `action`, `entity`, `entity_id`, `details` (JSON con `old` y `new`), `created_at`.
 
 - Solo inserción: un trigger bloquea `UPDATE`, `DELETE` y `TRUNCATE`, incluso para el backend.
 - Triggers de auditoría en `units`, `user_roles`, `indicators`, `commitments`, `measurements`, `targets` y `exceptions`.
 - La evaluación escribe además `evaluation_upsert`, `escalation_applied`, `alert_sent`, `exception_expired`, `pace_snapshot` (estado diario del paquete) y `evaluation_reprocess`.
-- El correo de alertas escribe `alert_emailed` (con el id de Resend y el intento) y `alert_email_failed` (con el intento y el error saneado). No guarda correos ni claves.
+- El correo de alertas escribe `alert_emailed` (con el id de Resend y el intento) y `alert_email_failed` (con el intento y el error saneado). Desde C-06 también `alert_email_skipped` (con el motivo; en las vencidas, además `sent_at`, intentos y ventana). No guarda correos ni claves: el error saneado oculta claves de Resend, `sb_secret_` y JWT.
 
 ## RLS por rol
 
