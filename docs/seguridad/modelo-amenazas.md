@@ -463,3 +463,11 @@ No abre endpoints, tablas ni permisos. Endurece el `warn` de `deploy-main` (T-F1
 | ID | STRIDE | Amenaza | Riesgo | Control | Prueba |
 |---|---|---|---|---|---|
 | T-F14-01 | Tampering / Repudiation | Una cadena de despliegues fallidos, o un pendiente con timestamps futuros o de tipo raro, deja `deploy-main` en `warn` u `ok` sin abrir issue | Muy bajo | El aviso exige que el anterior completado no cancelado (sin `skipped`/`neutral`) sea `success` o que no haya anterior; `parseApiTime` falla cerrado; entradas nulas → `checkDeploy` da `fail`. Residual: orden y `stuck` con `Date.parse` crudo (H-F14-01) | `tests/security/health-deploy-f14.test.js` |
+
+## Superficie nueva (F-15, F-16)
+
+No abren endpoints, tablas ni permisos. F-15 ordena los runs de `deploy-main` y calcula `stuck` con `parseApiTime`. F-16 exige ISO 8601 con zona (`API_TIME_RE`), desempata por `id` y mide el atasco con `created_at` cuando `run_started_at` es ilegible o futuro.
+
+| ID | STRIDE | Amenaza | Riesgo | Control | Prueba |
+|---|---|---|---|---|---|
+| T-F16-01 | Tampering / Repudiation | Runs con fechas en formatos límite, empates de `created_at` o `run_started_at` manipulado dejan `deploy-main` en `ok`/`warn` con un fallo o un atasco real | Muy bajo | `API_TIME_RE` anclado, sin cuantificadores anidados (lineal) y sin flag `g`; solo strings; margen `FUTURE_SKEW_MIN`; completado con fecha inválida → `fail`; empate → id entero seguro mayor; pendiente con `run_started_at` malo mide con `created_at` y no cubre. Residual: empate con ids no enteros o fuera de rango seguro depende del orden de entrada (H-F16-01) | `tests/security/health-deploy-f15.test.js`, `tests/security/health-deploy-f16.test.js` |
