@@ -256,6 +256,9 @@ const runLink = (r) => (r?.html_url ? ` — ${r.html_url}` : '');
  *   F-14 (H-F13-01): ese aviso solo vale para un fallo aislado. Si el despliegue completado
  *   anterior al fallo (sin contar cancelados) tampoco terminó en success, es una cadena de
  *   fallos y se falla aunque haya un run nuevo pendiente. Ver isolatedFailure.
+ * - F-15 (H-F14-01): un run completado con fecha inválida o futura (ver parseApiTime) hace
+ *   fallar el check: no se puede saber si es el más reciente. Los pendientes con fecha
+ *   inválida se descartan (ni cubren ni cuentan como atascados).
  * @param {typeof DEPLOY_RULE} rule
  * @param {{ workflow: any, runs: any[], now: Date }} data
  * @returns {Result}
@@ -265,19 +268,30 @@ export function assessDeploy(rule, { workflow, runs, now }) {
   if (workflow.state !== 'active') {
     return result(rule.check, 'fail', `${rule.file} deshabilitado (${workflow.state}); reactivar con PUT .../enable`);
   }
-  const relevant = (runs ?? [])
-    .filter((r) => rule.events.includes(r.event))
-    .sort((a, b) => Date.parse(b.created_at) - Date.parse(a.created_at));
   const nowMs = now.getTime();
+  // F-15 (H-F14-01): fechas validadas con parseApiTime (texto ISO, no más de FUTURE_SKEW_MIN
+  // en el futuro). Los runs con fecha inválida o futura no se ordenan con los demás.
+  // - Completado (no omitido) con created_at inválido: podría ser el más reciente y decidir
+  //   el resultado, así que no se puede dar ok ni warn: problema → fail.
+  // - Pendiente con created_at o run_started_at inválido: se descarta. No puede dar ok por sí
+  //   solo, no cubre un fallo (newerPendingRun ya lo rechaza) y no cuenta como atascado (lado
+  //   seguro; lo exige qa-v04b «sin fechas válidas: no se considera atascado ni lanza»).
+  const relevantAll = (runs ?? []).filter((r) => rule.events.includes(r?.event));
+  const timeOf = (r) => parseApiTime(r.created_at, nowMs);
+  const sinceOf = (r) => (r.run_started_at ? parseApiTime(r.run_started_at, nowMs) : timeOf(r));
+  const validTimes = (r) => Number.isFinite(timeOf(r)) && (!PENDING_STATUSES.has(r.status) || Number.isFinite(sinceOf(r)));
+  const invalid = relevantAll.filter((r) => !validTimes(r) && r.status === 'completed' && !IGNORED_CONCLUSIONS.has(r.conclusion));
+  const relevant = relevantAll.filter(validTimes).sort((a, b) => timeOf(b) - timeOf(a));
 
   const problems = [];
-  const stuck = relevant.find((r) => {
-    if (!PENDING_STATUSES.has(r.status)) return false;
-    const since = Date.parse(r.run_started_at || r.created_at);
-    return Number.isFinite(since) && (nowMs - since) / 60_000 > rule.maxPendingMin;
-  });
+  if (invalid.length > 0) {
+    problems.push(
+      `${invalid.length} despliegue(s) completado(s) con fecha inválida o en el futuro; no se puede determinar el más reciente${runLink(invalid[0])}`,
+    );
+  }
+  const stuck = relevant.find((r) => PENDING_STATUSES.has(r.status) && (nowMs - sinceOf(r)) / 60_000 > rule.maxPendingMin);
   if (stuck) {
-    const min = Math.round((nowMs - Date.parse(stuck.run_started_at || stuck.created_at)) / 60_000);
+    const min = Math.round((nowMs - sinceOf(stuck)) / 60_000);
     problems.push(`un despliegue lleva ${min} min en ${stuck.status} (máximo ${rule.maxPendingMin})${runLink(stuck)}`);
   }
 
