@@ -1,4 +1,4 @@
-# Despliegue a producción (V-05, V-05b, V-05c)
+# Despliegue a producción (V-05, V-05b, V-05c, F-11)
 
 Workflow: `.github/workflows/deploy.yml` (nombre en Actions: **Despliegue**).
 Destino: Supabase del proyecto de P-02 (migraciones) y GitHub Pages (`https://apivasa.github.io/practica_agente/`).
@@ -40,14 +40,14 @@ Orden: `verify` → `build-pages` → `migrate-plan` → `migrate` → `deploy-p
 
 | Job | Environment | Qué hace |
 |---|---|---|
-| `verify` | `produccion` | Con disparo manual, falla si `confirm` no es `desplegar`. Falla si la rama no es `main`, si falta un secreto (lista los nombres, nunca los valores) o si falta `SUPABASE_DB_POOLER_HOST` o no tiene la forma de un host de pooler de Supabase. Comprueba el prefijo `sb_publishable_`, que `SUPABASE_URL` corresponde a `SUPABASE_PROJECT_REF` y que es el origen de producción de `src/security/csp.js`. Falla si el registro de Auth está abierto. En push, espera al CI (`ci.yml`) del mismo SHA en `main`, hasta 20 min, y exige `success` (`scripts/ci/wait-ci.sh`). Timeout del job: 25 min. |
+| `verify` | `produccion` | Con disparo manual, falla si `confirm` no es `desplegar`. Falla si la rama no es `main`, si falta un secreto (lista los nombres, nunca los valores) o si falta `SUPABASE_DB_POOLER_HOST` o no tiene la forma de un host de pooler de Supabase. Comprueba el prefijo `sb_publishable_`, que `SUPABASE_URL` corresponde a `SUPABASE_PROJECT_REF` y que es el origen de producción de `src/security/csp.js`. Falla si el registro de Auth está abierto. En push, espera al CI (`ci.yml`) del mismo SHA en `main`, hasta 20 min, y exige `success` (`scripts/ci/wait-ci.sh`). Después comprueba que el commit sigue siendo la punta de `main` (`scripts/ci/check-main-tip.sh`, F-11). Timeout del job: 25 min. |
 | `build-pages` | `produccion` | `npm ci --ignore-scripts`, build con la URL y la clave publicable. Verifica que la CSP de `dist/index.html` no tiene orígenes locales e incluye `upgrade-insecure-requests` (ADR 0011), y que `dist/` no contiene una clave `sb_secret_…` ni apunta a Supabase local. Sube el artefacto de Pages. |
 | `migrate-plan` | `produccion` | `supabase db push --db-url … --dry-run`: deja en el log las migraciones que se aplicarán. No cambia nada. |
-| `migrate` | `produccion` | Otro dry-run, `supabase db push --db-url … --yes` y `supabase migration list --db-url …` como evidencia. Nunca aplica `seed.sql` (H-F03-07). |
-| `deploy-pages` | `github-pages` | Publica el artefacto cuando `build-pages` y `migrate` terminaron bien. Es el único job con `pages: write` e `id-token: write`. |
+| `migrate` | `produccion` | Repite «Commit vigente en main» en modo `--strict` (F-11). Otro dry-run, `supabase db push --db-url … --yes` y `supabase migration list --db-url …` como evidencia. Nunca aplica `seed.sql` (H-F03-07). |
+| `deploy-pages` | `github-pages` | Repite «Commit vigente en main» en modo `--strict` (F-11). Publica el artefacto cuando `build-pages` y `migrate` terminaron bien. Es el único job con `pages: write` e `id-token: write`. |
 | `smoke` | — | GET a la URL publicada (hasta 6 intentos): exige HTTP 200 con el título `App de control de capacidad RUN` y HTTP 200 en el JS principal (`/practica_agente/assets/…js`). |
 
-Si falla un job, los siguientes no corren. El grupo de concurrencia `despliegue-produccion` no cancela un despliegue en curso; si llegan varios merges, GitHub deja en cola solo el más reciente.
+Si falla un job, los siguientes no corren. Si `verify` da `deploy=false` (ver «Commit vigente en main»), `build-pages` y los siguientes se saltan. El grupo de concurrencia `despliegue-produccion` no cancela un despliegue en curso; si llegan varios merges, GitHub deja en cola solo el más reciente.
 
 ### Puerta de CI (V-05c)
 
@@ -61,7 +61,21 @@ Mientras espera, el run de Despliegue queda `in_progress` en `verify`. Es normal
 
 Para que la puerta funcione, el CI de cada commit de `main` tiene que terminar. Por eso `ci.yml`, en `main`, agrupa por SHA y **no cancela** runs anteriores: un commit de docs posterior ya no cancela el CI del merge. En las demás ramas se sigue cancelando el run anterior.
 
-Si el CI del merge falló o se canceló a mano: un commit posterior solo de docs no redespliega. Relanza el CI de ese commit y, cuando esté en verde, relanza el despliegue (*Re-run failed jobs*), o corrige `main` con un nuevo merge.
+Si el CI del merge falló o se canceló a mano: un commit posterior solo de docs no redespliega. Relanza el CI de ese commit y, cuando esté en verde, relanza el despliegue (*Re-run failed jobs*), o corrige `main` con un nuevo merge. Relanza solo si el commit sigue siendo la punta de `main` (ver abajo).
+
+### Commit vigente en main (F-11)
+
+En push, después de la puerta de CI, el paso «Commit vigente en main» de `verify` corre `scripts/ci/check-main-tip.sh` (permiso `contents: read`). Compara el commit del run con la punta de `main`. Evita que relanzar un run viejo republique un front anterior o migre desde un commit anterior. Con disparo manual no aplica: el run toma la punta al lanzarse.
+
+- **Es la punta:** sigue el despliegue.
+- **Detrás solo hay commits de documentación:** sigue. Esos commits no despliegan y lo desplegable es idéntico. Cuenta como documentación lo mismo que `paths-ignore`: `docs/**` y `**/*.md`. Un renombrado cuenta por sus dos rutas: mover `src/x.js` a `docs/x.js` es código. Si la API devuelve 300 archivos o más, o no trae la lista, falla cerrado.
+- **Lo superó un merge más nuevo con código, en el primer intento del run:** es la carrera normal entre dos merges seguidos. `verify` deja un aviso (`::warning::`), `build-pages`, `migrate-plan`, `migrate`, `deploy-pages` y `smoke` se saltan y el run termina en **`success` sin publicar**. El despliegue del commit más nuevo publica todo. `deploy-main` de `salud.yml` lo da por bueno.
+- **Lo superó un commit con código y es un relanzamiento** (intento 2 o más, o intento desconocido): falla con error. No relances despliegues de commits viejos: el que vale es el de la punta.
+- **Historia reescrita o divergente, o la API no responde en 3 intentos:** falla antes de cualquier efecto.
+
+`migrate` y `deploy-pages` repiten la comprobación al empezar, en modo `--strict`: ahí un run superado falla siempre, también en el primer intento. Así *Re-run failed jobs* de un run viejo no aplica migraciones ni publica cuando ya entró un commit con código. `migrate-plan` no la repite: solo hace un dry-run.
+
+La lista de «solo documentación» del script y `paths-ignore` de `deploy.yml` deben ser la misma. Si se cambia una, hay que cambiar la otra; una prueba en `tests/scripts/f11-fixes.test.js` falla si no coinciden.
 
 ### Conexión a la BD
 
@@ -79,6 +93,7 @@ Sin `supabase link` y sin token de cuenta (H-V05-01). Cada paso de migración ca
 
 ## Precauciones
 
+- **No relanzar despliegues de commits viejos.** Si ya entró un commit más nuevo con código, su despliegue cubre al anterior; el relanzamiento falla en «Commit vigente en main».
 - **Fusionar de a uno.** Cada merge despliega. Desde V-05c, el despliegue del segundo PR espera al CI de `main` que prueba los dos juntos. Igual conviene fusionar de a uno: si ese CI falla, ninguno queda publicado por partes y el diagnóstico es más simple.
 - **No cancelar a mano el CI de `main`.** Si se cancela, el despliegue de ese commit falla en `verify`.
 - `main` no tiene protección de rama (H-V05b-01). Un push directo a `main` con CI en verde despliega sin revisión de PR.
