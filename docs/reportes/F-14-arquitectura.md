@@ -1,0 +1,14 @@
+# F-14 — Informe de arquitectura y salud
+Veredicto: VERDE
+Alineado al diseño: sí. El cambio queda en `scripts/health/lib.js` (lógica de salud, no de negocio; no le corresponde `engine/`). No toca el stack, el modelo de datos, la escalada ni `salud.yml`.
+Requiere decisión del usuario: no
+ADR creados o actualizados: ninguno. Es una corrección de la regla `deploy-main`, que ya está cubierta por ADR 0014 y 0015.
+Salud: revisado sobre SHA 637a7a2. CI y Seguridad de la rama estaban `in_progress` al revisar; el run anterior (e74fa30) salió en success. `correo-alertas.yml` sigue `active`, con 0 runs (`total_count: 0`) a las 11:54 UTC. El cron `53 11 * * *` acaba de tocar, y GitHub suele retrasar los cron entre 5 y 30 min o más. Todavía no es una anomalía. Hay que volver a mirar después de las 12:30 UTC y después del segundo cron (14:53 UTC). Si a las 15:30 UTC sigue en 0, pasa a hallazgo de salud (H-ARQ-C06-02).
+
+## Hallazgos
+
+- **H-ARQ-F14-01 (juicio de la desviación, aceptada).** El desarrollador no aplicó la alternativa de H-F13-01 («o el fallo tiene menos de maxPendingMin»), y tiene razón. Dos fallos seguidos con pocos minutos entre ellos dejan el más reciente por debajo de 90 min, así que la alternativa volvería a poner la cadena en `warn`. Es justo el caso que reproduce el hallazgo, y está cubierto por el test «dos fallos seguidos recientes». Con `isolatedFailure` (el completado anterior, saltando cancelados, fue `success` o no existe) basta. El tiempo de cobertura ya lo acota `maxPendingMin` en `newerPendingRun`, y la detección de atasco (`stuck`) se mantiene.
+- **H-ARQ-F14-02 (aceptado, sin cambio de código).** Dos rojos esperados H-F11-06 seguidos (varios merges con código en pocos minutos) ahora se ven como cadena y abren un issue `salud` aunque el run pendiente vaya a pasar. Es un falso positivo posible pero raro, y es preferible a ocultar una cadena real. Se documentó en el runbook.
+- **H-ARQ-F14-03 (corregido en este informe, `docs/operacion.md`).** El runbook de `deploy-main` (entrada «aviso ... que lo cubre») ahora dice tres cosas. El aviso solo aparece para un fallo aislado. Una cadena falla con el detalle `último despliegue terminó en failure`. Los timestamps que no son texto o están más de 5 min en el futuro (`FUTURE_SKEW_MIN`) no cubren un fallo. También se indica qué hacer ante el falso positivo de H-ARQ-F14-02.
+- **H-ARQ-F14-04 (menor, no bloquea).** La detección de `stuck` en `assessDeploy` y el orden de `relevant` siguen usando `Date.parse` y no `parseApiTime`. Un `run_started_at` futuro da una espera negativa y ese run no cuenta como atascado, que es el lado seguro. Si alguien vuelve a tocar esta función, conviene usar `parseApiTime` en los tres lugares. No se abre un ítem.
+- Sin regresión de salud: la firma y los estados de `assessDeploy` no cambian, `check.js` y `salud.yml` no se tocan, y los nuevos exports son aditivos.
