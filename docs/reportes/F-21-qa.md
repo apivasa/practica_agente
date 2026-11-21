@@ -24,10 +24,15 @@ Rama revisada: `item/F-21` (SHA del desarrollador `f79ae8a`). Objeto: `sanitizeL
   - (1d): 3 casos.
   - (2): 14 casos.
 - El fuente no tiene caracteres de control, NBSP ni separadores literales; todos van como escapes `\uXXXX`. Lo comprobé con un escaneo por code point del archivo.
+- Corrección de lint (CI rojo por `no-control-regex` en la línea 26): `linesOf` ya no usa una regex con `\u000b` y `\u000c`. Ahora parte el texto comparando por code point con un `Set` y trata `\r\n` como un solo salto. La regla sigue activa y las aserciones no cambian.
 
 ## Resultado local
 
-`node --test tests/scripts/*.test.js tests/security/*.test.js`: 2864 tests, 2861 pass, 0 fail, 2 skipped y 1 todo. El todo es el que ya existía, H-C04-QA-01. Lint y e2e no se pueden correr aquí porque no hay `npm install`; se validan en el CI de la rama.
+`node --test tests/scripts/*.test.js tests/security/*.test.js`:
+- Primera revisión (`f79ae8a`): 2864 tests, 2861 pass, 0 fail, 2 skipped y 1 todo.
+- Después del arreglo del desarrollador `2591cfc` (H-ARQ-F21-01) y de mi corrección de lint: 2893 tests, 2890 pass, 0 fail, 2 skipped y 1 todo. Mis 39 casos siguen pasando.
+
+El todo es el que ya existía, H-C04-QA-01. Lint y e2e no se pueden correr aquí porque no hay `npm install`; se validan en el CI de la rama.
 
 ## Cobertura
 
@@ -42,5 +47,5 @@ Rama revisada: `item/F-21` (SHA del desarrollador `f79ae8a`). Objeto: `sanitizeL
 
 Ninguno bloqueante.
 
-- **QA-F21-01 (info).** El recorte a 300 se aplica a todo el `detail`. Si una `conclusion` de la API es larga, el enlace al run (`— html_url`), que va al final del detalle, ya no aparece en el log ni en el resumen. El resultado, el código y el issue no cambian, así que solo se pierde el diagnóstico. Para reproducir: `checkWorkflows` o `main` con un run cuya `conclusion` tenga 400 caracteres; la línea de log termina en «…» sin la URL. Opcional: acotar la `conclusion` dentro del detalle antes de añadir el enlace.
+- **QA-F21-01 (info).** El recorte a 300 se aplica a todo el `detail`. Si una `conclusion` de la API es larga, el enlace al run (`— html_url`), que va al final del detalle, ya no aparece en el log ni en el resumen. El resultado, el código y el issue no cambian, así que solo se pierde el diagnóstico. Para reproducir: `checkWorkflows` o `main` con un run cuya `conclusion` tenga 400 caracteres; la línea de log termina en «…» sin la URL. Opcional: acotar la `conclusion` dentro del detalle antes de añadir el enlace. **Corregido en `2591cfc`.** Con una `conclusion` de 400 caracteres, el valor saneado mide 300, lleva «…» y termina en el `html_url` completo; el estado sigue en `fail`.
 - **QA-F21-02 (info, solo en las pruebas).** Al escribir el archivo, las secuencias `\u2028`, `\u2029` y `\u00a0` quedaron como caracteres literales y rompieron el regex: U+2028 termina la línea dentro de un literal `/.../`. Las cambié otra vez por escapes y lo comprobé con el escaneo. No es un defecto de la app.

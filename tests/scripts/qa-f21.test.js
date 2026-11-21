@@ -23,8 +23,22 @@ const STEP_RULES = WORKFLOW_RULES.filter((r) => r.requiredStep);
 const ELLIPSIS = '…';
 const cpLen = (s) => Array.from(s).length;
 // Separadores de línea que reconocen Node, el runner o un visor: \n, \r, VT, FF, NEL, LS, PS.
-const LINE_BREAK = /\r\n|[\n\r\u000b\u000c\u0085\u2028\u2029]/;
-const linesOf = (text) => text.split(LINE_BREAK);
+// Por code point (sin regex de controles, regla no-control-regex); \r\n cuenta como un solo salto.
+const BREAK_CPS = new Set([0x0a, 0x0d, 0x0b, 0x0c, 0x85, 0x2028, 0x2029]);
+const linesOf = (text) => {
+  const out = [''];
+  const chars = Array.from(text);
+  for (let i = 0; i < chars.length; i++) {
+    const cp = chars[i].codePointAt(0);
+    if (!BREAK_CPS.has(cp)) {
+      out[out.length - 1] += chars[i];
+      continue;
+    }
+    if (cp === 0x0d && chars[i + 1] === '\n') i += 1;
+    out.push('');
+  }
+  return out;
+};
 // Una línea que empiece con `::` y no sea una de las anotaciones fijas del propio script.
 const injected = (text) => linesOf(text).some((l) => /^\s*::/.test(l) && !/^::(error|warning)::(FALLA|omitido|aviso) /.test(l));
 
