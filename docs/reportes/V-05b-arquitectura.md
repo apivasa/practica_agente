@@ -1,5 +1,5 @@
 # V-05b — Informe de arquitectura y salud
-Veredicto: VERDE
+Veredicto: ROJO (re-revisión V-05b + V-05c, SHA 86b447c; ver la última sección. La primera revisión fue VERDE)
 Alineado al diseño: sí. Se mantiene el stack (Pages estático, Supabase, Actions). Se mantiene el orden de jobs del ADR 0015 punto 2 y el punto 6 (sin revisor en `produccion`). La fase 2 era el seguimiento previsto en el punto 5. `paths-ignore` de `docs/**` y `**/*.md` es una lectura válida de «en cada merge a `main`»: esos commits no cambian `dist/` ni las migraciones, y ningún `.md` fuera de `docs/` entra al build (ningún `import` de `.md` en `src/`, `engine/`, `scripts/` ni `vite.config.js`). No hay que cambiar ninguna decisión confirmada.
 Requiere decisión del usuario: no. Sí hay compuertas operativas de la usuaria antes del merge y después (ver H-ARQ-V05b-03 y -04). No son desviaciones del diseño.
 ADR creados o actualizados: `docs/adr/0015-despliegue-manual-primero.md`. Se añade «Actualización V-05b (fase 2)», el estado queda en fase 2 entregada y el punto 6 ya no lleva `SUPABASE_ACCESS_TOKEN`.
@@ -30,3 +30,33 @@ Hallazgos:
 - **H-ARQ-V05b-05 (bajo, documentación).** `docs/despliegue.md`, líneas 12 y 44, sigue listando `SUPABASE_ACCESS_TOKEN` y describe solo la fase 1. Es área del documentador.
 - **H-ARQ-V05b-06 (informativo, en el runbook).** Revertir un PR que añadió una migración borra el archivo. `db push` falla entonces porque la versión remota no está en local, y el front revertido tampoco se publica. Se revierte solo el código y el esquema se corrige con una migración nueva.
 - **H-ARQ-V05b-07 (informativo).** No hay «desplegar versión anterior», porque `verify` exige `refs/heads/main` y siempre se despliega la cabeza. El rollback del front es un revert en `main`. Es coherente con el diseño y está en el runbook.
+
+## Re-revisión V-05b + V-05c (2026-11-21, SHA 86b447c, PR #45)
+Veredicto: ROJO
+Alineado al diseño: sí. V-05c cierra H-ARQ-V05b-01 sin cambiar el stack, el orden de jobs ni la regla de no tener revisor en `produccion`. El defecto que bloquea está en cómo interactúa la nueva puerta con la concurrencia de `ci.yml`, y se corrige dentro del ítem.
+Requiere decisión del usuario: no.
+ADR creados o actualizados: `docs/adr/0015-despliegue-manual-primero.md`. Se reescribe el punto 6 de la «Actualización V-05b» como «Puerta de CI (V-05c)», que añade como requisito que el CI de cada commit de `main` termine, y se actualiza la línea de estado.
+Salud:
+- **CI de la rama en 86b447c:** CI 44868418993 y 44868415509 `success`. Seguridad 44868418987 y 44868415476 `success`.
+- **Workflows programados y `salud.yml`:** sin cambios en este ítem. `deploy-main` (V-04b) ya está en `main`.
+- **Runbook:** `docs/operacion.md` › Despliegue continuo tiene la «Puerta de CI», «Fusionar de a uno» actualizado y los fallos nuevos del paso «CI del mismo commit en verde». También corrige la nota de timeouts de `deploy-main` (era ~55 min, ahora son ~75).
+
+Hallazgos:
+- **Validado.**
+  - `wait-ci.sh` solo espera en `push`. Valida el repositorio, el SHA de 40 hex, los enteros y el token. Filtra por `path` de `ci.yml` (también con sufijo `@ref`), `head_sha`, `event=push` y `branch=main`, y toma el id mayor. Exige `completed` + `success`. Si la API falla, reintenta hasta el tope. Nunca imprime el token.
+  - `actions: read` está solo en `verify`. Los topes (20 min de espera, 25 de job) son coherentes con un CI de unos 4 a 5 min.
+  - `db-url.sh` hace `{ set +x; } 2>/dev/null` al entrar, y la traza no se reactiva. Es correcto y está documentado.
+- **H-ARQ-V05b-08 (alto, bloquea; corrige el desarrollador en `.github/workflows/ci.yml`).** `ci.yml` tiene `concurrency: group: ci-${{ github.ref }}` con `cancel-in-progress: true`, y corre en todo push a `main`, también los de solo `docs/**`. El orquestador sube a `main` un commit de `docs/estado.md` minutos después de cada merge (paso 10, latido, candado). Ese commit cancela el CI del merge. Con V-05c, el despliegue del merge falla en `verify` (`conclusion 'cancelled'`), y el commit de docs no despliega porque `paths-ignore` lo excluye. El código fusionado no llega a producción hasta el próximo merge con código, y `deploy-main` de `salud.yml` queda en **failure** y abre un issue. No es un aviso: el run de Despliegue termina en `failure`, no en `cancelled`, así que la tolerancia a cancelaciones de `assessDeploy` no lo cubre.
+  - **Evidencia en `main`.** CI cancelado por el commit siguiente en `[fix] Privilegios explícitos de service_role (#52)` (7b4579d), `[C-05] Correo de alertas por Resend (#49)` (4604747) y `C-05: cerrar alerta CodeQL #18` (f0b7108). Con V-05c, los tres despliegues habrían fallado. Lo normal es que pase en cada merge, no de vez en cuando.
+  - **Corrección mínima.** Agrupar por SHA en `main` y no cancelar ahí. Las ramas y los PR siguen igual:
+    ```yaml
+    concurrency:
+      group: ci-${{ github.ref == 'refs/heads/main' && github.sha || github.ref }}
+      cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+    ```
+    El grupo por SHA es necesario. Con el grupo por `ref` y `cancel-in-progress: false`, GitHub sigue reemplazando el run *pendiente* por el más nuevo, y el CI de un merge en cola se perdería igual. Costo: varios CI de `main` en paralelo. El repo es público (minutos sin costo), y cada job levanta su propio Supabase local, sin recursos compartidos.
+  - **Prueba requerida (tester).** `ci.yml` no cancela en `main` y agrupa por SHA en `main`. Hoy ninguna prueba fija la concurrencia de `ci.yml`.
+  - **Descartado como solución principal: tolerancia en `salud.yml` o en `deploy-main`.** Taparía la alerta, pero el merge seguiría sin desplegarse. El problema es de disponibilidad de la entrega, no de ruido en el monitoreo. `salud.yml` no necesita cambios.
+  - **Opcional (P3, no bloquea).** Si el CI de A sale `cancelled` y entre A y la cabeza de `main` solo cambió `docs/**` o `*.md`, `wait-ci.sh` podría esperar el CI de la cabeza. Con la corrección de arriba no hace falta.
+- **H-ARQ-V05b-09 (bajo, ítem de seguimiento; área del desarrollador, `scripts/health/lib.js`).** Con `verify` en 25 min, la suma de timeouts de `deploy.yml` es de unos 75 min. Supera `DEPLOY_RULE.maxPendingMin = 60`. Un run legítimo que espere al CI cerca del tope, más migraciones lentas, podría salir como «atascado». Propuesta: subir `maxPendingMin` a 90, o derivarlo de la suma de timeouts con una prueba que los ate. Ya está anotado en el runbook.
+- **H-ARQ-V05b-10 (informativo).** El despliegue de un commit posterior sigue esperando en cola (`despliegue-produccion`, sin cancelar) mientras `verify` del anterior espera al CI. Con dos merges seguidos hay hasta unos 10 min de cola. Es aceptable.
