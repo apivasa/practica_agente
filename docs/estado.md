@@ -1,15 +1,16 @@
 # Estado del modo autónomo
 
 ## Candado de ciclo
-Estado: EN CURSO
-Desde: 2026-11-20 18:48
-Latido: 2026-11-20 19:15
-Sesión: programada (orquestador)
+Estado: LIBRE
+Desde: 
+Latido: 2026-11-20 19:47
+Sesión: 
 
 ## Log de ciclos (más reciente arriba)
 
 | Fecha y hora (Guayaquil) | Ítems trabajados | Resultado | Notas |
 |---|---|---|---|
+| 2026-11-20 19:47 | S-05c (#47), V-04b (#46) | Hechos | S-05c con 1 reintento (A-1: sondas debían no crear filas); confirmado en producción con fase B anónima run 44845769345 (4 tablas 42501). V-04b con 2 reintentos de CI (lint, gitleaks por token ficticio en prueba e informe). Todo lo que queda espera a la usuaria: V-05b (#45) → P-07; V-05c tras V-05b; C-05 (Q-04); V-07 (Q-02); P-05 y P-08. Sin nueva notificación. |
 | 2026-11-20 19:15 | S-05b (#44), V-05b (#45 abierto) | S-05b Hecho; V-05b en revisión | Fase B anónima VERDE (run 44839422473). V-05b con revisiones VERDE, sin fusionar: espera P-07 (variable SUPABASE_DB_POOLER_HOST). P-05 listo para la usuaria. Nuevos ítems S-05c, V-04b, V-05c. Notificación enviada (URL publicada + P-05 + P-07). |
 | 2026-11-20 18:45 | V-05 primer despliegue | Hecho | Sesión interactiva: arreglos de deploy.yml (--remote, --yes), despliegue OK run 44838844787. Siguiente para el orquestador: S-05b (pentest fase B contra producción), luego pedir P-05 (EVALUATION_ENABLED) y alta de la primera gestora real; recordar al usuario borrar del nivel de repositorio SUPABASE_SECRET_KEY, SUPABASE_ACCESS_TOKEN, SUPABASE_DB_PASSWORD y SUPABASE_PROJECT_REF (ya están en el environment produccion) |
 | 2026-11-20 18:07 | V-05 (primer `deploy.yml`, run 44834411127) | Falló en la verificación previa | Lanzado a pedido del usuario. La verificación detectó el registro de usuarios abierto en Supabase Auth; no se publicó nada. Espera que el usuario desactive *Allow new users to sign up* (P-06) y relance. |
