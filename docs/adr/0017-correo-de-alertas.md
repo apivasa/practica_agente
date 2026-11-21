@@ -25,3 +25,12 @@ Hasta C-04 el único canal era la tabla `alerts`, leída en la app (ADR 0008, pu
 - Hay un servicio externo nuevo con secreto propio (`RESEND_API_KEY`): crearlo y rotarlo es compuerta del usuario (CLAUDE.md §3).
 - Las cuotas del plan gratuito de Resend (a la fecha, del orden de 100 correos al día) limitan el volumen. El día 1 cada `color_change` genera una fila por líder y por miembro del comité. Si la cuota se agota, Resend responde 429 y las alertas restantes se reintentan en la pasada siguiente (gastan intentos). Con el volumen académico no se espera, pero el runbook explica cómo reencolarlas.
 - La migración debe estar aplicada en producción antes de que el workflow corra con `EVALUATION_ENABLED=true`. Si no, el paso falla con un error de BD (exit 1) y `salud.yml` lo detecta (una vez implementado H-ARQ-C05-01).
+
+## Adenda C-06 (2026-11-21, arquitecto-SRE)
+Complementa los puntos 5, 6, 7 y 10 sin cambiar decisiones:
+- **Omisión explícita.** Migración aditiva `20261201120000_alert_email_c06.sql`: `alerts.email_skipped_at timestamptz` y `alerts.email_skip_reason text` (`expired`, `recipient_missing`, `recipient_banned`, `recipient_no_role`), con CHECK de pareja y de exclusión con `emailed_at`. Siguen siendo columnas de estado operativo de `alerts`, no tabla nueva: el modelo de 9 tablas más `audit_log` no cambia. `authenticated` no recibe `UPDATE` sobre ellas.
+- **Destinatario vigente.** Antes de enviar se aplica el mismo criterio que eligió al destinatario (`recipientsFor`): líder de la unidad de la alerta o comité, cuenta existente y sin bloqueo. Si no, se omite sin reintento y se audita `alert_email_skipped`.
+- **Ventana (punto 7).** Las alertas que salen de la ventana sin enviarse se marcan `expired` y se auditan, en lotes de 500 por corrida. La primera corrida tras P-09 marcará de una vez el historial anterior a 7 días: es lo esperado.
+- **Códigos de salida (punto 6).** Además de 1 por BD y 2 por configuración, sale con 1 si ningún correo salió y todos los fallos fueron 401/403 de Resend (clave o remitente), para que `salud.yml` lo vea.
+- **Salud (punto 10).** Implementado: fila `correo-alertas` en `WORKFLOW_RULES` (H-ARQ-C05-01 cerrado).
+- **Orden de despliegue.** Sin `RESEND_API_KEY` el script termina antes de tocar la BD, así que el código puede llegar a `main` antes que la migración. Orden obligatorio: merge de C-06 → `deploy.yml` (migración) → P-09.

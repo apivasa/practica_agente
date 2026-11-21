@@ -110,9 +110,10 @@ describe('[A][B][C] salud.yml: programación y cableado de la alerta', () => {
     assert.match(alert, /issues:\s*write/);
   });
 
-  test('[C] vigila los cuatro workflows programados o críticos y esos archivos existen', () => {
+  test('[C] vigila los cinco workflows programados o críticos y esos archivos existen', () => {
+    // C-06 (H-ARQ-C05-01, ADR 0017 punto 10): correo-alertas.yml entra en la vigilancia.
     const files = WORKFLOW_RULES.map((r) => r.file).sort();
-    assert.deepEqual(files, ['ci.yml', 'evaluacion-mensual.yml', 'ritmo-diario.yml', 'seguridad.yml']);
+    assert.deepEqual(files, ['ci.yml', 'correo-alertas.yml', 'evaluacion-mensual.yml', 'ritmo-diario.yml', 'seguridad.yml']);
     for (const f of files) assert.doesNotThrow(() => read(`.github/workflows/${f}`), `${f} no existe`);
   });
 

@@ -25,6 +25,9 @@ export const WORKFLOW_RULES = Object.freeze([
   { file: 'evaluacion-mensual.yml', check: 'evaluacion-mensual', requiresProduction: true, event: null, monthly: true, requiredStep: 'Evaluar', maxDurationMin: 5 },
   { file: 'seguridad.yml', check: 'seguridad-semanal', requiresProduction: false, event: 'schedule', maxAgeHours: 8 * 24 },
   { file: 'ci.yml', check: 'ci-main', requiresProduction: false, event: 'push', latestOnly: true },
+  // C-06 (H-ARQ-C05-01, ADR 0017 punto 10): cron dos veces al día (11:53 y 14:53 UTC), así que
+  // 30 h toleran un día con ambos crons perdidos o muy retrasados, igual que ritmo-diario.
+  { file: 'correo-alertas.yml', check: 'correo-alertas', requiresProduction: true, event: null, maxAgeHours: 30, requiredStep: 'Enviar correos', maxDurationMin: 10 },
 ]);
 
 /**
