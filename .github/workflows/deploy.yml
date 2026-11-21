@@ -11,6 +11,9 @@ name: Despliegue
 # SUPABASE_ACCESS_TOKEN (H-V05-01): las migraciones van por --db-url al pooler
 # de sesión con la contraseña de la BD (scripts/ci/db-url.sh).
 #
+# V-05c: en push, `verify` espera al CI (ci.yml) del mismo commit y exige
+# success (scripts/ci/wait-ci.sh) antes de build, migraciones y Pages.
+#
 # Orden (ADR 0014): verify → build-pages → migrate-plan → migrate →
 # deploy-pages → smoke. Lo barato y reversible (build, verificación de dist/)
 # falla antes que lo irreversible (db push).
@@ -42,12 +45,15 @@ jobs:
   verify:
     name: verificar configuración
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    # V-05c: incluye la espera al CI del commit (tope 20 min en wait-ci.sh).
+    timeout-minutes: 25
     # H-C03-02: los secretos de producción se leen desde el environment
     # `produccion` (regla de ramas de despliegue = main).
     environment: produccion
+    # actions: read solo para consultar el run de CI del mismo commit (V-05c).
     permissions:
       contents: read
+      actions: read
     steps:
       # GITHUB_EVENT_NAME lo pone el runner. Solo `push` (a main, por el filtro
       # de on.push) se exime de confirm; cualquier otro evento lo exige.
@@ -137,6 +143,15 @@ jobs:
             exit 1
           fi
           echo "Registro de usuarios cerrado (disable_signup = true)."
+      # V-05c (H-ARQ-V05b-01, H-V05b-01, H-V05b-02): en push a main, espera a
+      # que el CI (ci.yml) del mismo SHA termine y exige success antes de
+      # build, migraciones y Pages. Con disparo manual no espera (lo decide
+      # quien confirma). Sin if: por evento: lo decide el script.
+      - name: CI del mismo commit en verde
+        env:
+          GH_TOKEN: ${{ github.token }}
+          HEAD_SHA: ${{ github.sha }}
+        run: bash scripts/ci/wait-ci.sh
 
   build-pages:
     name: build del front

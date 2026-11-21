@@ -16,6 +16,11 @@
 # de Supabase: la contraseña nunca se envía a otro host.
 
 supabase_db_url() {
+  # V-05c (H-V05b-02): aunque el paso que la llama tenga xtrace activo, nada de
+  # esta función se traza (la contraseña y la URL nunca llegan al log). La
+  # traza queda apagada al volver: el comando que usa $SUPABASE_DB_URL tampoco
+  # debe trazarse.
+  { set +x; } 2>/dev/null
   local ref="${SUPABASE_PROJECT_REF:-}"
   local pass="${SUPABASE_DB_PASSWORD:-}"
   local host="${SUPABASE_DB_POOLER_HOST:-}"
