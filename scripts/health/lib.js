@@ -46,11 +46,32 @@ export const LOG_VALUE_MAX = 300;
 // C0 (0x00-0x1f, incluye \r y \n), DEL y C1 (0x7f-0x9f, incluye NEL), separadores U+2028/U+2029.
 const isLogControl = (cp) => cp <= 0x1f || (cp >= 0x7f && cp <= 0x9f) || cp === 0x2028 || cp === 0x2029;
 
+/** Recorte simple a `limit` code points (ya sin controles) con «…». */
+function clip(chars, limit) {
+  return chars.length > limit ? `${chars.slice(0, limit - 1).join('')}…` : chars.join('');
+}
+
+const LINK_SEP = Array.from(' — ');
+const MIN_BODY = 20;
+
+/** ¿`chars` es un enlace https sin espacios ni controles (como html_url de la API)? */
+function isPlainHttpsLink(chars) {
+  if (chars.some((c) => c.trim() === '' || isLogControl(c.codePointAt(0)))) return false;
+  try {
+    return new URL(chars.join('')).protocol === 'https:';
+  } catch {
+    return false;
+  }
+}
+
 /**
  * F-21 (H-F20-01): deja un valor en una sola línea antes de escribirlo en stdout/stderr o en
  * $GITHUB_STEP_SUMMARY. Cambia cada carácter de control o separador de línea por un espacio y
  * recorta a `max` caracteres (code points) terminando en «…». Así ningún valor de la API puede
  * abrir una línea nueva que empiece con `::` (comandos de workflow de Actions).
+ * H-ARQ-F21-01 / QA-F21-01: si el valor termina en el enlace al run (` — https://...`, como lo
+ * arman assessWorkflow/assessDeploy) y el enlace cabe dejando al menos MIN_BODY caracteres de
+ * texto, se recorta solo el texto anterior y el enlace sale completo; el total sigue <= `max`.
  * @param {unknown} value
  * @param {number} [max]
  * @returns {string}
@@ -58,7 +79,16 @@ const isLogControl = (cp) => cp <= 0x1f || (cp >= 0x7f && cp <= 0x9f) || cp === 
 export function sanitizeLogValue(value, max = LOG_VALUE_MAX) {
   const chars = Array.from(String(value ?? ''), (c) => (isLogControl(c.codePointAt(0)) ? ' ' : c));
   const limit = Number.isSafeInteger(max) && max > 0 ? max : LOG_VALUE_MAX;
-  return chars.length > limit ? `${chars.slice(0, limit - 1).join('')}…` : chars.join('');
+  if (chars.length <= limit) return chars.join('');
+  const raw = Array.from(String(value ?? ''));
+  for (let i = raw.length - LINK_SEP.length; i >= 0; i--) {
+    if (!LINK_SEP.every((c, k) => raw[i + k] === c)) continue;
+    const link = raw.slice(i + LINK_SEP.length);
+    const budget = limit - LINK_SEP.length - link.length;
+    if (budget >= MIN_BODY && isPlainHttpsLink(link)) return `${clip(chars.slice(0, i), budget)}${LINK_SEP.join('')}${link.join('')}`;
+    break;
+  }
+  return clip(chars, limit);
 }
 
 /** @typedef {{ check: string, status: 'ok' | 'fail' | 'skip' | 'warn', detail: string }} Result */

@@ -144,3 +144,73 @@ describe('F-21 checkWorkflows con id no verificable (H-ARQ-F20-03 / QA-F20-02)',
     }
   });
 });
+
+describe('F-21 sanitizeLogValue conserva el enlace al run (H-ARQ-F21-01 / QA-F21-01)', () => {
+  const URL = 'https://github.com/apivasa/practica_agente/actions/runs/123456789012';
+  const SEP = ' — ';
+  test('detalle corto con enlace: sin cambios', () => {
+    assert.equal(sanitizeLogValue(`ultimo run success${SEP}${URL}`), `ultimo run success${SEP}${URL}`);
+    assert.equal(sanitizeLogValue('sin enlace\n::x'), 'sin enlace ::x');
+  });
+  test('detalle > 300 que termina en enlace: se recorta el texto, el enlace sale completo y el total <= 300', () => {
+    const detail = `${'problema largo; '.repeat(30)}failure\n::stop-commands::x${SEP}${URL}`;
+    assert.ok(Array.from(detail).length > 300);
+    const out = sanitizeLogValue(detail);
+    assert.ok(out.endsWith(`…${SEP}${URL}`), out);
+    assert.equal(Array.from(out).length, 300);
+    assert.ok(!hasControl(out));
+  });
+  test('enlace con controles o que no es https: se recorta todo como un valor', () => {
+    const bad = `${'x'.repeat(400)}${SEP}https://e.example/a\n::stop-commands::b`;
+    const out = sanitizeLogValue(bad);
+    assert.equal(Array.from(out).length, 300);
+    assert.ok(!hasControl(out));
+    assert.equal(Array.from(sanitizeLogValue(`${'x'.repeat(400)}${SEP}javascript:alert(1)`)).length, 300);
+  });
+  test('enlace enorme (no deja texto): se recorta todo a 300', () => {
+    const out = sanitizeLogValue(`fallo${SEP}https://e.example/${'p'.repeat(400)}`);
+    assert.equal(Array.from(out).length, 300);
+    assert.ok(out.endsWith('…'));
+  });
+
+  test('check.js: detalle > 300 con enlace -> enlace completo en log y resumen', async () => {
+    const runUrl = 'https://github.com/apivasa/practica_agente/actions/runs/987654321098';
+    const longConclusion = `failure\n::stop-commands::x ${'c'.repeat(300)}`;
+    const fetchLong = async (url) => {
+      const u = String(url);
+      const json = (body) => ({ ok: true, status: 200, json: async () => body, headers: new Headers() });
+      if (/\/actions\/workflows\/[^/]+\/runs/.test(u)) {
+        return json({ workflow_runs: [{ id: 5, status: 'completed', conclusion: longConclusion, event: 'schedule', created_at: at(-60), run_started_at: at(-60), updated_at: at(-59), html_url: runUrl }] });
+      }
+      if (/\/actions\/workflows\/[^/]+$/.test(u)) return json(WF);
+      return json({ workflow_runs: [], jobs: [], total_count: 0 });
+    };
+    const dir = mkdtempSync(join(tmpdir(), 'f21b-'));
+    try {
+      const summary = join(dir, 'summary.md');
+      const lines = [];
+      const { results } = await main({
+        argv: ['--only=workflows'],
+        env: { GITHUB_TOKEN: 't', GITHUB_REPOSITORY: 'o/r', EVALUATION_ENABLED: 'false', GITHUB_STEP_SUMMARY: summary },
+        fetchImpl: fetchLong, now: NOW, log: (s) => lines.push(s),
+      });
+      const long = results.filter((r) => r.detail.endsWith(`${SEP}${runUrl}`) && Array.from(r.detail).length > 300);
+      assert.ok(long.length > 0, 'el doble no produjo detalles largos con enlace');
+      const logLines = lines.slice(0, results.length).filter((l) => l.includes(runUrl));
+      assert.ok(logLines.length >= long.length);
+      for (const l of logLines) {
+        assert.ok(l.endsWith(`${SEP}${runUrl}`), l);
+        assert.ok(!hasControl(l));
+      }
+      const rows = readFileSync(summary, 'utf8').split('\n').filter((l) => l.includes(runUrl));
+      assert.ok(rows.length >= long.length);
+      for (const row of rows) {
+        assert.ok(row.endsWith(`${SEP}${runUrl} |`), row);
+        const detailCell = row.slice(2, -2).split(' | ')[2];
+        assert.ok(Array.from(detailCell).length <= LOG_VALUE_MAX, detailCell);
+      }
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+});
