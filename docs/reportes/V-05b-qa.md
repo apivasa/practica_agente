@@ -1,6 +1,6 @@
 # V-05b — Informe QA
 
-Veredicto: **ROJO** (re-revisión V-05b + V-05c, 2026-11-21; la revisión inicial de abajo fue VERDE)
+Veredicto: **VERDE** (intento 2, 2026-11-21, cabeza 9b4a34a; el intento 1 de la re-revisión V-05c fue ROJO por H-QA-V05c-01, ya corregido)
 
 Rama `item/V-05b` (commit del desarrollador ae7de7c). Fuentes del criterio: `docs/plan-maestro.md` (V-05b), ADR 0015 punto 5, H-V05-01 (`docs/reportes/V-05-seguridad.md`) y H-S03-02.
 
@@ -140,3 +140,54 @@ Rama `item/V-05b` en 86b447c. Incluye V-05c (`scripts/ci/wait-ci.sh`, `{ set +x;
 - **H-QA-V05c-02 · Baja · diagnóstico.** Si `gh api` devuelve siempre un error (por ejemplo, 403 por falta de `actions: read`), `wait-ci.sh` reintenta durante 20 min y termina con «No apareció ningún run de CI». Falla de forma segura, pero el mensaje apunta a la causa equivocada. Sugerencia: si el último intento fue un error de la API, indicarlo en el mensaje final.
 - **Observación · Baja.** `wait-ci.sh` confía en el filtro `head_sha` del servidor y no vuelve a comprobar `.head_sha` en la respuesta. Con la API de GitHub es suficiente; volver a comprobarlo sería defensa en profundidad.
 - H-QA-V05b-01 (variable del pooler): resuelto por P-07 según `docs/pendientes-usuario.md`. H-QA-V05b-03 (CLI real contra el pooler) sigue pendiente de la primera corrida en main.
+
+## Re-revisión intento 2 (2026-11-21, cabeza 9b4a34a)
+
+Veredicto del intento 2: **VERDE**.
+
+### Criterio de aceptación
+
+| Punto | Estado | Evidencia |
+|---|---|---|
+| V-05b: un merge a main despliega | Cumplido | `ci.yml` ahora usa `group: ci-${{ github.ref == 'refs/heads/main' && github.sha \|\| github.ref }}` y `cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}`. En main cada SHA tiene su propio grupo y no se cancela, así que el commit de latido ya no cancela el CI del merge. Fuera de main se sigue cancelando. La prueba `qa-v05c` que antes fallaba (H-QA-V05c-01) pasa. |
+| V-05c: `verify` espera el CI del mismo SHA en success | Cumplido | `wait-ci.sh` filtra por `path`, y además por `head_sha` y `event` (H-V05c-02). Los casos `cancelled`, `failure`, `null`, la ruta parecida, la ruta con `@ref`, otro SHA y otro evento dan el resultado esperado. |
+| H-QA-V05c-02: el mensaje cuando la API falla siempre | Cumplido | El mensaje final es «La API de GitHub falló N veces en T s: <último error>». Ese error sale saneado: sin el token y sin `::`. Si la API respondió al menos una vez, el mensaje es «No apareció ningún run». |
+| Mensaje de `cancelled` | Cumplido | Ya no promete que otro despliegue lo reemplace. Indica relanzar el CI y luego `rerun-failed-jobs`. |
+
+### Cambios del desarrollador en pruebas de QA y de seguridad: aceptados
+
+He revisado el diff de `tests/scripts/qa-v04b.test.js` y de `tests/security/health-deploy-v04b.test.js` (y también `tests/scripts/health-deploy.test.js`). **Solo cambió el umbral**:
+- 60 pasa a 90 en los bordes: exacto = pasa; +1 s / 91 = falla; 89 = pasa.
+- Los casos «atascado» pasan de 90 a 120 min, para que sigan por encima del nuevo umbral.
+
+No se quitó ninguna aserción ni se relajó ninguna condición. Los títulos se actualizaron igual. El cambio a 90 lo pidió el arquitecto (H-ARQ-V05b-09), porque la suma de timeouts de `deploy.yml` ronda los 75 min. El plan y el diseño no fijan los 60 min. Lo acepto.
+
+### Pruebas añadidas o modificadas (intento 2)
+
+- `tests/workflows/qa-v05c.test.js`:
+  - Los fixtures de `wait-ci` ahora traen `head_sha` y `event: 'push'`, como la API real. Así no dependen del valor por defecto permisivo del filtro jq.
+  - 3 casos nuevos:
+    - la concurrencia exacta de `ci.yml`: grupo por SHA en main y cancelación solo fuera de main;
+    - un run del mismo SHA con `event: pull_request` no habilita el despliegue;
+    - un `success` de otro SHA con id mayor no tapa el `failure` del SHA desplegado.
+
+### Resultado
+
+- En local, `node --test` sobre `tests/workflows`, `tests/scripts` y `tests/security`: 1541 pruebas, 1538 pasan, 0 fallan, 2 omitidas y 1 `todo`.
+- En local, `tests/engine` + smoke: 794 de 794 pasan.
+- CI de la rama en 9b4a34a: `CI` success (run 44872300486) y `Seguridad` success (run 44872300552).
+
+### Cobertura engine/
+
+99,32 % de líneas y 92,82 % de ramas. Sin cambios en `engine/`.
+
+### Hallazgos (intento 2)
+
+- **H-QA-V05c-01**: corregido.
+- **H-QA-V05c-02**: corregido.
+- **H-QA-V05c-03 · Baja · defensa en profundidad.** El filtro jq de `wait-ci.sh` acepta un run que no trae `head_sha` o `event`: usa `(.head_sha // $sha)` y `(.event // "push")`.
+  - Riesgo bajo, porque la API real siempre trae los dos campos y la consulta ya filtra por `head_sha` y `event=push`.
+  - Ese valor por defecto existía solo por los fixtures de QA, que ya se actualizaron. El desarrollador puede quitarlo y exigir los campos sin romper pruebas de QA.
+  - No bloquea.
+  - Cómo reproducir: una respuesta `{"workflow_runs":[{"id":1,"status":"completed","conclusion":"success","path":".github/workflows/ci.yml"}]}` termina con código 0.
+- **H-QA-V05c-04 · Baja · documentación.** `docs/operacion.md` sigue diciendo «> 60 min» en la fila `deploy-main` (línea 336) y «umbral de 60 min de `DEPLOY_RULE.maxPendingMin`» en el runbook (línea 362). El código ya usa 90. Le corresponde a arquitecto-SRE o al documentador. No bloquea.
