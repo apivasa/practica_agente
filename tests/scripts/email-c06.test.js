@@ -307,7 +307,10 @@ describe('C-06 H-C05-02 sanitizeError', () => {
     assert.equal(s, 'Invalid key [clave] rejected');
   });
   test('redacta JWT completos y fragmentos eyJ...', () => {
-    const jwt = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0In0.s1gn_atur-e';
+    // JWT ficticio armado en ejecución (sin literal en el repo, para gitleaks).
+    const b64 = (o) => Buffer.from(JSON.stringify(o)).toString('base64url');
+    const jwt = [b64({ alg: 'HS256', typ: 'JWT' }), b64({ sub: 'ficticio' }), 'firma_ficticia-x'].join('.');
+    assert.match(jwt, /^eyJ/);
     assert.equal(sanitizeError(`Bearer ${jwt} expirado`), 'Bearer [token] expirado');
     assert.equal(sanitizeError('token eyJhbGciOiJIUzI1NiJ9 suelto'), 'token [token] suelto');
     assert.doesNotMatch(sanitizeError({ toString: () => `x ${jwt}` }), /eyJ/);

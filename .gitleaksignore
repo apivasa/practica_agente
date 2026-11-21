@@ -3,3 +3,5 @@
 # V-04b: token ficticio de prueba en commit 5743e00 de item/V-04b y su cita en el informe (commit 40c5e0c); ambos reemplazados después. Ver docs/reportes/V-04b-seguridad.md.
 5743e0083ae926ca09a0e74e1a55b1b181a6f4a6:tests/security/health-deploy-v04b.test.js:generic-api-key:18
 40c5e0c88082d60be107521a8fec2043630bcbd5:docs/reportes/V-04b-seguridad.md:generic-api-key:19
+# C-06: JWT ficticio de prueba (cabecera HS256, sub "1234", firma inventada) en el commit 50d96c2 de item/C-06; reemplazado por uno armado en ejecución en el commit siguiente.
+50d96c24674abe12078bc48d5bdd18e0a7b17297:tests/scripts/email-c06.test.js:jwt:310

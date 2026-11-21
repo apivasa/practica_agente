@@ -75,7 +75,14 @@ const UNIT_BETA = '22222222-2222-4222-8222-000000000002';
 const COMMITTEE = '11111111-1111-4111-8111-000000000004';
 const UNIT_ALFA = '22222222-2222-4222-8222-000000000001';
 const fixtures = [
-  { unit_id: UNIT_BETA, recipient_user_id: LEADER_ALFA, kind: 'color_change', payload: { message: 'C-06 sin rol' }, dedupe_key: 'c06-integration:no-role' },
+  {
+    unit_id: UNIT_BETA,
+    recipient_user_id: LEADER_ALFA,
+    kind: 'color_change',
+    payload: { message: 'C-06 sin rol' },
+    dedupe_key: 'c06-integration:no-role',
+    sent_at: new Date().toISOString(),
+  },
   {
     unit_id: UNIT_ALFA,
     recipient_user_id: COMMITTEE,
