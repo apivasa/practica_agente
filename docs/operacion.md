@@ -181,7 +181,7 @@ Desde V-04 lo hace `salud.yml` (ver «Salud del sistema»). A mano:
 
 ## Correo de alertas (`correo-alertas.yml`, C-05, ADR 0017)
 
-`node scripts/send-alert-emails.js` lee de `alerts` las filas con `emailed_at` nula, `email_attempts < 3` y `sent_at` de los últimos 7 días. Envía un correo por fila al destinatario de esa fila, con Resend. Es idempotente: la marca es condicional (`emailed_at is null`) y cada petición lleva `Idempotency-Key: alert-email-<id>`, así que relanzar nunca reenvía. Grupo de concurrencia propio `correo-alertas`. Actor de auditoría: `system:alert-email`.
+`node scripts/send-alert-emails.js` lee de `alerts` las filas con `emailed_at` y `email_skipped_at` nulas, `email_attempts < 3` y `sent_at` de los últimos 7 días. Envía un correo por fila al destinatario de esa fila, con Resend. Es idempotente: la marca es condicional (`emailed_at is null`) y cada petición lleva `Idempotency-Key: alert-email-<id>`, así que relanzar nunca reenvía. Grupo de concurrencia propio `correo-alertas`. Actor de auditoría: `system:alert-email`.
 
 ### Variables y secretos
 | Nombre | Tipo y lugar | Obligatorio | Uso |
@@ -190,22 +190,23 @@ Desde V-04 lo hace `salud.yml` (ver «Salud del sistema»). A mano:
 | `EVALUATION_ENABLED` | variable de repositorio | sí (`true`) | Misma guarda de producción que la evaluación. |
 | `RESEND_API_KEY` | secreto, environment `produccion` | para enviar | Clave de Resend con *Sending access* (`re_...`). Sin ella: `::notice::` y exit 0 (P-09, compuerta del usuario: crearla y rotarla). |
 | `ALERT_EMAIL_FROM` | variable de repositorio | no | Remitente `correo` o `Nombre <correo>`. Por defecto `onboarding@resend.dev`, que **solo entrega al dueño de la cuenta de Resend**. Para todos los usuarios: dominio verificado en Resend y una dirección de ese dominio. |
-| `PAGES_URL` | variable de repositorio | no | Se pasa como `APP_URL` para el enlace «Ver en la app». Debe ser https. Si no existe, el correo sale sin enlace. `salud.yml` usa la misma variable con un valor por defecto; aquí no hay valor por defecto. |
+| `PAGES_URL` | variable de repositorio | no | Se pasa como `APP_URL` para el enlace «Ver en la app». Debe ser https. Si no existe, se usa `https://apivasa.github.io/practica_agente/`, el mismo valor por defecto de `salud.yml` (C-06). |
 | `ALERT_EMAIL_LOOKBACK_DAYS` | solo en ejecución local | no | Ventana en días (1..31, por defecto 7). No se define en el workflow. |
 
 ### Activación (después de P-05)
-1. Comprobar que la migración `20261129120000_alert_email_c05.sql` está aplicada en producción (`deploy.yml` tras el merge de C-05). Sin ella, con `EVALUATION_ENABLED=true`, el paso "Enviar correos" falla con `alerts pendientes de correo` (exit 1).
+1. Comprobar que las migraciones `20261129120000_alert_email_c05.sql` y `20261201120000_alert_email_c06.sql` están aplicadas en producción (`deploy.yml` tras el merge de C-05 y de C-06). Sin ellas, con `EVALUATION_ENABLED=true` y `RESEND_API_KEY` definida, el paso "Enviar correos" falla con `alerts pendientes de correo` o `alerts fuera de la ventana` (columna `email_skipped_at` inexistente, exit 1). Sin `RESEND_API_KEY` el script termina antes de tocar la BD, por eso el código de C-06 puede llegar a `main` antes que su migración; el orden obligatorio es: merge de C-06 → `deploy.yml` (migración) → P-09.
 2. *(usuario, P-09)* `RESEND_API_KEY` en el environment `produccion`; si hay dominio verificado, `ALERT_EMAIL_FROM`.
 3. Corrida manual: `gh api -X POST repos/apivasa/practica_agente/actions/workflows/correo-alertas.yml/dispatches -f ref=main`. En el log, la línea JSON final debe tener `errors: 0`. Si `failed > 0` con `HTTP 403`, es casi siempre el remitente de pruebas (ver abajo).
 
 ### Reintentos
 - Cada fallo (Resend sin respuesta, respuesta no 2xx, destinatario sin correo válido) suma 1 a `email_attempts` y deja `alert_email_failed` en `audit_log`. A los 3 intentos la alerta deja de reintentarse. Con dos pasadas al día, eso cubre ~1,5 días.
-- Pasados 7 días desde `sent_at`, la alerta ya no se envía aunque le queden intentos. Sigue en la bandeja.
-- Los fallos por alerta salen como `::warning::` y el run queda **verde**. Solo los errores de BD (exit 1) y la configuración inválida (exit 2) lo ponen en rojo.
+- Pasados 7 días desde `sent_at`, la alerta ya no se envía aunque le queden intentos. Sigue en la bandeja. Desde C-06 se marca `email_skipped_at`, `email_skip_reason = 'expired'` y se audita `alert_email_skipped`, como máximo 500 por corrida (el resto en la siguiente). **Primera corrida tras P-09:** todas las alertas generadas desde P-05 con más de 7 días salen como `expired` de golpe (hasta 500 por corrida). Es lo esperado, no una falla: nunca se iban a enviar.
+- Desde C-06, antes de enviar se comprueba el destinatario: si ya no existe (`recipient_missing`), está bloqueado en Auth (`recipient_banned`) o ya no es líder de la unidad de la alerta ni comité (`recipient_no_role`), el correo se omite sin reintento y se audita `alert_email_skipped`.
+- Los fallos por alerta salen como `::warning::` y el run queda **verde**. Lo ponen en rojo: errores de BD (exit 1), configuración inválida (exit 2) y, desde C-06, una corrida en la que ningún correo salió y **todos** los fallos fueron `HTTP 401`/`403` de Resend (exit 1, problema de configuración y no puntual).
 
 ### Cómo vigilarlo
 - Último run: `gh api 'repos/apivasa/practica_agente/actions/workflows/correo-alertas.yml/runs?per_page=3' --jq '.workflow_runs[]|{id,event,created_at,conclusion}'`.
-- `salud.yml` **todavía no** lo vigila (H-ARQ-C05-01: falta su fila en `WORKFLOW_RULES`). Hay que añadirla antes de completar P-09. Hasta entonces, revisar a mano tras la activación y reactivarlo si GitHub lo desactiva por inactividad (`.../workflows/correo-alertas.yml/enable`).
+- `salud.yml` lo vigila desde C-06 (check `correo-alertas`, fila en `WORKFLOW_RULES`): workflow `active` y, con producción activa, último run en `main` hace ≤ 30 h, `success`, ≤ 10 min y con el paso "Enviar correos" ejecutado. Ver «Qué hacer ante cada alerta» en «Salud del sistema».
 - Fallos por alerta (no los ve `salud.yml`, que no usa la clave secreta):
   ```sql
   select action, count(*) from audit_log
@@ -217,22 +218,24 @@ Desde V-04 lo hace `salud.yml` (ver «Salud del sistema»). A mano:
 
 ### Qué hacer si falla
 1. **Exit 2 `Error de configuración del correo`**: `RESEND_API_KEY` sin formato `re_...`, `ALERT_EMAIL_FROM` inválido, `PAGES_URL` no https, o faltan o son inválidos los secretos de Supabase. Corregir la variable. Si es un secreto, es compuerta del usuario.
-2. **Exit 1** (`alerts pendientes de correo`, `alerts emailed_at`, `audit_log insert`...): error de BD. Puede ser la migración sin aplicar, Supabase pausado o caído. Comprobar Supabase y migraciones y relanzar. Es idempotente.
-3. **`::warning::Correo de la alerta ... no enviado`** con:
+2. **Exit 1 con `Resend rechazó todos los envíos con 401/403`**: clave de Resend revocada o rotada (`401`), o remitente `ALERT_EMAIL_FROM` con dominio no verificado o el remitente de pruebas hacia terceros (`403`). Revisar `RESEND_API_KEY` (compuerta del usuario) o el dominio de `ALERT_EMAIL_FROM` en Resend, y luego reencolar (punto 5).
+3. **Exit 1** (`alerts pendientes de correo`, `alerts fuera de la ventana`, `alerts emailed_at`, `alerts email_skipped_at`, `user_roles del destinatario`, `audit_log insert`...): error de BD. Puede ser la migración sin aplicar, Supabase pausado o caído. Comprobar Supabase y migraciones y relanzar. Es idempotente.
+4. **`::warning::Correo de la alerta ... no enviado`** con:
    - `HTTP 403` (`You can only send testing emails...` o dominio no verificado): remitente de pruebas o dominio sin verificar. Completar P-09 (dominio y `ALERT_EMAIL_FROM`) y luego reencolar (abajo).
    - `HTTP 401`: clave revocada o rotada. Compuerta del usuario.
    - `HTTP 422`: remitente o datos rechazados por Resend. Revisar `ALERT_EMAIL_FROM`.
    - `HTTP 429`: límite por segundo o cuota diaria o mensual del plan. Se reintenta solo en la pasada siguiente. Si se agotó la cuota diaria, esperar al día siguiente y reencolar lo que llegó a 3 intentos.
    - `Resend no respondió` / `HTTP 5xx`: incidente de Resend (resend-status). Se reintenta solo.
    - `el destinatario no tiene un correo válido`: el usuario de Auth no tiene email. Corregirlo en *Authentication → Users* (paso del dueño).
-4. **Reencolar** alertas agotadas, tras corregir la causa (paso del dueño en el editor SQL; no borra datos. El `update` manual no deja fila propia en `audit_log`, pero los fallos anteriores siguen allí y el nuevo envío deja `alert_emailed` con el intento):
+5. **Reencolar** alertas agotadas, tras corregir la causa (paso del dueño en el editor SQL; no borra datos. El `update` manual no deja fila propia en `audit_log`, pero los fallos anteriores siguen allí y el nuevo envío deja `alert_emailed` con el intento):
    ```sql
    update alerts set email_attempts = 0
-    where emailed_at is null and email_attempts >= 3 and sent_at > now() - interval '7 days';
+    where emailed_at is null and email_skipped_at is null
+      and email_attempts >= 3 and sent_at > now() - interval '7 days';
    ```
-   Luego lanzar `correo-alertas.yml` a mano. Las de más de 7 días no se reenvían. Es intencional: siguen en la bandeja.
-5. **Correo duplicado reportado por un usuario**: no debería pasar (marca condicional e `Idempotency-Key`). Buscar `alert_emailed` repetido por `entity_id` en `audit_log` y abrir un ítem `fix/` con el `entity_id`. En el issue no se copian datos de la unidad ni correos: el repositorio es público.
-6. **Desactivar el correo** sin tocar la evaluación: borrar `RESEND_API_KEY` del environment (compuerta del usuario), o deshabilitar el workflow (`.../workflows/correo-alertas.yml/disable`). La bandeja de la app no se ve afectada.
+   Luego lanzar `correo-alertas.yml` a mano. Las de más de 7 días no se reenvían. Es intencional: siguen en la bandeja. Una alerta omitida (`email_skipped_at`) no se reencola: si se omitió por error (por ejemplo, rol corregido después), limpiar a la vez `email_skipped_at` y `email_skip_reason` (el CHECK `alerts_email_skip_pair` exige las dos) dentro de la ventana de 7 días.
+6. **Correo duplicado reportado por un usuario**: no debería pasar (marca condicional e `Idempotency-Key`). Buscar `alert_emailed` repetido por `entity_id` en `audit_log` y abrir un ítem `fix/` con el `entity_id`. En el issue no se copian datos de la unidad ni correos: el repositorio es público.
+7. **Desactivar el correo** sin tocar la evaluación: borrar `RESEND_API_KEY` del environment (compuerta del usuario), o deshabilitar el workflow (`.../workflows/correo-alertas.yml/disable`). La bandeja de la app no se ve afectada.
 
 ### Restaurar
 `emailed_at` y `email_attempts` son estado operativo, no historial. Tras restaurar un respaldo, las alertas restauradas conservan su marca: no se reenvían. Si el respaldo es anterior a algunos envíos, la ventana de 7 días y la `Idempotency-Key` limitan el reenvío. Resend guarda la clave unas 24 h, así que un reenvío de más de un día es posible. Para evitarlo, antes de reactivar el workflow, marcar como enviadas las alertas que ya tienen `alert_emailed` en `audit_log`:
@@ -293,6 +296,7 @@ Permisos: workflow `contents: read`; job `check` añade `actions: read`; solo el
 | `evaluacion-mensual` | workflow `active`; desde el día 2 (Guayaquil) hay un run del mes actual, el último `success`, ≤ 5 min y "Evaluar" ejecutado | estado siempre; resto con producción |
 | `seguridad-semanal` | workflow `active`; último run `schedule` hace ≤ 8 días y `success` | siempre (gracia de 8 días si el workflow es nuevo) |
 | `ci-main` | último run `push` de CI en `main` en `success` | siempre |
+| `correo-alertas` (C-06) | workflow `active`; último run completado en `main` hace ≤ 30 h, `success`, ≤ 10 min y con el paso "Enviar correos" ejecutado | estado siempre; resto con producción |
 | `deploy-main` (V-04b) | `deploy.yml` `active`; último run `push` o `workflow_dispatch` en `main` completado (sin contar `skipped`/`neutral`) en `success`; ningún run lleva > 60 min sin terminar (`queued`, `in_progress`, `waiting`...). Último cancelado: **aviso** (warning, no falla), salvo que el despliegue anterior no cancelado haya fallado: entonces falla. Sin despliegues: pasa | siempre (criterio en `DEPLOY_RULE` de `scripts/health/lib.js`, fuera de `WORKFLOW_RULES` porque no es programado) |
 | `actions-api` | hay `GITHUB_TOKEN` y la API responde | siempre |
 
@@ -316,6 +320,13 @@ Primero abrir el run enlazado en el issue y leer el resumen (tabla Check/Estado/
   - `duró N min`: comparar con la base de la tabla de tiempos; si se repite, aplicar la regla de paso intermitente.
 - **`seguridad-semanal`**: run semanal fallido o ausente. Si falló, seguir «Qué hacer si falla seguridad.yml» punto 7. Si no corrió, relanzar `seguridad.yml` manual en `main` y revisar su `state`.
 - **`ci-main`**: `main` está en rojo. El orquestador abre `fix/main-<fecha>` (paso 3 del ciclo).
+- **`correo-alertas`** (C-06, ver «Correo de alertas» arriba):
+  - `último run terminó en failure` con exit 1 y `Resend rechazó todos los envíos con 401/403` en el log: revisar `RESEND_API_KEY` (`401`: clave revocada o rotada; crearla o rotarla es compuerta del usuario) o el dominio de `ALERT_EMAIL_FROM` (`403`: dominio sin verificar en Resend o remitente de pruebas). Corregir, reencolar y relanzar `correo-alertas.yml`.
+  - `último run terminó en failure` sin esa línea: error de BD (Supabase pausado o caído) o la migración `20261201120000_alert_email_c06.sql` aún no desplegada (`column alerts.email_skipped_at does not exist`). Comprobar Supabase, desplegar la migración con `deploy.yml` y relanzar. Es idempotente. Exit 2 es configuración inválida (punto 1 de «Qué hacer si falla»).
+  - `último run hace N h` / `sin runs completados`: GitHub descartó los dos crons del día o el workflow es nuevo y aún no corrió. Lanzarlo a mano (`.../workflows/correo-alertas.yml/dispatches -f ref=main`); es idempotente y sin `RESEND_API_KEY` solo deja un `::notice::`.
+  - `paso "Enviar correos" omitido con EVALUATION_ENABLED=true`: faltan `SUPABASE_URL` o `SUPABASE_SECRET_KEY` en el environment `produccion` (compuerta del usuario).
+  - `deshabilitado (...)`: reactivar con `.../workflows/correo-alertas.yml/enable`. `duró N min`: Resend lento o muchos correos (~0,6 s por correo); revisar el log.
+  - Los fallos por alerta (exit 0, `::warning::`) no los ve `salud.yml`: se consultan en `audit_log` («Cómo vigilarlo»).
 - **`deploy-main`** (el detalle enlaza el run):
   - `último despliegue terminó en failure` (o `timed_out`, `startup_failure`...): seguir «Despliegue» (arriba) según el job que falló y relanzar `deploy.yml` en `main`. La alerta se repite cada 6 h (como comentario del mismo issue) hasta que un despliegue termine en `success`. Un run manual fallido por `confirm` mal escrito también cuenta: basta relanzarlo bien.
   - `último despliegue cancelado y el anterior terminó en failure`: la cancelación no corrige el fallo. Mismo tratamiento.
@@ -339,6 +350,6 @@ La lectura del .xlsx ocurre entera en el navegador del custodio. No hay workflow
 - Nada se guarda si hay errores (todas o ninguna). Corregir un archivo ya importado sigue el flujo normal de mediciones (M-04).
 
 ## Pendiente de completar
-- Correo de alertas (C-05): fila de `correo-alertas.yml` en `WORKFLOW_RULES` de `scripts/health/lib.js` (H-ARQ-C05-01), antes de completar P-09. Medir la base del job tras la activación.
+- Correo de alertas (C-05/C-06): medir la base del job tras P-09.
 - Restauración probada contra el Supabase de producción y medición de tiempos base de `salud.yml` y `deploy.yml` (V-05, tras el primer despliegue y la activación).
 - Cron de `salud.yml` (observado el 2026-11-20): desde su creación (02:55 UTC) solo corrió el slot de 12:41 UTC, con unas 3 h de retraso (15:44 UTC); GitHub descartó los de 06:41 y 18:41. Con producción activa, si GitHub sigue descartando crons, `ritmo-diario` (umbral 30 h) puede dar falsas alarmas `último run hace N h`: medir una semana tras P-05 antes de ajustar umbrales.
