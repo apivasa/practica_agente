@@ -109,8 +109,8 @@ describe('cat. 5 · un aviso (warn) nunca oculta un fallo', () => {
     const r = assess([run(3, { min: 30, conclusion: 'cancelled' }), run(2, { min: 60, conclusion: 'cancelled' }), run(1, { min: 90, conclusion: 'failure' })]);
     assert.equal(r.status, 'fail');
   });
-  test('cancelado con otro run atascado > 60 min: falla', () => {
-    const r = assess([run(4, { min: 90, status: 'in_progress' }), run(3, { min: 100, conclusion: 'cancelled' }), run(1, { min: 300 })]);
+  test('cancelado con otro run atascado > 90 min: falla', () => {
+    const r = assess([run(4, { min: 120, status: 'in_progress' }), run(3, { min: 100, conclusion: 'cancelled' }), run(1, { min: 300 })]);
     assert.equal(r.status, 'fail');
   });
   test('skipped/neutral posteriores no tapan un failure', () => {

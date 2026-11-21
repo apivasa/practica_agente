@@ -26,7 +26,7 @@ const BASE = {
   CI_WAIT_INTERVAL_SECONDS: '0',
 };
 
-const run = (id, status, conclusion, path = '.github/workflows/ci.yml') => ({ id, status, conclusion, path });
+const run = (id, status, conclusion, path = '.github/workflows/ci.yml', extra = {}) => ({ id, status, conclusion, path, head_sha: SHA, event: 'push', ...extra });
 const body = (...runs) => JSON.stringify({ total_count: runs.length, workflow_runs: runs });
 
 /**
@@ -37,7 +37,7 @@ function waitCi(responses, env = {}) {
   const dir = mkdtempSync(join(tmpdir(), 'v05c-gh-'));
   try {
     responses.forEach((r, i) => writeFileSync(join(dir, `r${i}`), r ?? ''));
-    const fail = responses.map((r, i) => (r === null ? `[ "$n" = ${i} ] && exit 1;` : '')).join(' ');
+    const fail = responses.map((r, i) => (r === null ? `[ "$n" = ${i} ] && { echo "HTTP 403: Resource not accessible by integration (token $GH_TOKEN) ::error::x" >&2; exit 1; };` : '')).join(' ');
     const last = responses.length - 1;
     writeFileSync(join(dir, 'gh'), `#!/bin/bash
 c="${dir}/count"; n=$(cat "$c" 2>/dev/null || echo 0); echo $((n+1)) > "$c"
@@ -116,17 +116,53 @@ test('wait-ci: error transitorio de la API o respuesta no JSON → reintenta', (
   assert.match(r.out, /::warning::/);
 });
 
-test('wait-ci: la API falla siempre → falla al agotar el tope', () => {
-  assert.notEqual(waitCi([null]).code, 0);
+test('wait-ci: la API falla siempre → el error final lo dice, con el último error sin token ni comandos de workflow (H-QA-V05c-02)', () => {
+  const r = waitCi([null, null, null], { CI_WAIT_TIMEOUT_SECONDS: '60' });
+  assert.notEqual(r.code, 0);
+  assert.equal(r.calls >= 3, true);
+  assert.match(r.out, /::error::La API de GitHub falló \d+ veces en 60 s: HTTP 403: Resource not accessible by integration/);
+  assert.doesNotMatch(r.out, /No apareció ningún run/);
+  assert.ok(!r.out.includes(TOKEN), 'el token aparece en la salida');
+  assert.equal((r.out.match(/::error::/g) || []).length, 1, 'el stderr de gh no debe inyectar ::error::');
+});
+
+test('wait-ci: si la API respondió alguna vez sin run, el mensaje es «No apareció»', () => {
+  const r = waitCi([null, body()], { CI_WAIT_TIMEOUT_SECONDS: '0' });
+  assert.match(r.out, /::error::La API de GitHub falló 1 veces/);
+  const r2 = waitCi([body(), null]);
+  assert.match(r2.out, /::error::No apareció ningún run de CI/);
+});
+
+test('wait-ci: con conclusion cancelled no promete que otro despliegue lo reemplace (H-QA-V05c-01)', () => {
+  const r = waitCi([body(run(60, 'completed', 'cancelled'))]);
+  assert.notEqual(r.code, 0);
+  assert.doesNotMatch(r.out, /lo reemplaza/);
+  assert.match(r.out, /solo de docs no redespliega/);
+});
+
+test('wait-ci: descarta runs con head_sha o event distintos aunque la API los devuelva (H-V05c-02)', () => {
+  assert.notEqual(waitCi([body(run(70, 'completed', 'success', undefined, { head_sha: 'c'.repeat(40) }))]).code, 0);
+  assert.notEqual(waitCi([body(run(71, 'completed', 'success', undefined, { event: 'workflow_dispatch' }))]).code, 0);
+  assert.notEqual(waitCi([body(run(72, 'completed', 'success', undefined, { event: 'pull_request' }))]).code, 0);
+  // Un impostor de otro SHA con id mayor no tapa el CI real en failure.
+  const r = waitCi([body(run(10, 'completed', 'failure'), run(99, 'completed', 'success', undefined, { head_sha: 'c'.repeat(40) }))]);
+  assert.match(r.out, /conclusion 'failure'/);
 });
 
 test('wait-ci: con disparo manual no consulta la API ni espera', () => {
-  for (const ev of ['workflow_dispatch']) {
-    const r = waitCi([body()], { GITHUB_EVENT_NAME: ev });
-    assert.equal(r.code, 0, r.out);
-    assert.equal(r.calls, 0);
-  }
+  const r = waitCi([body()], { GITHUB_EVENT_NAME: 'workflow_dispatch' });
+  assert.equal(r.code, 0, r.out);
+  assert.equal(r.calls, 0);
 });
+
+for (const ev of ['pull_request', 'schedule', 'workflow_run', 'repository_dispatch', '', 'PUSH']) {
+  test(`wait-ci: evento ${JSON.stringify(ev)} (ni push ni workflow_dispatch) → falla sin consultar la API`, () => {
+    const r = waitCi([body(run(1, 'completed', 'success'))], { GITHUB_EVENT_NAME: ev });
+    assert.notEqual(r.code, 0);
+    assert.equal(r.calls, 0);
+    assert.match(r.out, /::error::Evento/);
+  });
+}
 
 for (const [label, env] of [
   ['SHA corto', { HEAD_SHA: 'abc123' }],
