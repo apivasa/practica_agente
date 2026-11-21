@@ -4,6 +4,8 @@
 // Aquí se verifica estáticamente la estructura y, ejecutando con bash los
 // scripts de los pasos, el comportamiento de las compuertas de verify y del
 // chequeo de dist/. Sin dependencias de YAML: análisis por indentación.
+// V-05b: actualizado a la fase 2 (push a main + dispatch con confirm) y a
+// `db push --db-url` sin SUPABASE_ACCESS_TOKEN. Casos nuevos en qa-v05b.test.js.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync, mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
@@ -86,12 +88,26 @@ function bash(script, env, cwd) {
 
 // ---------------------------------------------------------------- disparador
 
-test('deploy.yml: solo se dispara con workflow_dispatch (compuerta del primer despliegue)', () => {
+// V-05b (ADR 0015 punto 5): fase 2, despliegue continuo en push a main; el
+// disparo manual sigue disponible.
+test('deploy.yml: se dispara solo con workflow_dispatch y push a main (sin PR, schedule ni workflow_run)', () => {
   const on = topBlock('on');
   assert.ok(on, 'falta on:');
   const triggers = on.split('\n').slice(1).filter((l) => /^ {2}[\w-]+:/.test(l)).map((l) => l.trim().replace(/:.*/, ''));
-  assert.deepEqual(triggers, ['workflow_dispatch']);
-  assert.doesNotMatch(on, /\b(push|pull_request|schedule|workflow_run|pull_request_target)\b/);
+  assert.deepEqual(triggers.sort(), ['push', 'workflow_dispatch']);
+  assert.doesNotMatch(on, /\b(pull_request|schedule|workflow_run|pull_request_target|release|repository_dispatch)\b/);
+});
+
+test('deploy.yml: el push se limita a la rama main (sin comodines, tags ni branches-ignore)', () => {
+  const lines = topBlock('on').split('\n');
+  const p = lines.findIndex((l) => /^ {2}push:\s*$/.test(l));
+  assert.ok(p >= 0, 'falta on.push');
+  const children = [];
+  for (let i = p + 1; i < lines.length && (lines[i].trim() === '' || indentOf(lines[i]) > 2); i++) children.push(lines[i]);
+  const keys = children.filter((l) => /^ {4}[\w-]+:/.test(l)).map((l) => l.trim().replace(/:.*/, ''));
+  assert.deepEqual(keys.sort(), ['branches', 'paths-ignore']);
+  const branches = children.find((l) => /^ {4}branches:/.test(l));
+  assert.match(branches, /^ {4}branches:\s*\[\s*main\s*\]\s*$/);
 });
 
 test('deploy.yml: input confirm obligatorio y sin valor por defecto que habilite', () => {
@@ -113,6 +129,16 @@ test('deploy.yml: concurrencia sin cancelar un despliegue en curso', () => {
   const c = topBlock('concurrency');
   assert.ok(c, 'falta concurrency:');
   assert.match(c, /cancel-in-progress:\s*false/);
+});
+
+// Con push en cada merge, dos merges seguidos no deben correr db push a la vez:
+// el grupo es único (no depende de ref, sha ni run) y no hay concurrency por job.
+test('deploy.yml: grupo de concurrencia único para todo despliegue (push y manual en la misma cola)', () => {
+  const c = topBlock('concurrency');
+  const group = c.split('\n').find((l) => /^\s+group:/.test(l));
+  assert.ok(group, 'falta concurrency.group');
+  assert.doesNotMatch(group, /\$\{\{/, `el grupo no debe variar por evento/ref: ${group.trim()}`);
+  for (const { id, text } of JOBS) assert.doesNotMatch(text, /^ {4}concurrency:/m, `${id} define su propia concurrencia`);
 });
 
 // ---------------------------------------------------------------- cadena de jobs
@@ -188,17 +214,11 @@ test('deploy.yml: los jobs con secretos de producción usan el environment produ
 
 // ---------------------------------------------------------------- verify
 
-// docs/despliegue.md lista los 6 secretos de P-02; deploy.yml usa 5:
-// SUPABASE_SECRET_KEY no la lee ningún job del despliegue (H-S05-06).
-const ALL_SECRETS = [
-  'SUPABASE_URL',
-  'SUPABASE_PROJECT_REF',
-  'SUPABASE_PUBLISHABLE_KEY',
-  'SUPABASE_SECRET_KEY',
-  'SUPABASE_ACCESS_TOKEN',
-  'SUPABASE_DB_PASSWORD',
-];
-const SECRETS = ALL_SECRETS.filter((s) => s !== 'SUPABASE_SECRET_KEY');
+// V-05b: deploy.yml usa 4 secretos. Ni SUPABASE_SECRET_KEY (H-S05-06) ni
+// SUPABASE_ACCESS_TOKEN (H-V05-01: las migraciones van por --db-url con la
+// contraseña de la BD). El host del pooler es una variable (vars.*), no secreto.
+const SECRETS = ['SUPABASE_URL', 'SUPABASE_PROJECT_REF', 'SUPABASE_PUBLISHABLE_KEY', 'SUPABASE_DB_PASSWORD'];
+const POOLER_VAR = 'SUPABASE_DB_POOLER_HOST';
 const CODE = TEXT.split('\n').filter((l) => !isComment(l)).join('\n');
 
 test('deploy.yml: ningún job lee SUPABASE_SECRET_KEY (H-S05-06)', () => {
@@ -206,10 +226,28 @@ test('deploy.yml: ningún job lee SUPABASE_SECRET_KEY (H-S05-06)', () => {
   assert.doesNotMatch(CODE, /sb_secret_\*/);
 });
 
-test('verify: recibe los 5 secretos del despliegue como env desde secrets.*', () => {
+test('deploy.yml: ningún job lee SUPABASE_ACCESS_TOKEN ni hace supabase link / login (H-V05-01)', () => {
+  assert.doesNotMatch(CODE, /SUPABASE_ACCESS_TOKEN|sbp_/);
+  assert.doesNotMatch(CODE, /supabase\s+(link|login|projects)\b/);
+});
+
+test('verify: recibe los 4 secretos del despliegue desde secrets.* y el host del pooler desde vars.*', () => {
   const v = job('verify');
   for (const s of SECRETS) assert.match(v, new RegExp(`${s}:\\s*\\$\\{\\{\\s*secrets\\.${s}\\s*\\}\\}`), s);
+  assert.match(v, new RegExp(`${POOLER_VAR}:\\s*\\$\\{\\{\\s*vars\\.${POOLER_VAR}\\s*\\}\\}`));
   assert.match(v, /CONFIRM:\s*\$\{\{\s*inputs\.confirm\s*\}\}/);
+});
+
+// La exención de confirm se decide por GITHUB_EVENT_NAME, que pone el runner:
+// ningún env: del workflow debe poder fijarlo.
+test('deploy.yml: ningún env: redefine GITHUB_EVENT_NAME ni GITHUB_REF', () => {
+  assert.doesNotMatch(CODE, /^\s+GITHUB_(EVENT_NAME|REF)\s*:/m);
+});
+
+test('deploy.yml: ningún paso de la cadena se salta por evento (sin if: en verify, build, plan ni migrate)', () => {
+  for (const id of ['verify', 'build-pages', 'migrate-plan', 'migrate']) {
+    assert.doesNotMatch(job(id), /^\s+if:/m, `${id} tiene un if:`);
+  }
 });
 
 test('verify: los scripts no usan expresiones ${{ }} (sin inyección del input)', () => {
@@ -245,62 +283,126 @@ test('verify: orden secretos → origen de producción → registro cerrado (no 
 });
 
 const REF = 'abcdefghijklmnopqrst';
+const POOLER = 'aws-0-us-east-2.pooler.supabase.com';
+// Disparo manual por defecto; los casos de push lo cambian explícitamente.
+// Sin SUPABASE_ACCESS_TOKEN ni SUPABASE_SECRET_KEY: verify debe pasar sin ellos.
 const GOOD = {
+  GITHUB_EVENT_NAME: 'workflow_dispatch',
   CONFIRM: 'desplegar',
   GITHUB_REF: 'refs/heads/main',
   SUPABASE_URL: `https://${REF}.supabase.co`,
   SUPABASE_PROJECT_REF: REF,
   SUPABASE_PUBLISHABLE_KEY: 'sb_publishable_FAKEpublishableVALUE123',
-  SUPABASE_ACCESS_TOKEN: 'sbp_FAKEaccessTOKEN0987654321',
   SUPABASE_DB_PASSWORD: 'FAKE-db-password-zz9',
+  SUPABASE_DB_POOLER_HOST: POOLER,
 };
-const SENSITIVE = ['SUPABASE_PUBLISHABLE_KEY', 'SUPABASE_ACCESS_TOKEN', 'SUPABASE_DB_PASSWORD'];
+const SENSITIVE = ['SUPABASE_PUBLISHABLE_KEY', 'SUPABASE_DB_PASSWORD'];
 const runVerify = (over) => bash(runScript('verify', 'Confirmación, rama y secretos'), { ...GOOD, ...over });
+const PUSH = { GITHUB_EVENT_NAME: 'push', CONFIRM: '' };
 const assertNoLeak = (out, values = GOOD) => {
   for (const s of SENSITIVE) assert.ok(!out.includes(values[s]), `la salida filtra ${s}`);
 };
 
-test('verify (bash): configuración completa en main con confirm=desplegar pasa sin filtrar valores', () => {
+test('verify (bash): disparo manual en main con confirm=desplegar y configuración completa pasa sin filtrar valores', () => {
   const r = runVerify({});
   assert.equal(r.code, 0, r.out);
   assertNoLeak(r.out);
 });
 
-test('verify (bash): no exige SUPABASE_SECRET_KEY (ausente, pasa)', () => {
-  const r = runVerify({});
+test('verify (bash): push a main pasa sin confirm (despliegue continuo) y sin filtrar valores', () => {
+  const r = runVerify(PUSH);
   assert.equal(r.code, 0, r.out);
-  assert.doesNotMatch(r.out, /SUPABASE_SECRET_KEY/);
+  assertNoLeak(r.out);
+});
+
+test('verify (bash): no exige SUPABASE_SECRET_KEY ni SUPABASE_ACCESS_TOKEN (ausentes, pasa)', () => {
+  for (const over of [{}, PUSH]) {
+    const r = runVerify(over);
+    assert.equal(r.code, 0, r.out);
+    assert.doesNotMatch(r.out, /SUPABASE_SECRET_KEY|SUPABASE_ACCESS_TOKEN/);
+  }
 });
 
 for (const bad of ['', 'Desplegar', 'desplegar ', 'si', 'desplegarr']) {
-  test(`verify (bash): confirm=${JSON.stringify(bad)} se rechaza`, () => {
+  test(`verify (bash): dispatch con confirm=${JSON.stringify(bad)} se rechaza`, () => {
     const r = runVerify({ CONFIRM: bad });
     assert.notEqual(r.code, 0);
     assert.match(r.out, /no confirmado/);
   });
 }
 
-for (const ref of ['refs/heads/item/V-05', 'refs/heads/mainx', 'refs/tags/main', '']) {
-  test(`verify (bash): rama ${JSON.stringify(ref)} distinta de main se rechaza`, () => {
-    const r = runVerify({ GITHUB_REF: ref });
+// Solo el evento push exime de confirm: cualquier otro nombre (o vacío) lo exige.
+for (const ev of ['', 'Push', 'push ', 'pull_request', 'schedule', 'workflow_run', 'repository_dispatch']) {
+  test(`verify (bash): evento ${JSON.stringify(ev)} sin confirm se rechaza`, () => {
+    const r = runVerify({ GITHUB_EVENT_NAME: ev, CONFIRM: '' });
     assert.notEqual(r.code, 0);
-    assert.match(r.out, /Solo se despliega desde main/);
+    assert.match(r.out, /no confirmado/);
   });
 }
 
+for (const ref of ['refs/heads/item/V-05', 'refs/heads/mainx', 'refs/tags/main', 'refs/pull/1/merge', '']) {
+  for (const [label, over] of [['dispatch', {}], ['push', PUSH]]) {
+    test(`verify (bash): ${label} desde ${JSON.stringify(ref)} distinta de main se rechaza`, () => {
+      const r = runVerify({ ...over, GITHUB_REF: ref });
+      assert.notEqual(r.code, 0);
+      assert.match(r.out, /Solo se despliega desde main/);
+    });
+  }
+}
+
 for (const s of SECRETS) {
-  test(`verify (bash): falta ${s} → falla, lo nombra y no filtra los demás`, () => {
-    const r = runVerify({ [s]: '' });
+  test(`verify (bash): falta ${s} → falla también en push, lo nombra y no filtra los demás`, () => {
+    for (const over of [{}, PUSH]) {
+      const r = runVerify({ ...over, [s]: '' });
+      assert.notEqual(r.code, 0);
+      assert.match(r.out, new RegExp(`Faltan secretos de producción:.*${s}`));
+      assertNoLeak(r.out);
+    }
+  });
+}
+
+test('verify (bash): faltan todos → los 4 se listan', () => {
+  const r = runVerify(Object.fromEntries(SECRETS.map((s) => [s, ''])));
+  assert.notEqual(r.code, 0);
+  for (const s of SECRETS) assert.ok(r.out.includes(s), s);
+});
+
+test('verify (bash): falta la variable SUPABASE_DB_POOLER_HOST → falla en push y en dispatch sin filtrar', () => {
+  for (const over of [{}, PUSH]) {
+    const r = runVerify({ ...over, SUPABASE_DB_POOLER_HOST: '' });
     assert.notEqual(r.code, 0);
-    assert.match(r.out, new RegExp(`Faltan secretos de producción:.*${s}`));
+    assert.match(r.out, /SUPABASE_DB_POOLER_HOST/);
+    assertNoLeak(r.out);
+  }
+});
+
+// La contraseña de la BD solo debe viajar al pooler de Supabase.
+const BAD_POOLERS = [
+  'evil.example.com',
+  'aws-0-us-east-1.pooler.supabase.com.evil.io',
+  'x.aws-0-us-east-1.pooler.supabase.com',
+  'aws-0-us-east-1.pooler.supabase.com:6543',
+  'aws-0-us-east-1.pooler.supabase.com/x',
+  'aws-0-us-east-1.pooler.supabase.com@evil.io',
+  'evil.io#aws-0-us-east-1.pooler.supabase.com',
+  ' aws-0-us-east-1.pooler.supabase.com',
+  'aws-0-us-east-1.pooler.supabase.com\nevil.io',
+  `db.${REF}.supabase.co`,
+  'aws-0-us-east-1.pooler.supabase.co',
+];
+for (const host of BAD_POOLERS) {
+  test(`verify (bash): host del pooler ${JSON.stringify(host)} se rechaza sin filtrar la contraseña`, () => {
+    const r = runVerify({ ...PUSH, SUPABASE_DB_POOLER_HOST: host });
+    assert.notEqual(r.code, 0);
+    assert.match(r.out, /SUPABASE_DB_POOLER_HOST/);
     assertNoLeak(r.out);
   });
 }
 
-test('verify (bash): faltan todos → los 5 se listan', () => {
-  const r = runVerify(Object.fromEntries(SECRETS.map((s) => [s, ''])));
-  assert.notEqual(r.code, 0);
-  for (const s of SECRETS) assert.ok(r.out.includes(s), s);
+test('verify (bash): hosts de pooler reales de varias regiones se aceptan', () => {
+  for (const host of ['aws-0-us-east-1.pooler.supabase.com', 'aws-1-eu-central-2.pooler.supabase.com', 'aws-0-ap-southeast-1.pooler.supabase.com', POOLER]) {
+    assert.equal(runVerify({ SUPABASE_DB_POOLER_HOST: host }).code, 0, host);
+  }
 });
 
 test('verify (bash): clave publicable legada (JWT anon) se rechaza sin imprimirla', () => {
@@ -460,10 +562,12 @@ for (const id of ['migrate-plan', 'migrate']) {
     assert.doesNotMatch(job(id), /--include-seed|seed\.sql|db reset|db seed|--include-all|--debug|config push/);
   });
 
-  test(`${id}: link con project ref, solo token y contraseña de BD, sin credenciales persistidas`, () => {
+  test(`${id}: sin link ni token, solo contraseña de BD + ref + host del pooler, sin credenciales persistidas`, () => {
     const m = job(id);
-    assert.match(m, /supabase link --project-ref "\$SUPABASE_PROJECT_REF"/);
-    assert.doesNotMatch(m, /SUPABASE_SECRET_KEY|SUPABASE_PUBLISHABLE_KEY/);
+    assert.doesNotMatch(m, /supabase\s+link\b|SUPABASE_ACCESS_TOKEN/);
+    assert.doesNotMatch(m, /SUPABASE_SECRET_KEY|SUPABASE_PUBLISHABLE_KEY|secrets\.SUPABASE_URL\b/);
+    const secretsRead = [...new Set([...m.matchAll(/secrets\.(\w+)/g)].map((x) => x[1]))].sort();
+    assert.deepEqual(secretsRead, ['SUPABASE_DB_PASSWORD', 'SUPABASE_PROJECT_REF']);
     assert.match(m, /persist-credentials:\s*false/);
     assert.match(m, /environment:\s*produccion/);
   });
@@ -475,9 +579,11 @@ test('deploy.yml: ningún job aplica la semilla, resetea, usa psql ni config pus
 
 // Líneas que invocan `supabase db push` (cualquier variante de flags).
 const DB_PUSH = /supabase\s+db\s+push\b/;
-const DRY_RUN_LINE = /^\s*(run:\s*)?supabase db push --remote --dry-run\s*$/;
+// V-05b: destino remoto explícito por --db-url (cadena de scripts/ci/db-url.sh).
+const DRY_RUN_LINE = /^\s*(run:\s*)?supabase db push --db-url "\$SUPABASE_DB_URL" --dry-run\s*$/;
 // Fix run 44837918615: la CLI pide confirmación en CI; el push real lleva --yes.
-const REAL_PUSH_LINE = /^\s*(run:\s*)?supabase db push --remote --yes\s*$/;
+const REAL_PUSH_LINE = /^\s*(run:\s*)?supabase db push --db-url "\$SUPABASE_DB_URL" --yes\s*$/;
+const LIST_LINE = /^\s*(run:\s*)?supabase migration list --db-url "\$SUPABASE_DB_URL"\s*$/;
 
 test('migrate-plan: solo dry-run sin --yes, nunca db push real', () => {
   const pushes = job('migrate-plan').split('\n').filter((l) => DB_PUSH.test(l));
@@ -488,17 +594,17 @@ test('migrate-plan: solo dry-run sin --yes, nunca db push real', () => {
   }
 });
 
-test('migrate: dry-run (sin --yes) en un paso previo al push real `--remote --yes` y migration list después', () => {
+test('migrate: dry-run (sin --yes) en un paso previo al push real `--db-url … --yes` y migration list después', () => {
   const lines = job('migrate').split('\n');
   const pushes = lines.map((l, i) => [l, i]).filter(([l]) => DB_PUSH.test(l));
   const dryIdx = pushes.filter(([l]) => DRY_RUN_LINE.test(l)).map(([, i]) => i);
   const realIdx = pushes.filter(([l]) => REAL_PUSH_LINE.test(l)).map(([, i]) => i);
   assert.equal(dryIdx.length, 1, 'migrate: exactamente un dry-run');
-  assert.equal(realIdx.length, 1, 'migrate: exactamente un push real `supabase db push --remote --yes`');
+  assert.equal(realIdx.length, 1, 'migrate: exactamente un push real `supabase db push --db-url "$SUPABASE_DB_URL" --yes`');
   assert.equal(pushes.length, 2, `migrate: solo dry-run y push real: ${pushes.map(([l]) => l.trim()).join(' | ')}`);
   const [dry] = dryIdx;
   const [push] = realIdx;
-  const list = lines.findIndex((l) => /supabase migration list --remote\s*$/.test(l));
+  const list = lines.findIndex((l) => LIST_LINE.test(l));
   assert.ok(dry >= 0 && push > dry && list > push, `orden dry-run(${dry}) → push(${push}) → list(${list})`);
   assert.ok(lines.slice(dry, push).some((l) => /^\s+- name:/.test(l)), 'dry-run y push en pasos distintos');
 });
@@ -693,23 +799,50 @@ test('smoke (bash): sin page_url usa la URL de respaldo de Pages', () => {
 
 test('docs/despliegue.md: documenta disparo manual, secretos, verificación y reversión', () => {
   assert.match(DOC, /desplegar/);
-  for (const s of ALL_SECRETS) assert.ok(DOC.includes(s), `docs/despliegue.md no menciona ${s}`);
+  for (const s of SECRETS) assert.ok(DOC.includes(s), `docs/despliegue.md no menciona ${s}`);
   assert.match(DOC, /dry-run/);
   assert.match(DOC, /seed\.sql/);
   assert.match(DOC, /[Rr]evers/);
 });
 
-test('deploy.yml: todo comando de BD de la CLI apunta al proyecto remoto (CLI 3.x usa el stack local por defecto)', () => {
-  const cmds = CODE.split('\n').filter((l) => /^\s*(run:\s*)?supabase\s+(db\s+push|migration\s+list)\b/.test(l));
+// La CLI 3.x usa el stack local por defecto: cada comando de BD lleva un
+// destino remoto explícito, ahora la cadena del pooler por --db-url (H-V05-01).
+test('deploy.yml: todo comando de BD de la CLI apunta al proyecto remoto por --db-url "$SUPABASE_DB_URL"', () => {
+  const all = CODE.split('\n').filter((l) => /supabase\s+(db|migration)\b/.test(l));
+  const cmds = all.filter((l) => /^\s*(run:\s*)?supabase\s+(db\s+push|migration\s+list)\b/.test(l));
+  assert.equal(cmds.length, all.length, `comando de BD inesperado: ${all.map((l) => l.trim()).join(' | ')}`);
   assert.ok(cmds.length >= 4, `se esperaban al menos 4 comandos, hay ${cmds.length}`);
   for (const l of cmds) {
-    assert.match(l, /\s--remote(\s|$)/, `sin --remote: ${l.trim()}`);
-    assert.doesNotMatch(l, /--local|--db-url|--password|-p\s|--include-seed|--debug/, l.trim());
+    assert.match(l, /\s--db-url "\$SUPABASE_DB_URL"(\s|$)/, `sin --db-url explícito: ${l.trim()}`);
+    assert.doesNotMatch(l, /--local|--linked|--password|\s-p\s|--include-seed|--include-all|--debug/, l.trim());
   }
 });
 
-test('deploy.yml: los pasos con db push/migration list reciben la contraseña por env', () => {
+test('deploy.yml: la cadena de conexión nunca va escrita en el workflow (sin postgres:// literal)', () => {
+  assert.doesNotMatch(CODE, /postgres(ql)?:\/\//);
+  assert.doesNotMatch(CODE, /SUPABASE_DB_URL:\s*\$\{\{/, 'SUPABASE_DB_URL no se arma con expresiones de GitHub');
+});
+
+test('deploy.yml: cada paso con db push/migration list arma la URL con db-url.sh y recibe contraseña, ref y host por env', () => {
   const steps = CODE.split(/^\s+- (?=name:|uses:)/m).filter((s) => /supabase\s+(db\s+push|migration\s+list)/.test(s));
   assert.ok(steps.length >= 4);
-  for (const s of steps) assert.match(s, /SUPABASE_DB_PASSWORD:\s*\$\{\{\s*secrets\.SUPABASE_DB_PASSWORD\s*\}\}/, s.split('\n')[0]);
+  for (const s of steps) {
+    const name = s.split('\n')[0];
+    assert.match(s, /SUPABASE_DB_PASSWORD:\s*\$\{\{\s*secrets\.SUPABASE_DB_PASSWORD\s*\}\}/, name);
+    assert.match(s, /SUPABASE_PROJECT_REF:\s*\$\{\{\s*secrets\.SUPABASE_PROJECT_REF\s*\}\}/, name);
+    assert.match(s, /SUPABASE_DB_POOLER_HOST:\s*\$\{\{\s*vars\.SUPABASE_DB_POOLER_HOST\s*\}\}/, name);
+    const body = s.split('\n');
+    const strict = body.findIndex((l) => /set -euo pipefail/.test(l));
+    const src = body.findIndex((l) => /^\s*\. scripts\/ci\/db-url\.sh\s*$/.test(l));
+    const call = body.findIndex((l) => /^\s*supabase_db_url\s*$/.test(l));
+    const cli = body.findIndex((l) => /supabase\s+(db\s+push|migration\s+list)/.test(l));
+    assert.ok(strict >= 0 && src > strict && call > src && cli > call, `${name}: orden set -euo pipefail → . db-url.sh → supabase_db_url → CLI`);
+  }
+});
+
+test('deploy.yml: ningún script imprime la contraseña ni la URL de la BD ni activa trazas', () => {
+  for (const l of CODE.split('\n')) {
+    if (/\b(echo|printf)\b/.test(l)) assert.doesNotMatch(l, /SUPABASE_DB_(PASSWORD|URL)/, l.trim());
+    assert.doesNotMatch(l, /set -[a-z]*x|set -o xtrace|bash -x/, l.trim());
+  }
 });
