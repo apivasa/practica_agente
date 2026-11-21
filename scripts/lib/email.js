@@ -322,7 +322,8 @@ export async function sendAlertEmails(db, { config, fetchImpl, now = () => new D
  * Sin RESEND_API_KEY: anota ::notice:: y termina con 0. Fallos de Resend: ::warning:: y 0,
  * salvo que ningún correo salga y todos los fallos sean 401/403 (clave revocada o remitente
  * no verificado, H-ARQ-C05-02): entonces 1, para que salud.yml lo vea.
- * Configuración inválida: 2. Errores de la BD: 1.
+ * Configuración inválida: 2. BD sin recipientAccess, expiredEmailAlerts o
+ * markAlertsEmailSkipped: 2 sin enviar nada (F-11, H-C06-01). Errores de la BD: 1.
  * @param {{ env: Record<string, string|undefined>, fetchImpl: typeof fetch,
  *   makeDb: (supabase: { url: string, secretKey: string }) => Promise<EmailDb>,
  *   readSupabaseConfig: (env: any) => { url: string, secretKey: string },
@@ -343,6 +344,13 @@ export async function runEmailStep({ env, fetchImpl, makeDb, readSupabaseConfig,
     return { code: 2, summary: null };
   }
   const db = await makeDb(supabase);
+  // F-11 (H-C06-01): fail-closed. Sin los métodos de C-06 no se puede comprobar rol ni
+  // bloqueo del destinatario: no se envía nada.
+  const missing = missingEmailDbMethods(db);
+  if (missing.length > 0) {
+    log(`::error::La capa de BD no implementa ${missing.join(', ')}: no se envían correos sin comprobar rol y bloqueo del destinatario.`);
+    return { code: 2, summary: null };
+  }
   const summary = await sendAlertEmails(db, { config, fetchImpl, now, sleep, log: (m) => log(`  ${m}`) });
   for (const f of summary.failures) log(`::warning::Correo de la alerta ${f.alert_id} no enviado: ${f.error}`);
   for (const e of summary.errors) log(`::error::${e}`);
@@ -362,6 +370,18 @@ export async function runEmailStep({ env, fetchImpl, makeDb, readSupabaseConfig,
     }),
   );
   return { code: summary.errors.length > 0 || authFailure ? 1 : 0, summary };
+}
+
+/** Métodos de C-06 que runEmailStep exige a la BD (H-C06-01). */
+export const REQUIRED_C06_DB_METHODS = Object.freeze(['recipientAccess', 'expiredEmailAlerts', 'markAlertsEmailSkipped']);
+
+/**
+ * Nombres de los métodos de C-06 que la BD no implementa (vacío si están todos).
+ * @param {unknown} db
+ * @returns {string[]}
+ */
+export function missingEmailDbMethods(db) {
+  return REQUIRED_C06_DB_METHODS.filter((m) => !db || typeof (/** @type {any} */ (db))[m] !== 'function');
 }
 
 /**

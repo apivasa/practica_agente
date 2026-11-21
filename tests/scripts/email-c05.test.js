@@ -70,6 +70,23 @@ function fakeDb(alerts, { emails = EMAILS, userEmailError = null } = {}) {
   };
 }
 
+/**
+ * F-11 (H-C06-01): runEmailStep exige a la BD los tres métodos de C-06. Se añaden a la BD
+ * simulada de C-05: el destinatario es unit_leader vigente de la(s) unidad(es) de sus
+ * alertas, no hay alertas vencidas y marcar como omitida no hace nada.
+ */
+function withC06(db, emails = EMAILS) {
+  db.recipientAccess = async (id) => ({
+    email: emails[id] ?? null,
+    bannedUntil: null,
+    deletedAt: null,
+    roles: db.t.alerts.filter((a) => a.recipient_user_id === id).map((a) => ({ role: 'unit_leader', unit_id: a.unit_id })),
+  });
+  db.expiredEmailAlerts = async () => [];
+  db.markAlertsEmailSkipped = async () => [];
+  return db;
+}
+
 /** Resend simulado: guarda cada petición y responde según `respond`. */
 function fakeResend(respond = () => ({ status: 200, body: { id: `re-${Math.random().toString(36).slice(2)}` } })) {
   const calls = [];
@@ -288,7 +305,7 @@ describe('runEmailStep', () => {
 
   test('fallos de Resend: ::warning:: y código 0; resumen en JSON', async () => {
     const lines = [];
-    const db = fakeDb([row('a-l1', U1, L1, 'Unidad Uno')]);
+    const db = withC06(fakeDb([row('a-l1', U1, L1, 'Unidad Uno')]));
     const { fetchImpl } = fakeResend(() => ({ status: 429, body: { message: 'Too many requests' } }));
     const r = await runEmailStep({ env, fetchImpl, makeDb: async () => db, readSupabaseConfig, log: (m) => lines.push(m), now: () => NOW, sleep: async () => {} });
     assert.equal(r.code, 0);
@@ -311,7 +328,7 @@ describe('runEmailStep', () => {
   });
 
   test('errores de la BD: código 1', async () => {
-    const db = fakeDb([row('a-l1', U1, L1, 'Unidad Uno')]);
+    const db = withC06(fakeDb([row('a-l1', U1, L1, 'Unidad Uno')]));
     db.insertAudit = async () => {
       throw new Error('audit down');
     };

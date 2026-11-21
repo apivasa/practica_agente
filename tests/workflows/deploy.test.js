@@ -244,10 +244,22 @@ test('deploy.yml: ningún env: redefine GITHUB_EVENT_NAME ni GITHUB_REF', () => 
   assert.doesNotMatch(CODE, /^\s+GITHUB_(EVENT_NAME|REF)\s*:/m);
 });
 
-test('deploy.yml: ningún paso de la cadena se salta por evento (sin if: en verify, build, plan ni migrate)', () => {
-  for (const id of ['verify', 'build-pages', 'migrate-plan', 'migrate']) {
-    assert.doesNotMatch(job(id), /^\s+if:/m, `${id} tiene un if:`);
+// F-11 (H-ARQ-F11-01): la única condición admitida en toda la cadena es la de
+// build-pages sobre la salida deploy de verify (la decide check-main-tip.sh,
+// no el evento). Cualquier otro if:, en job o en paso, sigue prohibido.
+const DEPLOY_IF = "if: needs.verify.outputs.deploy == 'true'";
+test('deploy.yml: ningún paso de la cadena se salta por evento (solo build-pages lleva el if: de verify.outputs.deploy)', () => {
+  for (const { id, text } of JOBS) {
+    const ifs = text.split('\n').filter((l) => /^\s+(- )?if:/.test(l));
+    if (id === 'build-pages') {
+      assert.equal(ifs.length, 1, `build-pages: se esperaba un único if:, hay ${ifs.length}`);
+      assert.equal(ifs[0], `    ${DEPLOY_IF}`, `build-pages: if: distinto del admitido (o no a nivel de job): ${ifs[0]}`);
+    } else {
+      assert.deepEqual(ifs, [], `${id} tiene un if:`);
+    }
   }
+  assert.doesNotMatch(CODE, /\bif:.*\bgithub\.event/, 'ningún if: depende de github.event*');
+  assert.doesNotMatch(CODE, /\bif:.*\bgithub\.(run_attempt|ref|actor)\b/, 'ningún if: depende del intento, la ref o el actor');
 });
 
 test('verify: los scripts no usan expresiones ${{ }} (sin inyección del input)', () => {

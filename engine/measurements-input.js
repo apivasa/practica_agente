@@ -160,7 +160,9 @@ export function validateMeasurementInput(indicator, fields, ctx = {}) {
     raw[k] = get(k);
     if (k === 'valor' && NEGATIVE_NUMBER_RE.test(raw[k])) {
       const what = type === 'cumulative_target' ? 'un entero' : 'un número';
-      err(k, `valor: "${raw[k]}" debe ser ${what} ≥ 0 (no se aceptan negativos ni fórmulas)`);
+      // F-11: un negativo de Excel expandido puede tener cientos de dígitos; se recorta.
+      const shown = raw[k].length > 30 ? `${raw[k].slice(0, 30)}…` : raw[k];
+      err(k, `valor: "${shown}" debe ser ${what} ≥ 0 (no se aceptan negativos ni fórmulas)`);
       raw[k] = null;
     } else if (isFormulaLike(raw[k])) {
       err(k, `${k}: la celda empieza con =, +, -, @ o un carácter de control (posible fórmula); no se acepta`);
