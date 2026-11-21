@@ -11,7 +11,7 @@ El primer despliegue a producción ya se hizo a mano (V-05, run 44838844787). De
 ## Cuándo se dispara
 
 - **Push a `main`** (el merge de un PR): despliega sin input manual, pero solo si el CI (`ci.yml`) del mismo commit termina en `success` (V-05c, ver «Puerta de CI»). Se excluyen los commits que solo tocan `docs/**` o archivos `*.md` (`paths-ignore`): el candado, el latido y la documentación no cambian ni `dist/` ni las migraciones. Un commit mixto (código y docs) sí despliega.
-- **Disparo manual** (Actions → **Despliegue** → *Run workflow*, rama `main`): sigue disponible y exige escribir exactamente `desplegar` en `confirm`. Cualquier evento distinto de `push` exige `confirm`. El disparo manual no espera al CI: lo decide quien confirma.
+- **Disparo manual** (Actions → **Despliegue** → *Run workflow*, rama `main`): sigue disponible y exige escribir exactamente `desplegar` en `confirm`. Cualquier evento distinto de `push` exige `confirm`. El disparo manual no espera al CI: lo decide quien confirma. Desde F-12 sí pasa por «Commit vigente en main»: para volver a publicar, lanza un disparo **nuevo**; un *Re-run* de un disparo viejo falla si ya entró un commit con código.
   Por REST: `gh api -X POST repos/apivasa/practica_agente/actions/workflows/deploy.yml/dispatches -f ref=main -f 'inputs[confirm]=desplegar'`.
 
 En los dos casos `verify` exige la rama `main`. Siempre se despliega la cabeza de `main`.
@@ -65,7 +65,9 @@ Si el CI del merge falló o se canceló a mano: un commit posterior solo de docs
 
 ### Commit vigente en main (F-11)
 
-En push, después de la puerta de CI, el paso «Commit vigente en main» de `verify` corre `scripts/ci/check-main-tip.sh` (permiso `contents: read`). Compara el commit del run con la punta de `main`. Evita que relanzar un run viejo republique un front anterior o migre desde un commit anterior. Con disparo manual no aplica: el run toma la punta al lanzarse.
+En push, después de la puerta de CI, el paso «Commit vigente en main» de `verify` corre `scripts/ci/check-main-tip.sh` (permiso `contents: read`). Compara el commit del run con la punta de `main`. Evita que relanzar un run viejo republique un front anterior o migre desde un commit anterior.
+
+Desde F-12 el disparo manual sigue la misma regla, con y sin `--strict`. Un disparo nuevo toma la punta al lanzarse y pasa. Un *Re-run* de un disparo viejo reutiliza su commit y su `confirm`: si ya entró un commit con código, falla y no publica. Para publicar la punta, lanza un disparo nuevo.
 
 - **Es la punta:** sigue el despliegue.
 - **Detrás solo hay commits de documentación:** sigue. Esos commits no despliegan y lo desplegable es idéntico. Cuenta como documentación lo mismo que `paths-ignore`: `docs/**` y `**/*.md`. Un renombrado cuenta por sus dos rutas: mover `src/x.js` a `docs/x.js` es código. Si la API devuelve 300 archivos o más, o no trae la lista, falla cerrado.
@@ -74,6 +76,10 @@ En push, después de la puerta de CI, el paso «Commit vigente en main» de `ver
 - **Historia reescrita o divergente, o la API no responde en 3 intentos:** falla antes de cualquier efecto.
 
 `migrate` y `deploy-pages` repiten la comprobación al empezar, en modo `--strict`: ahí un run superado falla siempre, también en el primer intento. Así *Re-run failed jobs* de un run viejo no aplica migraciones ni publica cuando ya entró un commit con código. `migrate-plan` no la repite: solo hace un dry-run.
+
+**Rojo esperado (H-F11-06).** Si entra un merge con código mientras un run espera la aprobación de `migrate` o está migrando, `deploy-pages` (o `migrate`) falla en el primer intento. El error dice «Rojo esperado (H-F11-06)» y «no relances este run». No es un defecto y no se toca producción en ese job. **No lo relances.** El run del commit nuevo está en cola (concurrencia `despliegue-produccion`): aplica las migraciones y publica el front juntos. Comprueba que ese run termina en `success`. Si mientras tanto `salud.yml` abre un issue `deploy-main`, ciérralo cuando la punta termine en verde (ver `docs/operacion.md`).
+
+El `status` que devuelve la API de comparación se sanea a letras minúsculas y `_` antes de imprimirlo en el mensaje de error (H-F11-05).
 
 La lista de «solo documentación» del script y `paths-ignore` de `deploy.yml` deben ser la misma. Si se cambia una, hay que cambiar la otra; una prueba en `tests/scripts/f11-fixes.test.js` falla si no coinciden.
 
