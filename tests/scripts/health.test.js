@@ -49,13 +49,14 @@ function run(id, { hours = 2, conclusion = 'success', event = 'schedule', minute
   };
 }
 
-/** Estado sano de los cuatro workflows vigilados y del despliegue (V-04b). */
+/** Estado sano de los cinco workflows vigilados y del despliegue (V-04b). */
 function healthyActions() {
   return {
     'ritmo-diario.yml': { workflow: { state: 'active', created_at: '2026-11-19T00:00:00Z' }, runs: [run(11, { hours: 5 })] },
     'evaluacion-mensual.yml': { workflow: { state: 'active', created_at: '2026-11-19T00:00:00Z' }, runs: [run(12, { hours: 8 * 24 })] },
     'seguridad.yml': { workflow: { state: 'active', created_at: '2026-11-19T00:00:00Z' }, runs: [run(13, { hours: 2 * 24 })] },
     'ci.yml': { workflow: { state: 'active', created_at: '2026-11-19T00:00:00Z' }, runs: [run(14, { hours: 1, event: 'push' })] },
+    'correo-alertas.yml': { workflow: { state: 'active', created_at: '2026-11-19T00:00:00Z' }, runs: [run(16, { hours: 4 })] },
     'deploy.yml': { workflow: { state: 'active', created_at: '2026-11-19T00:00:00Z' }, runs: [run(15, { hours: 3, event: 'push' })] },
   };
 }
@@ -106,7 +107,7 @@ describe('check.js de punta a punta (fetch simulado)', () => {
     const env = { ...PROD_ENV, GITHUB_OUTPUT: join(dir, 'out'), GITHUB_STEP_SUMMARY: join(dir, 'sum') };
     const { code, results } = await main({ argv: [], env, fetchImpl: fakeFetch(), now: NOW, log: (s) => lines.push(s), sleep: noSleep });
     assert.equal(code, 0, lines.join('\n'));
-    assert.deepEqual(results.map((r) => r.status), ['ok', 'ok', 'ok', 'ok', 'ok', 'ok', 'ok']);
+    assert.deepEqual(results.map((r) => r.status), ['ok', 'ok', 'ok', 'ok', 'ok', 'ok', 'ok', 'ok']);
     assert.equal(readFileSync(env.GITHUB_OUTPUT, 'utf8'), 'failures=\n');
     assert.match(readFileSync(env.GITHUB_STEP_SUMMARY, 'utf8'), /\| pages \| ok \|/);
     const log = lines.join('\n');
@@ -317,5 +318,53 @@ test('checkWorkflows consulta los jobs solo con producción activa', async () =>
   await checkWorkflows({ env: { EVALUATION_ENABLED: 'false' }, github, now: NOW });
   assert.equal(calls.length, 0);
   await checkWorkflows({ env: { EVALUATION_ENABLED: 'true' }, github, now: NOW });
-  assert.equal(calls.length, 2); // ritmo-diario y evaluacion-mensual
+  assert.equal(calls.length, 3); // ritmo-diario, evaluacion-mensual y correo-alertas (C-06)
+});
+
+// C-06 (H-ARQ-C05-01): correo-alertas.yml entra en la vigilancia de salud (ADR 0017, punto 10).
+describe('C-06 regla de correo-alertas', () => {
+  const rule = WORKFLOW_RULES.find((r) => r.file === 'correo-alertas.yml');
+  const wf = { state: 'active', created_at: '2026-11-19T00:00:00Z' };
+  const base = { workflow: wf, now: NOW, productionEnabled: true };
+  const mailJobs = (c = 'success') => [{ steps: [{ name: 'Verificar configuración', conclusion: 'success' }, { name: 'Enviar correos', conclusion: c }] }];
+
+  test('fila: exige producción, 30 h, paso "Enviar correos" y 10 min; el archivo y el paso existen', () => {
+    assert.ok(rule);
+    assert.equal(rule.check, 'correo-alertas');
+    assert.equal(rule.requiresProduction, true);
+    assert.equal(rule.event, null);
+    assert.equal(rule.maxAgeHours, 30);
+    assert.equal(rule.requiredStep, 'Enviar correos');
+    assert.equal(rule.maxDurationMin, 10);
+    const yml = readFileSync(new URL('../../.github/workflows/correo-alertas.yml', import.meta.url), 'utf8');
+    assert.match(yml, /- name: Enviar correos\n/);
+    // Coherente con el cron: corre dos veces al día, así que 30 h cubren un día entero perdido.
+    assert.match(yml, /cron: '53 11 \* \* \*'/);
+    assert.match(yml, /cron: '53 14 \* \* \*'/);
+    assert.match(yml, /timeout-minutes: 15/);
+  });
+  test('run reciente y sano: ok', () => {
+    assert.equal(assessWorkflow(rule, { ...base, runs: [run(1, { hours: 3 })], jobs: mailJobs() }).status, 'ok');
+  });
+  test('sin correr en 31 h: falla', () => {
+    const r = assessWorkflow(rule, { ...base, runs: [run(1, { hours: 31 })] });
+    assert.equal(r.status, 'fail');
+    assert.match(r.detail, /hace 31 h \(máximo 30 h\)/);
+  });
+  test('último run en failure (p. ej. exit 1 por 401/403 de Resend): falla', () => {
+    const r = assessWorkflow(rule, { ...base, runs: [run(1, { conclusion: 'failure' })] });
+    assert.match(r.detail, /terminó en failure/);
+  });
+  test('paso "Enviar correos" omitido con producción activa: falla', () => {
+    const r = assessWorkflow(rule, { ...base, runs: [run(1)], jobs: mailJobs('skipped') });
+    assert.match(r.detail, /paso "Enviar correos" omitido/);
+  });
+  test('duró más de 10 min: falla', () => {
+    assert.match(assessWorkflow(rule, { ...base, runs: [run(1, { minutes: 12 })] }).detail, /duró 12 min \(máximo 10\)/);
+  });
+  test('producción inactiva: se omite, pero un workflow deshabilitado falla igual', () => {
+    assert.equal(assessWorkflow(rule, { ...base, productionEnabled: false, runs: [] }).status, 'skip');
+    const r = assessWorkflow(rule, { ...base, productionEnabled: false, workflow: { ...wf, state: 'disabled_inactivity' }, runs: [] });
+    assert.equal(r.status, 'fail');
+  });
 });

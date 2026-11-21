@@ -293,7 +293,7 @@ describe('runEmailStep', () => {
     const r = await runEmailStep({ env, fetchImpl, makeDb: async () => db, readSupabaseConfig, log: (m) => lines.push(m), now: () => NOW, sleep: async () => {} });
     assert.equal(r.code, 0);
     assert.ok(lines.some((l) => l.startsWith('::warning::') && /a-l1/.test(l) && /429/.test(l)));
-    assert.deepEqual(JSON.parse(lines.at(-1)), { pending: 1, sent: 0, failed: 1, skipped: 0, errors: 0 });
+    assert.deepEqual(JSON.parse(lines.at(-1)), { pending: 1, sent: 0, failed: 1, skipped: 0, not_eligible: 0, expired: 0, errors: 0 });
     assert.doesNotMatch(lines.join('\n'), /re_TESTKEY|lider1@example\.test/);
   });
 
@@ -327,7 +327,7 @@ describe('readEmailConfig', () => {
     assert.equal(readEmailConfig({ RESEND_API_KEY: '   ' }).enabled, false);
   });
   test('valores por defecto', () => {
-    assert.deepEqual(readEmailConfig({ RESEND_API_KEY: KEY }), { enabled: true, apiKey: KEY, from: DEFAULT_FROM, appUrl: null, lookbackDays: 7 });
+    assert.deepEqual(readEmailConfig({ RESEND_API_KEY: KEY }), { enabled: true, apiKey: KEY, from: DEFAULT_FROM, appUrl: 'https://apivasa.github.io/practica_agente/', lookbackDays: 7 });
   });
   test('remitente, URL y ventana', () => {
     const c = readEmailConfig({ RESEND_API_KEY: KEY, ALERT_EMAIL_FROM: 'Alertas RUN <alertas@example.test>', APP_URL: 'https://x.test/app/', ALERT_EMAIL_LOOKBACK_DAYS: '3' });
