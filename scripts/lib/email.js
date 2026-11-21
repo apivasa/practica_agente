@@ -143,11 +143,12 @@ export function recipientSkipReason(alert, access, now) {
  * @property {(ids: string[], v: { before: string, maxAttempts: number, skippedAt: string,
  *   lookbackDays: number }) => Promise<string[]>} [markAlertsEmailExpired]
  *   F-12: marca `expired` y audita en una sola transacción (RPC); devuelve los ids marcados.
- *   Si existe, la ruta `expired` la usa en lugar de markAlertsEmailSkipped + insertAudit.
+ *   F-13: es la única ruta para `expired`; sin ella sendAlertEmails no marca vencidas
+ *   (registra un error) y runEmailStep falla cerrado.
  *
- * Los tres métodos de C-06 son opcionales para no romper BD simuladas anteriores; la capa
- * real (scripts/lib/db.js) los implementa siempre, y con ellos la comprobación de rol y
- * bloqueo es obligatoria (sin recipientAccess se usa userEmail, como en C-05).
+ * Los métodos opcionales lo son solo para sendAlertEmails con BD simuladas; la capa real
+ * (scripts/lib/db.js) los implementa siempre y runEmailStep los exige todos
+ * (REQUIRED_EMAIL_DB_METHODS).
  */
 
 /**
@@ -170,13 +171,18 @@ export async function sendAlertEmails(db, { config, fetchImpl, now = () => new D
   const useAccess = typeof db.recipientAccess === 'function' && canSkip;
 
   // QA-C05-1: las alertas que salen de la ventana sin correo quedan marcadas y auditadas.
-  if (canSkip && typeof db.expiredEmailAlerts === 'function') {
+  // F-13 (H-F12-01): solo por la RPC atómica (marca y auditoría en una transacción). Sin
+  // ella no se marca nada: no existe ruta no atómica (markAlertsEmailSkipped + insertAudit).
+  if (typeof db.expiredEmailAlerts === 'function') {
     try {
+      if (typeof db.markAlertsEmailExpired !== 'function') {
+        throw new Error('la BD no implementa markAlertsEmailExpired: no se marcan alertas vencidas sin la RPC atómica');
+      }
       const old = (await db.expiredEmailAlerts({ before: since, maxAttempts, limit: EXPIRED_BATCH })) ?? [];
       const ids = old.map((a) => a?.id).filter((id) => typeof id === 'string');
-      if (ids.length > 0 && typeof db.markAlertsEmailExpired === 'function') {
-        // F-12 (H-ARQ-C06-04): marca y auditoría en una sola transacción (RPC). Si falla,
-        // no queda ninguna alerta marcada sin su fila en audit_log.
+      if (ids.length > 0) {
+        // F-12 (H-ARQ-C06-04): si la RPC falla, no queda ninguna alerta marcada sin su
+        // fila en audit_log.
         const marked = (await db.markAlertsEmailExpired(ids, {
           before: since,
           maxAttempts,
@@ -185,29 +191,6 @@ export async function sendAlertEmails(db, { config, fetchImpl, now = () => new D
         })) ?? [];
         summary.expired = marked.length;
         if (marked.length > 0) log(`${marked.length} alerta(s) fuera de la ventana de ${config.lookbackDays} días: omitidas y auditadas`);
-      } else if (ids.length > 0) {
-        // C-06: BD sin la RPC de F-12 (solo BD simuladas; createDb siempre la implementa).
-        const marked = new Set(await db.markAlertsEmailSkipped(ids, { skippedAt: now().toISOString(), reason: SKIP_REASONS.expired }));
-        const rows = old
-          .filter((a) => marked.has(a.id))
-          .map((a) => ({
-            actor: EMAIL_ACTOR,
-            action: 'alert_email_skipped',
-            entity: 'alerts',
-            entity_id: a.id,
-            details: {
-              kind: a.kind,
-              unit_id: a.unit_id,
-              recipient_user_id: a.recipient_user_id,
-              reason: SKIP_REASONS.expired,
-              sent_at: a.sent_at,
-              attempts: Number(a.email_attempts) || 0,
-              lookback_days: config.lookbackDays,
-            },
-          }));
-        if (rows.length > 0) await db.insertAudit(rows);
-        summary.expired = rows.length;
-        if (rows.length > 0) log(`${rows.length} alerta(s) fuera de la ventana de ${config.lookbackDays} días: omitidas y auditadas`);
       }
     } catch (err) {
       summary.errors.push(`alertas fuera de la ventana: ${sanitizeError(err, config.apiKey)}`);
@@ -338,8 +321,9 @@ export async function sendAlertEmails(db, { config, fetchImpl, now = () => new D
  * Sin RESEND_API_KEY: anota ::notice:: y termina con 0. Fallos de Resend: ::warning:: y 0,
  * salvo que ningún correo salga y todos los fallos sean 401/403 (clave revocada o remitente
  * no verificado, H-ARQ-C05-02): entonces 1, para que salud.yml lo vea.
- * Configuración inválida: 2. BD sin recipientAccess, expiredEmailAlerts o
- * markAlertsEmailSkipped: 2 sin enviar nada (F-11, H-C06-01). Errores de la BD: 1.
+ * Configuración inválida: 2. BD sin recipientAccess, expiredEmailAlerts,
+ * markAlertsEmailSkipped (F-11, H-C06-01) o markAlertsEmailExpired (F-13, H-F12-01): 2 sin
+ * enviar nada. Errores de la BD: 1.
  * @param {{ env: Record<string, string|undefined>, fetchImpl: typeof fetch,
  *   makeDb: (supabase: { url: string, secretKey: string }) => Promise<EmailDb>,
  *   readSupabaseConfig: (env: any) => { url: string, secretKey: string },
@@ -367,6 +351,12 @@ export async function runEmailStep({ env, fetchImpl, makeDb, readSupabaseConfig,
     log(`::error::La capa de BD no implementa ${missing.join(', ')}: no se envían correos sin comprobar rol y bloqueo del destinatario.`);
     return { code: 2, summary: null };
   }
+  // F-13 (H-F12-01): sin la RPC atómica no se marcan vencidas: tampoco se envía nada.
+  const missingF12 = REQUIRED_F12_DB_METHODS.filter((m) => typeof (/** @type {any} */ (db))[m] !== 'function');
+  if (missingF12.length > 0) {
+    log(`::error::La capa de BD no implementa ${missingF12.join(', ')}: no se marcan alertas vencidas sin la RPC atómica ni se envían correos.`);
+    return { code: 2, summary: null };
+  }
   const summary = await sendAlertEmails(db, { config, fetchImpl, now, sleep, log: (m) => log(`  ${m}`) });
   for (const f of summary.failures) log(`::warning::Correo de la alerta ${f.alert_id} no enviado: ${f.error}`);
   for (const e of summary.errors) log(`::error::${e}`);
@@ -390,6 +380,10 @@ export async function runEmailStep({ env, fetchImpl, makeDb, readSupabaseConfig,
 
 /** Métodos de C-06 que runEmailStep exige a la BD (H-C06-01). */
 export const REQUIRED_C06_DB_METHODS = Object.freeze(['recipientAccess', 'expiredEmailAlerts', 'markAlertsEmailSkipped']);
+/** F-13 (H-F12-01): método de F-12 que runEmailStep también exige (RPC atómica de `expired`). */
+export const REQUIRED_F12_DB_METHODS = Object.freeze(['markAlertsEmailExpired']);
+/** Todo lo que runEmailStep exige a la BD. */
+export const REQUIRED_EMAIL_DB_METHODS = Object.freeze([...REQUIRED_C06_DB_METHODS, ...REQUIRED_F12_DB_METHODS]);
 
 /**
  * Nombres de los métodos de C-06 que la BD no implementa (vacío si están todos).
