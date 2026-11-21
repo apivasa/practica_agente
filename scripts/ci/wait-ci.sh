@@ -71,10 +71,12 @@ filter='[.workflow_runs[]?
   | sort_by(.id) | last
   | if . == null then "" else "\(.id) \(.status) \(.conclusion // "none")" end'
 
-# Primera línea del error de gh, sin el token, sin comandos de workflow (::)
-# y recortada: se puede mostrar en el log.
+# Primera línea del error de gh, sin \r (F-11, H-V05c-03a: el runner lo trata
+# como salto de línea), sin el token, sin comandos de workflow (::) y
+# recortada: se puede mostrar en el log.
 clean_error() {
   local e="${1%%$'\n'*}"
+  e="${e//$'\r'/}"
   e="${e//"$GH_TOKEN"/***}"
   e="${e//::/: :}"
   printf '%s' "${e:0:200}"
@@ -115,7 +117,7 @@ while :; do
         echo "CI del commit en verde (run ${run_id}). Se puede desplegar."
         exit 0
       fi
-      echo "::error::El CI del commit ${sha} terminó con conclusion '${conclusion}' (run ${run_id}: https://github.com/${repo}/actions/runs/${run_id}). No se despliega este commit. Un commit posterior solo de docs no redespliega: relanza el CI de este commit y, cuando esté en verde, este workflow (rerun-failed-jobs), o corrige main con un nuevo merge."
+      echo "::error::El CI del commit ${sha} terminó con conclusion '${conclusion}' (run ${run_id}: https://github.com/${repo}/actions/runs/${run_id}). No se despliega este commit. Un commit posterior solo de docs no redespliega: relanza el CI de este commit y, cuando esté en verde, este workflow (rerun-failed-jobs), o corrige main con un nuevo merge. Relanza solo si este commit sigue siendo la punta de main: si ya entró un commit más nuevo con código, no relances este (el paso «Commit vigente en main» lo rechaza); su despliegue lo cubre."
       exit 1
     fi
     echo "CI run ${run_id}: ${status}."
@@ -125,11 +127,11 @@ while :; do
 
   if [ "$(date +%s)" -ge "$deadline" ]; then
     if [ -n "$seen" ]; then
-      echo "::error::El CI del commit ${sha} (run ${seen}) no terminó en ${timeout_s} s. No se despliega. Cuando termine en verde, relanza este workflow (rerun-failed-jobs)."
+      echo "::error::El CI del commit ${sha} (run ${seen}) no terminó en ${timeout_s} s. No se despliega. Cuando termine en verde, relanza este workflow (rerun-failed-jobs). Relanza solo si este commit sigue siendo la punta de main: si ya entró un commit más nuevo con código, no relances este (el paso «Commit vigente en main» lo rechaza); su despliegue lo cubre."
     elif [ "$api_ok" -eq 0 ]; then
-      echo "::error::La API de GitHub falló ${api_failures} veces en ${timeout_s} s: ${last_error}. No se pudo comprobar el CI del commit ${sha}; no se despliega. Revisa el permiso actions: read y el estado de GitHub, y relanza este workflow."
+      echo "::error::La API de GitHub falló ${api_failures} veces en ${timeout_s} s: ${last_error}. No se pudo comprobar el CI del commit ${sha}; no se despliega. Revisa el permiso actions: read y el estado de GitHub, y relanza este workflow. Relanza solo si este commit sigue siendo la punta de main: si ya entró un commit más nuevo con código, no relances este (el paso «Commit vigente en main» lo rechaza); su despliegue lo cubre."
     else
-      echo "::error::No apareció ningún run de CI (${CI_PATH}) para el commit ${sha} en ${timeout_s} s. No se despliega. Revisa que ci.yml se disparó en main y relanza este workflow."
+      echo "::error::No apareció ningún run de CI (${CI_PATH}) para el commit ${sha} en ${timeout_s} s. No se despliega. Revisa que ci.yml se disparó en main y relanza este workflow. Relanza solo si este commit sigue siendo la punta de main: si ya entró un commit más nuevo con código, no relances este (el paso «Commit vigente en main» lo rechaza); su despliegue lo cubre."
     fi
     exit 1
   fi

@@ -13,6 +13,7 @@ name: Despliegue
 #
 # V-05c: en push, `verify` espera al CI (ci.yml) del mismo commit y exige
 # success (scripts/ci/wait-ci.sh) antes de build, migraciones y Pages.
+# F-11: y que el commit siga siendo la punta de main (scripts/ci/check-main-tip.sh).
 #
 # Orden (ADR 0014): verify → build-pages → migrate-plan → migrate →
 # deploy-pages → smoke. Lo barato y reversible (build, verificación de dist/)
@@ -152,6 +153,15 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           HEAD_SHA: ${{ github.sha }}
         run: bash scripts/ci/wait-ci.sh
+      # F-11 (H-V05c-01): en push, el commit debe seguir siendo la punta de
+      # main (o solo seguirlo commits de documentación): un Re-run de un run
+      # viejo no republica un front ni migra desde un commit anterior. Con
+      # disparo manual no aplica. Sin if: por evento: lo decide el script.
+      - name: Commit vigente en main
+        env:
+          GH_TOKEN: ${{ github.token }}
+          HEAD_SHA: ${{ github.sha }}
+        run: bash scripts/ci/check-main-tip.sh
 
   build-pages:
     name: build del front
