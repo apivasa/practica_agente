@@ -1,4 +1,4 @@
-# Despliegue a producción (V-05, V-05b)
+# Despliegue a producción (V-05, V-05b, V-05c)
 
 Workflow: `.github/workflows/deploy.yml` (nombre en Actions: **Despliegue**).
 Destino: Supabase del proyecto de P-02 (migraciones) y GitHub Pages (`https://apivasa.github.io/practica_agente/`).
@@ -10,8 +10,8 @@ El primer despliegue a producción ya se hizo a mano (V-05, run 44838844787). De
 
 ## Cuándo se dispara
 
-- **Push a `main`** (el merge de un PR): despliega sin input manual. Se excluyen los commits que solo tocan `docs/**` o archivos `*.md` (`paths-ignore`): el candado, el latido y la documentación no cambian ni `dist/` ni las migraciones. Un commit mixto (código y docs) sí despliega.
-- **Disparo manual** (Actions → **Despliegue** → *Run workflow*, rama `main`): sigue disponible y exige escribir exactamente `desplegar` en `confirm`. Cualquier evento distinto de `push` exige `confirm`.
+- **Push a `main`** (el merge de un PR): despliega sin input manual, pero solo si el CI (`ci.yml`) del mismo commit termina en `success` (V-05c, ver «Puerta de CI»). Se excluyen los commits que solo tocan `docs/**` o archivos `*.md` (`paths-ignore`): el candado, el latido y la documentación no cambian ni `dist/` ni las migraciones. Un commit mixto (código y docs) sí despliega.
+- **Disparo manual** (Actions → **Despliegue** → *Run workflow*, rama `main`): sigue disponible y exige escribir exactamente `desplegar` en `confirm`. Cualquier evento distinto de `push` exige `confirm`. El disparo manual no espera al CI: lo decide quien confirma.
   Por REST: `gh api -X POST repos/apivasa/practica_agente/actions/workflows/deploy.yml/dispatches -f ref=main -f 'inputs[confirm]=desplegar'`.
 
 En los dos casos `verify` exige la rama `main`. Siempre se despliega la cabeza de `main`.
@@ -40,7 +40,7 @@ Orden: `verify` → `build-pages` → `migrate-plan` → `migrate` → `deploy-p
 
 | Job | Environment | Qué hace |
 |---|---|---|
-| `verify` | `produccion` | Con disparo manual, falla si `confirm` no es `desplegar`. Falla si la rama no es `main`, si falta un secreto (lista los nombres, nunca los valores) o si falta `SUPABASE_DB_POOLER_HOST` o no tiene la forma de un host de pooler de Supabase. Comprueba el prefijo `sb_publishable_`, que `SUPABASE_URL` corresponde a `SUPABASE_PROJECT_REF` y que es el origen de producción de `src/security/csp.js`. Falla si el registro de Auth está abierto. |
+| `verify` | `produccion` | Con disparo manual, falla si `confirm` no es `desplegar`. Falla si la rama no es `main`, si falta un secreto (lista los nombres, nunca los valores) o si falta `SUPABASE_DB_POOLER_HOST` o no tiene la forma de un host de pooler de Supabase. Comprueba el prefijo `sb_publishable_`, que `SUPABASE_URL` corresponde a `SUPABASE_PROJECT_REF` y que es el origen de producción de `src/security/csp.js`. Falla si el registro de Auth está abierto. En push, espera al CI (`ci.yml`) del mismo SHA en `main`, hasta 20 min, y exige `success` (`scripts/ci/wait-ci.sh`). Timeout del job: 25 min. |
 | `build-pages` | `produccion` | `npm ci --ignore-scripts`, build con la URL y la clave publicable. Verifica que la CSP de `dist/index.html` no tiene orígenes locales e incluye `upgrade-insecure-requests` (ADR 0011), y que `dist/` no contiene una clave `sb_secret_…` ni apunta a Supabase local. Sube el artefacto de Pages. |
 | `migrate-plan` | `produccion` | `supabase db push --db-url … --dry-run`: deja en el log las migraciones que se aplicarán. No cambia nada. |
 | `migrate` | `produccion` | Otro dry-run, `supabase db push --db-url … --yes` y `supabase migration list --db-url …` como evidencia. Nunca aplica `seed.sql` (H-F03-07). |
@@ -48,6 +48,20 @@ Orden: `verify` → `build-pages` → `migrate-plan` → `migrate` → `deploy-p
 | `smoke` | — | GET a la URL publicada (hasta 6 intentos): exige HTTP 200 con el título `App de control de capacidad RUN` y HTTP 200 en el JS principal (`/practica_agente/assets/…js`). |
 
 Si falla un job, los siguientes no corren. El grupo de concurrencia `despliegue-produccion` no cancela un despliegue en curso; si llegan varios merges, GitHub deja en cola solo el más reciente.
+
+### Puerta de CI (V-05c)
+
+En push, el último paso de `verify` («CI del mismo commit en verde») corre `scripts/ci/wait-ci.sh`. Consulta cada 30 s la API de Actions (permiso `actions: read`) hasta que el run de `ci.yml` del mismo commit en `main` termine. Tope: 20 min.
+
+- `success`: sigue el despliegue.
+- Otra conclusión (`failure`, `cancelled`…): `verify` falla y no se toca la BD ni Pages.
+- El run de CI no aparece, no termina a tiempo o la API falla durante todo el tope: `verify` falla.
+
+Mientras espera, el run de Despliegue queda `in_progress` en `verify`. Es normal.
+
+Para que la puerta funcione, el CI de cada commit de `main` tiene que terminar. Por eso `ci.yml`, en `main`, agrupa por SHA y **no cancela** runs anteriores: un commit de docs posterior ya no cancela el CI del merge. En las demás ramas se sigue cancelando el run anterior.
+
+Si el CI del merge falló o se canceló a mano: un commit posterior solo de docs no redespliega. Relanza el CI de ese commit y, cuando esté en verde, relanza el despliegue (*Re-run failed jobs*), o corrige `main` con un nuevo merge.
 
 ### Conexión a la BD
 
@@ -65,13 +79,14 @@ Sin `supabase link` y sin token de cuenta (H-V05-01). Cada paso de migración ca
 
 ## Precauciones
 
-- **Fusionar de a uno.** Cada merge despliega. Con dos PR con migraciones, fusionar el segundo solo cuando el CI de `main` y el despliegue del primero estén en verde (H-ARQ-V05b-01).
-- **El despliegue no espera al CI** del commit fusionado, y `main` no tiene protección de rama (H-V05b-01). Un push directo a `main` despliega sin revisión.
+- **Fusionar de a uno.** Cada merge despliega. Desde V-05c, el despliegue del segundo PR espera al CI de `main` que prueba los dos juntos. Igual conviene fusionar de a uno: si ese CI falla, ninguno queda publicado por partes y el diagnóstico es más simple.
+- **No cancelar a mano el CI de `main`.** Si se cancela, el despliegue de ese commit falla en `verify`.
+- `main` no tiene protección de rama (H-V05b-01). Un push directo a `main` con CI en verde despliega sin revisión de PR.
 - Un fallo de despliegue lo detecta `salud.yml` con el check `deploy-main` (ver «Vigilancia»); no hace falta revisarlo a mano.
 
 ## Vigilancia
 
-`salud.yml` revisa cada 6 h el último run de `deploy.yml` en `main` (check `deploy-main`, V-04b). Si falló o lleva más de 60 min sin terminar, abre o comenta el issue `salud`. Un despliegue solo cancelado deja un aviso sin issue. Qué hacer ante cada alerta: `docs/operacion.md` › Salud del sistema.
+`salud.yml` revisa cada 6 h el último run de `deploy.yml` en `main` (check `deploy-main`, V-04b). Si falló o lleva más de 90 min sin terminar (antes 60; la suma de timeouts de los jobs ronda 75 min desde V-05c), abre o comenta el issue `salud`. Un despliegue solo cancelado deja un aviso sin issue. Qué hacer ante cada alerta: `docs/operacion.md` › Salud del sistema.
 
 ## Cómo revertir
 
