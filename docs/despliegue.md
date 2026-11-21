@@ -69,6 +69,10 @@ Sin `supabase link` y sin token de cuenta (H-V05-01). Cada paso de migración ca
 - **El despliegue no espera al CI** del commit fusionado, y `main` no tiene protección de rama (H-V05b-01). Un push directo a `main` despliega sin revisión.
 - `salud.yml` todavía no vigila este workflow (H-ARQ-V05b-02). Un fallo de despliegue llega por el correo de GitHub; el orquestador lo revisa en cada ciclo.
 
+## Vigilancia
+
+`salud.yml` revisa cada 6 h el último run de `deploy.yml` en `main` (check `deploy-main`, V-04b). Si falló o lleva más de 60 min sin terminar, abre o comenta el issue `salud`. Un despliegue solo cancelado deja un aviso sin issue. Qué hacer ante cada alerta: `docs/operacion.md` › Salud del sistema.
+
 ## Cómo revertir
 
 - **Front:** no existe «desplegar una versión anterior». Se abre un PR que revierte el código; su merge vuelve a desplegar. Para retirar el sitio de inmediato: Settings → Pages → *Unpublish*.

@@ -1,13 +1,15 @@
 #!/usr/bin/env node
 // V-04 — Comprobación de salud. Uso:
 //   node scripts/health/check.js [--only=availability|workflows]
+// `workflows` incluye el check deploy-main (último run de Despliegue en main, V-04b).
+// Un resultado `warn` (despliegue cancelado) se anota como ::warning:: y no falla.
 // Variables: EVALUATION_ENABLED, PAGES_URL, SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY,
 //   GITHUB_TOKEN, GITHUB_REPOSITORY, GITHUB_API_URL, DEFAULT_BRANCH.
 // Escribe `failures=<check,...>` en $GITHUB_OUTPUT y una tabla en $GITHUB_STEP_SUMMARY.
 // Sale con 1 si algún check falla. Nunca imprime claves ni la URL de Supabase.
 import { appendFileSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
-import { checkAvailability, checkWorkflows, createGitHubClient, failedChecks } from './lib.js';
+import { checkAvailability, checkDeploy, checkWorkflows, createGitHubClient, failedChecks } from './lib.js';
 
 /**
  * @param {{ argv: string[], env: Record<string,string|undefined>, fetchImpl: typeof fetch,
@@ -28,12 +30,20 @@ export async function main({ argv, env, fetchImpl, now = new Date(), log = conso
     } else {
       const github = createGitHubClient({ token: env.GITHUB_TOKEN, repo: env.GITHUB_REPOSITORY, apiUrl: env.GITHUB_API_URL || undefined, fetchImpl });
       results.push(...(await checkWorkflows({ env, github, now })));
+      results.push(...(await checkDeploy({ env, github, now })));
     }
   }
   for (const r of results) {
     // HEALTH_PLAIN_LOG=1 (simulación de caída en CI): sin anotaciones ::error:: en un job que pasa.
     const plain = env.HEALTH_PLAIN_LOG === '1';
-    const tag = r.status === 'fail' ? `${plain ? '' : '::error::'}FALLA` : r.status === 'skip' ? `${plain ? '' : '::warning::'}omitido` : 'ok';
+    const tag =
+      r.status === 'fail'
+        ? `${plain ? '' : '::error::'}FALLA`
+        : r.status === 'skip'
+          ? `${plain ? '' : '::warning::'}omitido`
+          : r.status === 'warn'
+            ? `${plain ? '' : '::warning::'}aviso`
+            : 'ok';
     log(`${tag} ${r.check}: ${r.detail}`);
   }
   const failures = failedChecks(results);

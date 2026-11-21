@@ -134,12 +134,12 @@ El orquestador toma el **primer ítem `Pendiente`** cuyas dependencias estén `H
 | 24 | V-06 | Hecho | 0 | #23 | Constructor: documentador |
 | 25 | S-05 | Hecho | 1 | #26 | Fase A (pre-despliegue). Constructor: seguridad |
 | 26 | V-05 | Hecho | 3 | #27, #fix deploy | Primer despliegue OK (run 44838844787): migraciones aplicadas y Pages publicado. Siguiente: S-05b (pentest fase B contra producción), luego P-05 |
-| 26b | S-05b | En curso | 0 | | Fase B del pentest contra Pages y Supabase real; depende del primer run de V-05; compuerta de P-05 |
+| 26b | S-05b | Hecho | 0 | #44 | Fase B del pentest contra Pages y Supabase real; depende del primer run de V-05; compuerta de P-05 |
 | 26c | M-06 | Hecho | 1 | #28 | Color mensual de VULN por criticidad (96 % P0/P1, 85 % P2/P3); antes de P-05 |
 | 26d | M-07 | Hecho | 0 | #31 | Pantalla de metas mensuales (`targets`) para la gestora |
 | 26e | V-08 | Hecho | 0 | #33 | Candado vigente hoy e inicio autorizado; agrupar con V-09 |
 | 26f | V-09 | Hecho | 0 | #33 | Un solo mapa de etiquetas de alcance de excepciones |
-| 26g | V-05b | Pendiente | 0 | | Despliegue en push a main (ADR 0015 punto 5); incluye H-V05-01 (`db push --db-url` sin token de cuenta) y H-S03-02 (contraseña mínima 12 en config.toml) |
+| 26g | V-05b | En revisión | 0 | #45 | Revisiones VERDE y CI pendiente; NO fusionar hasta P-07 (variable `SUPABASE_DB_POOLER_HOST`). Al retomarlo: integrar main (S-05c, V-04b) y aplicar H-ARQ-V04b-02 (quitar revisión manual del despliegue en operacion.md, despliegue.md y ADR 0015: lo vigila `deploy-main`).  Despliegue en push a main (ADR 0015 punto 5); incluye H-V05-01 (`db push --db-url` sin token de cuenta) y H-S03-02 (contraseña mínima 12 en config.toml) |
 | 26i | M-08 | Hecho | 0 | #32 | Validación en BD de mediciones VULN (trigger), rechazo cumulative_target + lower_is_better, descarte compartido en buildPackageInput |
 | 26j | F-08 | Hecho | 0 | #29 | Alertas CodeQL abiertas en main (4 altas, solo en pruebas: URL por subcadena en tests/scripts/health.test.js:150,256 y qa-v04.test.js:193,213) fusionadas con #22; constructor: tester. Regla nueva: no fusionar con el check CodeQL en rojo |
 | 26h | F-07 | Hecho | 1 | #30 | CI: reintento acotado de `supabase start` por puertos 54322/54324 ocupados (intermitente) |
@@ -151,6 +151,9 @@ El orquestador toma el **primer ítem `Pendiente`** cuyas dependencias estén `H
 | 26p | M-14 | Hecho | 0 | #39 | H-ARQ-M13-01: CHECK `_safe` a abs(v) < 9007199254740991.5 para que BD y motor rechacen lo mismo (hoy [2^53 − 0,5, 2^53) pasa la BD y hace fallar la evaluación mensual) |
 | 26q | F-09 | Hecho | 0 | #40 | Tokens del pentest en memoria + `PENTEST_TOKENS`; sin caché en disco. Confirmar en GitHub que las alertas #14–#16 pasan a *fixed* (la sesión recibe 403 en code-scanning) |
 | 26r | F-10 | Hecho | 0 | #41 | `supabase start` sigue fallando por 54322 «address already in use» tras 3 intentos (PR #40) sin ningún proceso escuchando: el puerto cae en el rango efímero de Linux (32768–60999). Reservar 54320–54329 con `sysctl net.ipv4.ip_local_reserved_ports` antes de arrancar en `scripts/ci/supabase-start.sh`. Constructor: desarrollador. Vigilar 2 semanas `::notice::` de intento >1 en main (H-ARQ-F10-03) |
+| 26s | S-05c | Hecho | 1 | #47 | Confirmado en producción: fase B anónima run 44845769345, 4 tablas → 42501.  H-QA-S05b-01/02: en `tests/security/prod/fase-b.test.js` las sondas de escritura anónima usan columna `name` (400 PGRST204 antes del chequeo de privilegio en exceptions, audit_log, user_roles): usar columnas reales y exigir 401/403/42501; login sin enumeración comparado con cuenta existente en modo roles. Constructor: seguridad |
+| 26t | V-04b | Hecho | 2 | #46 | Reintentos por lint y gitleaks en prueba de seguridad (token ficticio; huellas en `.gitleaksignore`).  H-ARQ-V05b-02: `salud.yml` vigila el último run de `Despliegue` en main (check `deploy-main` en `scripts/health/`) |
+| 26u | V-05c | Pendiente | 0 | | Espera V-05b (P-07).  H-ARQ-V05b-01 / H-V05b-01 / H-V05b-02: en push, `verify` espera a que CI del mismo SHA termine en success (`actions: read`); `{ set +x; }` dentro de `supabase_db_url`. Depende de V-05b |
 | 27 | C-05 | Bloqueado | 0 | | Espera Q-04 |
 | 28 | V-07 | Bloqueado | 0 | | Espera Q-02 |
 
