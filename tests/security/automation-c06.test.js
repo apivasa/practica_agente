@@ -14,7 +14,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { join } from 'node:path';
-import { sendAlertEmails, runEmailStep, sanitizeError, recipientSkipReason, SKIP_REASONS } from '../../scripts/lib/email.js';
+import { sendAlertEmails, runEmailStep, sanitizeError, recipientSkipReason, SKIP_REASONS, REQUIRED_EMAIL_DB_METHODS, REQUIRED_F12_DB_METHODS } from '../../scripts/lib/email.js';
 import { createDb } from '../../scripts/lib/db.js';
 
 const ROOT = fileURLToPath(new URL('../../', import.meta.url));
@@ -52,8 +52,8 @@ const row = (id, unit, recipient, extra = {}) => ({
   ...extra,
 });
 
-function fakeDb(alerts, { users = USERS, access } = {}) {
-  const t = { alerts: structuredClone(alerts), audit: [] };
+function fakeDb(alerts, { users = USERS, access, rpc = true } = {}) {
+  const t = { alerts: structuredClone(alerts), audit: [], rpcCalls: 0 };
   const open = (a) => a.emailed_at === null && a.email_skipped_at === null;
   return {
     t,
@@ -79,6 +79,24 @@ function fakeDb(alerts, { users = USERS, access } = {}) {
       if (a && open(a)) a.email_attempts = attempts;
     },
     insertAudit: async (rows) => { t.audit.push(...structuredClone(rows)); },
+    // F-13: emula la RPC atómica mark_alerts_email_expired (marca y audita en una transacción,
+    // con las mismas condiciones que el SQL de F-12). Con rpc:false la BD no la implementa.
+    ...(rpc ? {
+      async markAlertsEmailExpired(ids, { before, maxAttempts, skippedAt, lookbackDays }) {
+        t.rpcCalls += 1;
+        const out = [];
+        for (const a of t.alerts) {
+          if (!ids.includes(a.id) || !open(a) || a.email_attempts >= maxAttempts || !(a.sent_at < before)) continue;
+          Object.assign(a, { email_skipped_at: skippedAt, email_skip_reason: 'expired' });
+          t.audit.push({
+            actor: 'system:alert-email', action: 'alert_email_skipped', entity: 'alerts', entity_id: a.id,
+            details: { kind: a.kind, unit_id: a.unit_id, recipient_user_id: a.recipient_user_id, reason: 'expired', sent_at: a.sent_at, attempts: a.email_attempts, lookback_days: lookbackDays },
+          });
+          out.push(a.id);
+        }
+        return out;
+      },
+    } : {}),
   };
 }
 
@@ -119,9 +137,9 @@ function fakeSb({ user = null, userError = null, roles = [], rolesError = null, 
 }
 
 describe('C-06 seguridad · cat. 1/8 ruta real fail-closed (createDb)', () => {
-  test('createDb implementa recipientAccess, expiredEmailAlerts y markAlertsEmailSkipped', () => {
+  test('createDb implementa recipientAccess, expiredEmailAlerts, markAlertsEmailSkipped y markAlertsEmailExpired', () => {
     const db = createDb(fakeSb());
-    for (const m of ['recipientAccess', 'expiredEmailAlerts', 'markAlertsEmailSkipped', 'pendingEmailAlerts', 'markAlertEmailed']) {
+    for (const m of ['recipientAccess', 'expiredEmailAlerts', 'markAlertsEmailSkipped', 'markAlertsEmailExpired', 'pendingEmailAlerts', 'markAlertEmailed']) {
       assert.equal(typeof db[m], 'function', `falta ${m}: la comprobación de rol quedaría abierta`);
     }
   });
@@ -290,5 +308,94 @@ describe('C-06 seguridad · cat. 8 auditoría de vencidas sin datos personales',
     assert.equal(a.actor, 'system:alert-email');
     assert.ok(!JSON.stringify(db.t.audit).includes('@'), 'la auditoría no guarda correos');
     assert.equal(r.calls.length, 1, 'solo la alerta vigente se envía');
+  });
+});
+
+// F-13 (H-F12-01): la ruta `expired` solo existe por la RPC atómica; sin ella, fail-closed.
+const stepArgs = (db, lines, fetchImpl) => ({
+  env: { RESEND_API_KEY: RESEND_KEY, SUPABASE_URL: 'http://127.0.0.1:9', SUPABASE_SECRET_KEY: SB_KEY },
+  fetchImpl,
+  makeDb: async () => db,
+  readSupabaseConfig: (env) => ({ url: env.SUPABASE_URL, secretKey: env.SUPABASE_SECRET_KEY }),
+  log: (m) => lines.push(m),
+  now: () => NOW,
+  sleep: async () => {},
+});
+
+describe('F-13 seguridad · cat. 1/8 vencidas solo por la RPC atómica (fail-closed)', () => {
+  test('runEmailStep exige markAlertsEmailExpired (REQUIRED_EMAIL_DB_METHODS, congelado)', () => {
+    assert.ok(REQUIRED_EMAIL_DB_METHODS.includes('markAlertsEmailExpired'));
+    assert.ok(REQUIRED_F12_DB_METHODS.includes('markAlertsEmailExpired'));
+    for (const m of ['recipientAccess', 'expiredEmailAlerts', 'markAlertsEmailSkipped']) assert.ok(REQUIRED_EMAIL_DB_METHODS.includes(m), m);
+    assert.ok(Object.isFrozen(REQUIRED_EMAIL_DB_METHODS) && Object.isFrozen(REQUIRED_F12_DB_METHODS));
+  });
+
+  test('runEmailStep sin la RPC: código 2, no envía, no marca, no audita y no filtra secretos', async () => {
+    const lines = [];
+    const db = fakeDb([row('v1', UA, LA, { sent_at: '2027-03-01T00:00:00Z' }), row('v2', UA, LA)], { rpc: false });
+    let skippedCalls = 0;
+    const orig = db.markAlertsEmailSkipped;
+    db.markAlertsEmailSkipped = async (...a) => { skippedCalls += 1; return orig(...a); };
+    let audits = 0;
+    db.insertAudit = async () => { audits += 1; };
+    const r = fakeResend();
+    const { code, summary } = await runEmailStep(stepArgs(db, lines, r.fetchImpl));
+    assert.equal(code, 2, 'sin la RPC atómica debe fallar cerrado con 2');
+    assert.equal(summary, null);
+    assert.equal(r.calls.length, 0, 'no se envía ningún correo');
+    assert.equal(skippedCalls, 0, 'no se usa la ruta no atómica (markAlertsEmailSkipped) para vencidas');
+    assert.equal(audits, 0);
+    assert.ok(db.t.alerts.every((a) => a.email_skipped_at === null && a.emailed_at === null), 'ninguna alerta cambia');
+    assert.ok(lines.some((l) => l.startsWith('::error::') && l.includes('markAlertsEmailExpired')));
+    assertNoSecrets(lines.join('\n'), 'log');
+  });
+
+  for (const bogus of [null, undefined, 1, 'markAlertsEmailExpired', {}, true]) {
+    test(`runEmailStep con markAlertsEmailExpired = ${JSON.stringify(bogus) ?? 'undefined'} (no función) → 2`, async () => {
+      const db = fakeDb([row('v1', UA, LA, { sent_at: '2027-03-01T00:00:00Z' })]);
+      db.markAlertsEmailExpired = bogus;
+      const r = fakeResend();
+      const { code } = await runEmailStep(stepArgs(db, [], r.fetchImpl));
+      assert.equal(code, 2);
+      assert.equal(r.calls.length, 0);
+    });
+  }
+
+  test('sendAlertEmails sin la RPC: no marca vencidas por la ruta vieja, registra error y no audita', async () => {
+    const db = fakeDb([row('x1', UA, LA, { sent_at: '2027-03-01T00:00:00Z' })], { rpc: false });
+    let skippedCalls = 0;
+    db.markAlertsEmailSkipped = async () => { skippedCalls += 1; return ['x1']; };
+    const s = await sendAlertEmails(db, opts(fakeResend().fetchImpl));
+    assert.equal(s.expired, 0);
+    assert.equal(skippedCalls, 0);
+    assert.equal(db.t.audit.length, 0);
+    assert.equal(db.t.alerts[0].email_skipped_at, null);
+    assert.ok(s.errors.some((e) => e.includes('markAlertsEmailExpired')));
+  });
+
+  test('si la RPC falla (con la clave en el mensaje), nada queda marcado ni auditado y el error va saneado', async () => {
+    const db = fakeDb([row('x1', UA, LA, { sent_at: '2027-03-01T00:00:00Z' })]);
+    let skippedCalls = 0;
+    db.markAlertsEmailSkipped = async () => { skippedCalls += 1; return []; };
+    db.markAlertsEmailExpired = async () => { throw new Error(`rpc failed apikey=${SB_KEY} ${LEGACY_JWT}`); };
+    const s = await sendAlertEmails(db, opts(fakeResend().fetchImpl));
+    assert.equal(s.expired, 0);
+    assert.equal(skippedCalls, 0, 'no hay fallback no atómico');
+    assert.equal(db.t.audit.length, 0);
+    assert.equal(db.t.alerts[0].email_skipped_at, null);
+    assert.equal(s.errors.length, 1);
+    assertNoSecrets(JSON.stringify(s), 'summary');
+  });
+
+  test('la ruta vencidas pasa a la RPC solo ids string de alertas vencidas, el corte y la ventana', async () => {
+    const db = fakeDb([row('x1', UA, LA, { sent_at: '2027-03-01T00:00:00Z' }), row('x2', UA, LA)]);
+    const calls = [];
+    const orig = db.markAlertsEmailExpired;
+    db.markAlertsEmailExpired = async (ids, v) => { calls.push({ ids, v }); return orig(ids, v); };
+    const s = await sendAlertEmails(db, opts(fakeResend().fetchImpl));
+    assert.equal(s.expired, 1);
+    assert.deepEqual(calls[0].ids, ['x1']);
+    assert.equal(calls[0].v.before, new Date(NOW.getTime() - CONFIG.lookbackDays * 86400000).toISOString());
+    assert.equal(calls[0].v.lookbackDays, CONFIG.lookbackDays);
   });
 });

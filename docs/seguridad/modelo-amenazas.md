@@ -447,3 +447,12 @@ Nueva: la primera función de `public` visible por `/rest/v1/rpc`, `public.mark_
 | T-F12-04 | Tampering | Re-run de un disparo manual viejo de `deploy.yml` republica un commit superado (H-F11-02) | Muy bajo | `check-main-tip.sh` aplica a `workflow_dispatch` la misma regla que a push, también con `--strict`; API caída → falla cerrado | `tests/security/deploy-f12.test.js` › dispatch; `deploy-f11.test.js` › workflow_dispatch aplica la regla |
 | T-F12-05 | Tampering (log) | `status` de compare con `::` o saltos de línea inyecta comandos de workflow (H-F11-05) | Muy bajo | `gsub("[^a-z_]"; "")` antes de imprimir | `deploy-f12.test.js` › status hostil |
 
+## Superficie nueva (F-13)
+
+No abre endpoints ni tablas. Cambia dos decisiones de automatización: `runEmailStep` exige `markAlertsEmailExpired` (`REQUIRED_EMAIL_DB_METHODS`) y la ruta `expired` ya no tiene la variante no atómica; el check `deploy-main` de `salud.yml` da `warn` (sin issue) si el último despliegue fallido tiene un run más nuevo de `deploy.yml` pendiente dentro de `maxPendingMin` (`newerPendingRun`).
+
+| ID | STRIDE | Amenaza | Riesgo | Control | Prueba |
+|---|---|---|---|---|---|
+| T-F13-01 | Repudiation | Una capa de BD sin la RPC atómica marca alertas `expired` sin su fila de auditoría (H-F12-01) | Muy bajo | `runEmailStep` devuelve 2 sin enviar ni marcar si `markAlertsEmailExpired` no es función; `sendAlertEmails` sin la RPC no marca y registra el error; sin fallback `markAlertsEmailSkipped + insertAudit` | `tests/security/automation-c06.test.js` › F-13 (fail-closed, valores no función, RPC que falla con secreto) |
+| T-F13-02 | Tampering / Repudiation | El `warn` de `deploy-main` oculta un despliegue fallido real: run nuevo atascado, de otro evento, creado antes del fallo, o con timestamps ilegibles | Bajo | Solo cubre un run de `push`/`workflow_dispatch`, con `created_at` posterior al fallo, pendiente y con `run_started_at` dentro de `maxPendingMin`; cualquier atasco anula el aviso; timestamps que `Date.parse` rechaza → fail; el detalle solo lleva `status`, `conclusion` y `html_url`. Residual: fallos consecutivos tapados si siempre hay un run nuevo pendiente (H-F13-01), y `created_at` futuro o no string coaccionado por `Date.parse` (H-F13-02) | `tests/security/health-deploy-f13.test.js` |
+
