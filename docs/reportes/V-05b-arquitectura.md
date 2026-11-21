@@ -1,5 +1,5 @@
 # V-05b — Informe de arquitectura y salud
-Veredicto: ROJO (re-revisión V-05b + V-05c, SHA 86b447c; ver la última sección. La primera revisión fue VERDE)
+Veredicto: VERDE (re-revisión intento 2, SHA 9b4a34a; ver la última sección. Historial: primera revisión VERDE; re-revisión V-05c en 86b447c ROJO por H-ARQ-V05b-08, ya cerrado)
 Alineado al diseño: sí. Se mantiene el stack (Pages estático, Supabase, Actions). Se mantiene el orden de jobs del ADR 0015 punto 2 y el punto 6 (sin revisor en `produccion`). La fase 2 era el seguimiento previsto en el punto 5. `paths-ignore` de `docs/**` y `**/*.md` es una lectura válida de «en cada merge a `main`»: esos commits no cambian `dist/` ni las migraciones, y ningún `.md` fuera de `docs/` entra al build (ningún `import` de `.md` en `src/`, `engine/`, `scripts/` ni `vite.config.js`). No hay que cambiar ninguna decisión confirmada.
 Requiere decisión del usuario: no. Sí hay compuertas operativas de la usuaria antes del merge y después (ver H-ARQ-V05b-03 y -04). No son desviaciones del diseño.
 ADR creados o actualizados: `docs/adr/0015-despliegue-manual-primero.md`. Se añade «Actualización V-05b (fase 2)», el estado queda en fase 2 entregada y el punto 6 ya no lleva `SUPABASE_ACCESS_TOKEN`.
@@ -60,3 +60,23 @@ Hallazgos:
   - **Opcional (P3, no bloquea).** Si el CI de A sale `cancelled` y entre A y la cabeza de `main` solo cambió `docs/**` o `*.md`, `wait-ci.sh` podría esperar el CI de la cabeza. Con la corrección de arriba no hace falta.
 - **H-ARQ-V05b-09 (bajo, ítem de seguimiento; área del desarrollador, `scripts/health/lib.js`).** Con `verify` en 25 min, la suma de timeouts de `deploy.yml` es de unos 75 min. Supera `DEPLOY_RULE.maxPendingMin = 60`. Un run legítimo que espere al CI cerca del tope, más migraciones lentas, podría salir como «atascado». Propuesta: subir `maxPendingMin` a 90, o derivarlo de la suma de timeouts con una prueba que los ate. Ya está anotado en el runbook.
 - **H-ARQ-V05b-10 (informativo).** El despliegue de un commit posterior sigue esperando en cola (`despliegue-produccion`, sin cancelar) mientras `verify` del anterior espera al CI. Con dos merges seguidos hay hasta unos 10 min de cola. Es aceptable.
+
+## Re-revisión intento 2 (2026-11-21, SHA 9b4a34a, PR #45)
+Veredicto: VERDE
+Alineado al diseño: sí. Los cambios se quedan en la concurrencia de CI, un umbral de salud y los mensajes de `wait-ci.sh`. No se toca el stack, el orden de jobs ni las reglas del ADR 0015.
+Requiere decisión del usuario: no. Siguen en pie las compuertas operativas de H-ARQ-V05b-03 y -04 (secretos y primer despliegue continuo).
+ADR creados o actualizados: `docs/adr/0015-despliegue-manual-primero.md`, punto 6. Se añade «Implementado en V-05c»: en `main` el CI ya no se cancela. También se añade el coste en minutos de runner.
+Salud:
+- **CI de la rama en 9b4a34a:** CI y Seguridad `success`, en los dos eventos (push y pull_request). El `failure` de 83ce89e era la prueba de QA `qa-v05c` escrita antes de la corrección, que es lo esperado.
+- **Runbook:** `docs/operacion.md`. La tabla de checks de `deploy-main` pasa de «> 60 min» a «> 90 min». La nota de timeouts ya no deja H-ARQ-V05b-09 abierto. «Puerta de CI» y el fallo `cancelled` dicen que en `main` el CI ya no se cancela y que solo una cancelación manual lo provoca.
+- **Workflows programados y `salud.yml`:** sin cambios. `salud.yml` no necesita tocarse: `DEPLOY_RULE` vive en `scripts/health/lib.js`.
+
+Hallazgos:
+- **H-ARQ-V05b-08: cerrado.** `ci.yml` usa `group: ci-${{ github.ref == 'refs/heads/main' && github.sha || github.ref }}` y `cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}`, tal como se propuso. En `main` cada SHA tiene su propio grupo, así que el CI del merge no se cancela ni se reemplaza en cola. En los PR (`refs/pull/<n>/merge`) y en `item/**` y `fix/**`, la cancelación por `ref` sigue igual. Lo fija `tests/workflows/qa-v05c.test.js` (`cancelsOnMain`).
+- **H-ARQ-V05b-09: cerrado.** `DEPLOY_RULE.maxPendingMin = 90` está por encima de la suma de timeouts de `deploy.yml`: 25 + 10 + 10 + 15 + 10 + 5 = 75 min. Las pruebas de V-04b (`health-deploy`, `qa-v04b`, `security/health-deploy-v04b`) ya usan el nuevo valor. No se exige derivar el umbral de los timeouts con una prueba que los ate (ver P3 abajo).
+- **`wait-ci.sh`: validado.** Solo `workflow_dispatch` se exime, y cualquier otro evento falla. Eso es coherente con `deploy.yml`, que solo tiene `push` y `workflow_dispatch`. El filtro jq añade `head_sha` y `event` como defensa en profundidad. Si a un run le falta uno de esos campos, el filtro lo acepta, pero la consulta ya filtra por los dos, así que es aceptable. El mensaje final distingue tres casos: tope vencido con un run visto, fallos de la API (con el último error saneado: sin token, sin `::` y recortado a 200 caracteres) y run ausente. El mensaje de `cancelled` ya no promete un redespliegue.
+- **Coste de no cancelar en `main` (valorado, no bloquea).** En los últimos 12 CI de `main`, 4 salieron `cancelled`. Con el cambio, esos runs terminan. Cada CI de `main` dura unos 4 a 5 min de pared y unos 8 min facturables (4 jobs con redondeo). Con unos 10 merges por ciclo, el extra ronda los 80 min de runner por ciclo. El repo es público y en runners estándar los minutos son gratis, así que el coste real es nulo. Tampoco hay contención: cada job levanta su propio Supabase local. Solo se ven varios CI de `main` en paralelo durante unos minutos. Si el repo pasara a privado, la mitigación sería saltar el CI de `main` en los push que solo cambian `docs/**` o `*.md`, ya que esos no despliegan. Queda anotado en el ADR 0015 punto 6.
+- **P3 (opcional, no bloquea).** Si alguien sube algún `timeout-minutes` de `deploy.yml` y la suma pasa de 90, `deploy-main` podría dar un falso «atascado». Una prueba que compare la suma de timeouts con `DEPLOY_RULE.maxPendingMin` lo evitaría. Puede ir en un ítem de seguimiento.
+- **Documentación fuera de mi área.** `docs/despliegue.md` línea 74 todavía dice «más de 60 min». Le toca al documentador cambiarlo a 90.
+- **H-ARQ-V05b-10:** sin cambios (informativo).
+
