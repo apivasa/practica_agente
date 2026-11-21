@@ -1,15 +1,16 @@
 # Estado del modo autónomo
 
 ## Candado de ciclo
-Estado: EN CURSO
-Desde: 2026-11-21 06:48
-Latido: 2026-11-21 07:35
-Sesión: programada (session_013PQePV6su2yxPYPkURk48c)
+Estado: LIBRE
+Desde: 
+Latido: 2026-11-21 07:53
+Sesión: 
 
 ## Log de ciclos (más reciente arriba)
 
 | Fecha y hora (Guayaquil) | Ítems trabajados | Resultado | Notas |
 |---|---|---|---|
+| 2026-11-21 07:53 | F-14 (#58), F-15 (#59), F-16 (#60) | Hechos | Programado. Endurecimiento del check `deploy-main` de salud (cadenas de fallos, fechas validadas ISO 8601, desempate por id); sin reintentos de revisión. F-15: pentest-api falló una vez por puerto 54322 ocupado (intermitente de F-10 reaparece; se relanzó el job, verde). Nuevo F-17 (info de F-16, baja prioridad). `correo-alertas.yml` sigue con 0 runs: el cron de 11:53 UTC no corrió (el arquitecto confirma workflow válido y crons de GitHub retrasados en todo el repo); lanzarlo a mano lo bloqueó el permiso de la sesión, no se rodea. Si sigue en 0, el check de salud fallará tras 2026-11-22 09:04 UTC y abrirá issue. Sin notificación: nada bloquea. Lección: los subagentes en worktree no pueden usar `-c push.negotiate`; push normal. |
 | 2026-11-21 05:49 | F-12 (#56), F-13 (#57) | Hechos | Programado. Sin reintentos. F-12: dispatch sigue la regla de punta, status saneado, H-F11-06 documentado, RPC `mark_alerts_email_expired` (solo service_role) desplegada en producción (Despliegue de 6525323 en verde). F-13: correo fail-closed sin la RPC y `deploy-main` en aviso por rojo esperado. Gitleaks en rojo una vez por un literal ficticio citado en el informe de seguridad (corregido + huella). Nuevo F-14 (bajos de F-13). `correo-alertas.yml` sigue con 0 runs (primer cron 11:53 UTC; gracia vence 2026-11-22 09:04 UTC): si sigue sin runs, el siguiente ciclo lo lanza a mano (H-ARQ-C06-02). Sin notificación: nada nuevo bloquea. |
 | 2026-11-21 03:20 | V-05b+V-05c (#45), C-06 (#53), V-07b (#54), F-11 (#55) | Hechos | Programado. P-07 aplicado (variable del pooler): V-05b fusionado; primer despliegue continuo en verde (run 44875933592) publica V-07, C-05, C-06 y V-07b (P-10 resuelto); despliegue de F-11 run 44883848786 en verde. V-05b 1 reintento (CI de main se cancelaba con commits de docs → ci.yml agrupa por SHA en main); F-11 1 reintento de revisión + 1 por CodeQL (regex con `^` y `|` en pruebas). Nuevo F-12 (bajos de F-11). Sin notificación: nada nuevo bloquea. Lección: el orquestador debe esperar CodeQL agregado antes de fusionar, también tras commits solo de docs del documentador. |
 | 2026-11-20 23:09 | P-05 activación de producción | Hecho | Sesión interactiva: grants explícitos de service_role (PR #52; producción hospedada no los concede por defecto — toda tabla nueva debe conceder sus privilegios a service_role, proponer prueba pgTAP que lo exija), despliegue 44864442687, ritmo-diario y salud en verde. Hallazgo bajo de seguridad: rol dedicado para fixtures de pentest (ítem propuesto) |
