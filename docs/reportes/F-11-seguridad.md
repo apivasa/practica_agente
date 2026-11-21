@@ -59,7 +59,7 @@ Modelo de amenazas: T-F11-01..05 y T-CI-10 actualizado. Registro: `docs/segurida
   - Problema: el `status` de compare se imprime sin sanear dentro de `::error::`. Lo controla GitHub.
   - Corrección sugerida: `gsub("[^a-z_]"; "")` en el filtro.
 
-No dejé pruebas en rojo para H-F11-03, 04 y 05: son bajas o informativas y no deben bloquear el merge. Quedan en el registro con su reproducción para el ítem que las corrija, y ese ítem debe añadir sus pruebas negativas. No se omitió ni se desactivó ninguna prueba.
+H-F11-03 y H-F11-04 coinciden con QA-F11-01 y QA-F11-02 del informe de QA. QA ya los cubre con pruebas en rojo en `tests/scripts/qa-f11.test.js` («renombrado de código a docs», «compare sin `files`»), así que su corrección se verifica ahí y en la próxima revisión de seguridad. No dupliqué esas pruebas en rojo. H-F11-01, 02 y 05 quedan en el registro con su reproducción para el ítem que los corrija. No se omitió ni se desactivó ninguna prueba.
 
 ## Verificado sin hallazgos
 
@@ -71,5 +71,5 @@ No dejé pruebas en rojo para H-F11-03, 04 y 05: son bajas o informativas y no d
 
 ## Nota para el orquestador (no es un hallazgo de seguridad)
 
-- **CI en rojo por el fail-closed.** `build` cae en `tests/scripts/email-c05.test.js:289` («fallos de Resend…») y en «errores de la BD: código 1». Esas pruebas usan una BD simulada solo de C-05, y ahora `runEmailStep` devuelve 2, que es lo esperado tras H-C06-01. La salida correcta es migrar esos mocks para que incluyan `recipientAccess`, `expiredEmailAlerts` y `markAlertsEmailSkipped`. No se debe relajar el fail-closed.
+- **CI en rojo en e5a34ce por el fail-closed.** Las pruebas de C-05 con una BD simulada sin los métodos de C-06 devolvían 2, que es lo esperado. QA migró esas BD simuladas en 5b44639 sin relajar ninguna aserción; lo comprobé y es la salida correcta. Tras el merge, en local solo quedan en rojo las 2 subpruebas de QA-F11-01/02 (`tests/scripts/qa-f11.test.js:68`), que corresponden a H-F11-03/04.
 - **El endurecimiento de H-QA-V05c-03 choca con una prueba del desarrollador.** `tests/scripts/f11-fixes.test.js` («el filtro jq conserva los valores por defecto // $sha y // "push"») fija el filtro laxo. Cuando el desarrollador endurezca `wait-ci.sh`, tendrá que actualizar esa prueba. Las de seguridad ya están preparadas.
