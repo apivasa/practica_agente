@@ -1,4 +1,5 @@
 # Huellas de gitleaks aceptadas. Solo fixtures ficticios ya publicados en el historial de una rama;
 # cada entrada se justifica en el informe de seguridad del ítem. No añadir secretos reales.
-# V-04b: token ficticio de prueba (ghs_SECRETO_DE_PRUEBA_V04b_...) en commit 5743e00 de item/V-04b; reemplazado en el commit siguiente. Ver docs/reportes/V-04b-seguridad.md.
+# V-04b: token ficticio de prueba en commit 5743e00 de item/V-04b y su cita en el informe (commit 40c5e0c); ambos reemplazados después. Ver docs/reportes/V-04b-seguridad.md.
 5743e0083ae926ca09a0e74e1a55b1b181a6f4a6:tests/security/health-deploy-v04b.test.js:generic-api-key:18
+40c5e0c88082d60be107521a8fec2043630bcbd5:docs/reportes/V-04b-seguridad.md:generic-api-key:19

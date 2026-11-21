@@ -16,7 +16,7 @@ Resultados del pipeline: gitleaks · semgrep · npm audit · ZAP · pentest RLS/
 
 Intento 1 en CI (commit 743f2cc): la prueba de esta revisión rompió dos jobs; ambos se corrigieron sin desactivar nada.
 - Lint `no-regex-spaces` en cuatro regex de `health-deploy-v04b.test.js`: los espacios repetidos se escriben ahora como ` {n}`. El significado de las regex no cambia y los 28 casos siguen pasando.
-- gitleaks `generic-api-key` (job 136658634246) en `const TOKEN = 'ghs_SECRETO_DE_PRUEBA_V04b_0123456789'`.
+- gitleaks `generic-api-key` (job 136658634246) en la constante `TOKEN` de la prueba (valor ficticio con prefijo `ghs_`; el literal no se repite aquí para no volver a disparar la regla).
   - Es un valor ficticio que escribió el propio agente de seguridad para comprobar que el token no se filtra. No es un token real de GitHub: los `ghs_` reales tienen 36 caracteres alfanuméricos aleatorios, sin guiones bajos ni palabras, y este nunca se usó contra la API, porque la prueba corre con `fetch` simulado.
   - Se reemplazó por `ghs_tokenficticioseguridad`, de baja entropía, que sigue el patrón de `tests/scripts/qa-v04b.test.js`.
   - El commit 5743e00 ya está publicado en la rama y no se reescribe historia, así que su huella exacta se añadió a `.gitleaksignore`: `5743e0083ae926ca09a0e74e1a55b1b181a6f4a6:tests/security/health-deploy-v04b.test.js:generic-api-key:18`. Es una sola huella, de un commit y una línea, y la regla sigue activa para todo lo demás.
