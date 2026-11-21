@@ -306,7 +306,9 @@ describe('[S] H-C05-01: solo se envía a destinatarios con rol vigente y cuenta 
 
 describe('[R] H-C05-02: sanitizeError redacta sb_secret_ y JWT', () => {
   const SB = 'sb_secret_AbC123-xyz_987654321';
-  const JWT = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJyb2xlIjoic2VydmljZV9yb2xlIn0.c2lnbmF0dXJhLWZpY3RpY2lh';
+  // JWT ficticio armado en ejecución (un literal con forma de JWT dispara gitleaks).
+  const b64 = (v) => Buffer.from(typeof v === 'string' ? v : JSON.stringify(v)).toString('base64url');
+  const JWT = [b64({ alg: 'HS256', typ: 'JWT' }), b64({ role: 'qa_ficticio' }), b64('firma-ficticia-qa')].join('.');
   test('la clave secreta de Supabase no queda en el texto (ni fragmentos)', () => {
     const out = sanitizeError(new Error(`Invalid API key: ${SB} rechazada`), KEY);
     assert.ok(!out.includes('sb_secret_'));
