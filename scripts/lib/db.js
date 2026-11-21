@@ -197,6 +197,19 @@ export function createDb(sb) {
       }
       return out;
     },
+    // F-12 (H-ARQ-C06-04): marca `expired` y audita en una sola transacción (RPC
+    // public.mark_alerts_email_expired, solo service_role). Devuelve los ids marcados.
+    async markAlertsEmailExpired(ids, { before, maxAttempts, skippedAt, lookbackDays }) {
+      const { data, error } = await sb.rpc('mark_alerts_email_expired', {
+        p_ids: ids,
+        p_before: before,
+        p_max_attempts: maxAttempts,
+        p_skipped_at: skippedAt,
+        p_lookback_days: lookbackDays,
+      });
+      if (error) throw fail('mark_alerts_email_expired', error);
+      return (data ?? []).map((r) => r?.alert_id).filter((id) => typeof id === 'string');
+    },
     // C-05: marca condicional (emailed_at is null). Devuelve true si esta corrida la marcó.
     async markAlertEmailed(id, { emailedAt, attempts }) {
       const { data, error } = await sb
