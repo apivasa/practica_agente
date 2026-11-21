@@ -106,7 +106,7 @@ describe('F-20 steps y nombres manipulados → fail', () => {
       ['con salto de línea', `${rule.requiredStep}\n`],
       ['con carácter de control', `${rule.requiredStep}\u0000`],
       ['con espacio final', `${rule.requiredStep} `],
-      ['con ancho cero', `${rule.requiredStep}​`],
+      ['con ancho cero', `${rule.requiredStep}\u200b`],
       ['en mayúsculas', rule.requiredStep.toUpperCase()],
       ['con comando ::', `::error::${rule.requiredStep}`],
     ];
