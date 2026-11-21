@@ -1,6 +1,6 @@
 # C-06 — Informe QA
 
-Veredicto: VERDE (condicionado a la huella de gitleaks del hallazgo QA-C06-1; ver abajo)
+Veredicto: VERDE
 
 Rama: `item/C-06`. Código revisado: 847cf6e (desarrollador) más el runbook del arquitecto-SRE (759b491) y las pruebas de seguridad (3aa6d7e).
 
@@ -24,13 +24,15 @@ Rama: `item/C-06`. Código revisado: 847cf6e (desarrollador) más el runbook del
 ## Resultado CI
 - CI en 1083d09: verde (build, unit, lint; db pgTAP; integración; e2e). https://github.com/apivasa/practica_agente/actions/runs/44870633717
 - Seguridad en 1083d09: rojo solo por gitleaks (historial), a causa de mi commit 632991f (hallazgo QA-C06-1). Las demás tareas, en verde. https://github.com/apivasa/practica_agente/actions/runs/44870633714
+- Seguridad en f9cfcbe: verde, gitleaks incluido (seguridad ya añadió la huella de QA-C06-1 en 3aa6d7e). https://github.com/apivasa/practica_agente/actions/runs/44871143747
+- CI en f9cfcbe: verde en todas las tareas (build/unit/lint, db pgTAP, integración, e2e). https://github.com/apivasa/practica_agente/actions/runs/44871143761
 - Local en el árbol fusionado: 2282 pruebas, 0 fallos.
 
 ## Cobertura engine/
 99,9 % de líneas. Todos los archivos están al 100 %, salvo `commitment.js` (99,35 %, línea 37, previa a C-06). `alert-email.js`: 100 % de líneas y 98,15 % de ramas.
 
 ## Hallazgos
-- **QA-C06-1 (media, del tester, bloquea el check de gitleaks).** Mi commit 632991f subió en `tests/scripts/qa-c06.test.js:309` un JWT ficticio literal: cabecera HS256, payload `{"role":"service_role"}` y firma inventada; no es un secreto real. Ya lo cambié por un JWT armado en ejecución, pero el historial no se reescribe. Corrección: añadir a `.gitleaksignore` (fuera de mi carpeta; le toca a seguridad o al orquestador) la huella
+- **QA-C06-1 (media, del tester; resuelto).** Mi commit 632991f subió en `tests/scripts/qa-c06.test.js:309` un JWT ficticio literal: cabecera HS256, payload `{"role":"service_role"}` y firma inventada; no es un secreto real. Ya lo cambié por un JWT armado en ejecución, pero el historial no se reescribe. Seguridad lo revisó y añadió a `.gitleaksignore` (3aa6d7e) la huella
   `632991f37c7f2c403a7518b8bd64d5480456f42a:tests/scripts/qa-c06.test.js:jwt:309`.
   Para reproducirlo: run de Seguridad 44870633714, tarea «gitleaks (historial completo)».
 - **QA-C06-2 (baja, observación).** Un destinatario con rol vigente y sin correo válido sigue contando como fallo con intento (`alert_email_failed`) y no como omisión. Es coherente con C-05 y el criterio no lo cubre. Se registra solo para el runbook.
